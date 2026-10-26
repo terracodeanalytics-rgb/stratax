@@ -1,0 +1,47 @@
+const fs=require('node:fs');
+const {execFileSync}=require('node:child_process');
+const crypto=require('node:crypto');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'C:/Users/Tolu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const SITE='https://stratax-workbench.cometcrab258.chatgpt.site',API='https://stratax-api-227436363119.us-central1.run.app',PROJECT='project-9afac';
+function hiddenInput(){return new Promise((resolve,reject)=>{let value='';if(process.stdin.isTTY){process.stdin.setRawMode(true);process.stderr.write('Ready for private live-check input (hidden).\n');}process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>{value+=chunk;if(value.includes('\u0003'))process.exit(130);if(/[\r\n]/.test(value)){if(process.stdin.isTTY)process.stdin.setRawMode(false);process.stdin.pause();try{resolve(JSON.parse(value.trim()));}catch{reject(Error('Invalid private input'));}}});process.stdin.resume();});}
+async function json(url,{method='GET',body,token,quota=false}={}){const headers={'Content-Type':'application/json'};if(token)headers.Authorization='Bearer '+token;if(quota)headers['x-goog-user-project']=PROJECT;const response=await fetch(url,{method,headers,body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw Error('Live request failed: '+response.status+' '+(data.code||data.error?.message||''));return data;}
+(async()=>{
+  const {siteToken,flow}=await hiddenInput();
+  const admin=execFileSync('cmd.exe',['/d','/s','/c','gcloud auth print-access-token'],{encoding:'utf8',windowsHide:true}).trim();
+  const config=await json(API+'/api/runtime-config'),key=config.firebase.apiKey;
+  const email='stratax-browser-qa-'+crypto.randomBytes(7).toString('hex')+'@example.com',identity='https://identitytoolkit.googleapis.com/v1/';
+  let fixture,browser;const results=[],pageErrors=[];
+  async function check(name,operation){await operation();results.push(name);}
+  try{
+    const generated=await json(identity+'projects/'+PROJECT+'/accounts:sendOobCode',{method:'POST',token:admin,quota:true,body:{requestType:'EMAIL_SIGNIN',email,returnOobLink:true,continueUrl:SITE+'/#email-action',canHandleCodeInApp:true}});
+    const code=new URL(generated.oobLink).searchParams.get('oobCode');
+    fixture=await json(identity+'accounts:signInWithEmailLink?key='+key,{method:'POST',body:{email,oobCode:code}});
+    const password='StrataX!'+crypto.randomBytes(14).toString('hex')+'Aa1';
+    fixture=await json(identity+'accounts:update?key='+key,{method:'POST',body:{idToken:fixture.idToken,password,returnSecureToken:true}});
+    browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||'C:/Users/Tolu/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe'});
+    const context=await browser.newContext();
+    await context.route(SITE+'/**',route=>route.continue({headers:{...route.request().headers(),'OAI-Sites-Authorization':'Bearer '+siteToken}}));
+    const page=await context.newPage();page.on('pageerror',e=>pageErrors.push(e.message));
+    if(flow==='email'){
+      const recovery=await json(identity+'projects/'+PROJECT+'/accounts:sendOobCode',{method:'POST',token:admin,quota:true,body:{requestType:'EMAIL_SIGNIN',email,returnOobLink:true,continueUrl:SITE+'/#email-action',canHandleCodeInApp:true}});
+      const generatedParams=new URL(recovery.oobLink).searchParams;
+      const query=new URLSearchParams({mode:generatedParams.get('mode'),oobCode:generatedParams.get('oobCode'),apiKey:generatedParams.get('apiKey'),purpose:'recovery'});
+      await check('Real cross-device email action form',async()=>{await page.goto(SITE+'/?'+query+'#email-action');await page.locator('#account-email').waitFor();if(await page.locator('#account-email').inputValue()!=='')throw Error('New browser should ask for email');});
+      await check('Real email-link verification and password save',async()=>{const replacement='Recovered!'+crypto.randomBytes(14).toString('hex')+'Aa1';await page.locator('#account-email').fill(email);await page.locator('#account-password').fill(replacement);await page.locator('#account-confirm').fill(replacement);await page.locator('#accept-all').check();await page.locator('.account-primary').click();await page.locator('.landing-hero').waitFor({timeout:60000});if(new URL(page.url()).search)throw Error('Action code remains in address');const signed=await json(identity+'accounts:signInWithPassword?key='+key,{method:'POST',body:{email,password:replacement,returnSecureToken:true}});fixture={...fixture,...signed};});
+      await check('Email action cannot be reused',async()=>{const response=await fetch(identity+'accounts:signInWithEmailLink?key='+key,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,oobCode:generatedParams.get('oobCode')})});if(response.status!==400)throw Error('Used link was accepted');});
+      await check('Real Google provider popup and cancellation',async()=>{await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.goto(SITE+'/#signin');await page.locator('#account-form').waitFor();await page.locator('#accept-all').check();const pending=page.waitForEvent('popup');await page.locator('#account-google').click();const popup=await pending;await popup.waitForURL(/accounts\.google\.com/,{timeout:30000});await popup.close();await page.getByText('Google sign-in was cancelled.',{exact:true}).waitFor({timeout:30000});});
+    }else{
+    await check('Published landing',async()=>{await page.goto(SITE+'/#home');await page.locator('.landing-hero').waitFor();if(await page.locator('#platform,#workflow,#evidence,.landing-cta').count())throw Error('Removed landing content remains');});
+    await check('Real Firebase sign-in and policies',async()=>{await page.goto(SITE+'/#signin');await page.locator('#account-email').waitFor();await page.locator('#account-email').fill(email);await page.locator('#account-password').fill(password);await page.locator('#accept-all').check();await page.locator('.account-primary').click();await page.locator('.landing-hero').waitFor({timeout:60000});await page.locator('.public-header').getByRole('link',{name:'Open workspace',exact:true}).waitFor();});
+    await check('Workspace entry and refresh',async()=>{await page.locator('.public-header').getByRole('link',{name:'Open workspace',exact:true}).click();await page.locator('.portfolio-shell').waitFor();await page.reload();await page.locator('.portfolio-shell').waitFor({timeout:60000});});
+    await check('Logo home and sign-out',async()=>{await page.getByRole('link',{name:'StrataX home',exact:true}).click();await page.locator('.landing-hero').waitFor();await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.locator('.public-signin').waitFor();await page.goto(SITE+'/#projects');await page.locator('#account-form').waitFor();if(await page.locator('.portfolio-shell').count())throw Error('Anonymous workspace visible');});
+    for(const width of [320,768,1440])for(const route of ['home','signin','signup'])await check(`Published ${route} ${width}px`,async()=>{await page.setViewportSize({width,height:900});await page.goto(SITE+'/#'+route);await page.locator(route==='home'?'.landing-hero':'#account-form').waitFor();if(!await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))throw Error('Horizontal overflow');await page.screenshot({path:`.release/live-${route}-${width}.png`,fullPage:true});});
+    }
+    if(pageErrors.length)throw Error('Browser errors: '+pageErrors.join('; '));
+    const report={site:SITE,passed:results.length,checks:results,pageErrors,limits:'Google popup completion not automated; real Firebase email/password sign-in verified.'};
+    fs.writeFileSync(flow==='email'?'.release/live-email-browser-verification.json':'.release/live-browser-verification.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+  }finally{
+    if(browser)await browser.close();
+    if(fixture){const uid=fixture.localId;await json(identity+'projects/'+PROJECT+'/accounts:delete',{method:'POST',token:admin,quota:true,body:{localId:uid}});for(const collection of ['stratax_accounts','stratax_legal_acceptance'])await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${collection}/${uid}`,{method:'DELETE',headers:{Authorization:'Bearer '+admin,'x-goog-user-project':PROJECT}});console.log(JSON.stringify({isolated_browser_account_removed:true}));}
+  }
+})().catch(error=>{console.error(error.message.replace(/oobCode=[^&#\s]+/g,'oobCode=[redacted]'));process.exitCode=1;});

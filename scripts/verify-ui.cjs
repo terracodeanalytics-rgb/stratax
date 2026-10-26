@@ -1,0 +1,68 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
+const assert = require('node:assert/strict');
+const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/Tolu/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+
+// Browser-level regression coverage with a controlled Firebase/provider boundary.
+// Real Firebase, SMTP, and Firestore are verified separately by live-account-qa.py.
+const firebaseStub = `
+let listener=()=>{}, current=null;
+const user=()=>({uid:'ui-test-user',email:'ui-test@example.com',emailVerified:true,providerData:[{providerId:'password'}],getIdToken:async()=> 'ui-test-token',reload:async()=>{}});
+export const browserLocalPersistence='local',browserSessionPersistence='session';
+export function getAuth(){return {get currentUser(){return current}};}
+export function onAuthStateChanged(auth,callback){listener=callback;const saved=sessionStorage.getItem('test-user');current=saved?user():null;queueMicrotask(()=>callback(current));}
+export async function setPersistence(){}
+export async function signInWithEmailAndPassword(auth,email,password){if(password==='wrong')throw Object.assign(new Error(),{code:'auth/invalid-credential'});current=user();sessionStorage.setItem('test-user','1');queueMicrotask(()=>listener(current));return {user:current};}
+export class GoogleAuthProvider{setCustomParameters(){}}
+export async function signInWithPopup(){throw Object.assign(new Error(),{code:'auth/popup-closed-by-user'});}
+export function isSignInWithEmailLink(auth,url){return new URL(url).searchParams.get('mode')==='signIn';}
+export async function signInWithEmailLink(auth,email,url){if(new URL(url).searchParams.get('oobCode')==='expired')throw Object.assign(new Error(),{code:'auth/expired-action-code'});if(email!=='ui-test@example.com')throw Object.assign(new Error(),{code:'auth/invalid-action-code'});return signInWithEmailAndPassword(auth,email,'valid');}
+export async function updatePassword(){}
+export async function linkWithCredential(){}
+export const EmailAuthProvider={credential(){return {}}};
+export async function applyActionCode(auth,code){if(!code)throw Object.assign(new Error(),{code:'auth/invalid-action-code'});}
+export async function signOut(){current=null;sessionStorage.removeItem('test-user');queueMicrotask(()=>listener(null));}
+`;
+const versions={terms_of_use:'1.0',privacy_policy:'1.0',acceptable_use_policy:'1.0',ai_processing_disclosure:'1.0',data_confidentiality:'1.0',disclaimer:'1.0',cookie_policy:'1.0'};
+const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png'};
+const root=path.resolve('frontend/dist');
+const server=http.createServer((req,res)=>{let pathname=new URL(req.url,'http://localhost').pathname;if(pathname==='/')pathname='/index.html';const file=path.resolve(root,'.'+pathname);if(!file.startsWith(root+path.sep)){res.writeHead(403);return res.end();}fs.readFile(file,(error,data)=>{res.writeHead(error?404:200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(error?'Not found':data);});});
+
+(async()=>{
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||'C:/Users/Tolu/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe'});
+  const context=await browser.newContext();
+  const results=[],errors=[],emails=[];let accepted=false;
+  await context.route('https://www.gstatic.com/firebasejs/**/firebase-app.js',r=>r.fulfill({contentType:'text/javascript',body:'export function initializeApp(config){return config;}'}));
+  await context.route('https://www.gstatic.com/firebasejs/**/firebase-auth.js',r=>r.fulfill({contentType:'text/javascript',body:firebaseStub}));
+  await context.route('https://stratax-api-227436363119.us-central1.run.app/**',async r=>{
+    const req=r.request(),url=new URL(req.url());let data={};
+    if(url.pathname==='/api/runtime-config')data={firebase:{apiKey:'test',appId:'test'},policy_versions:versions};
+    if(url.pathname==='/api/legal-acceptance'){if(req.method()==='POST')accepted=true;data={accepted,required_versions:versions};}
+    if(url.pathname==='/api/account')data={uid:'ui-test-user',email:'ui-test@example.com',display_name:'UI Test',organization:''};
+    if(url.pathname==='/api/auth/action-email'){emails.push(req.postDataJSON());data={accepted:true};}
+    await r.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':'*'},body:JSON.stringify(data)});
+  });
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  async function test(name,operation){try{await operation();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:e.message});}}
+  async function goto(hash){await page.goto(base+'/'+hash);await page.waitForFunction(()=>!document.body.innerText.includes('Checking your secure session'));}
+  try{
+    await test('Landing contains hero and footer, without removed sections or preview access',async()=>{await goto('#home');assert.equal(await page.locator('.landing-hero').count(),1);assert.equal(await page.locator('.tc-footer').count(),1);assert.equal(await page.locator('#platform,#workflow,#evidence,.landing-cta,[data-section]').count(),0);assert.doesNotMatch(await page.locator('body').innerText(),/preview|ONE CONNECTED|FAMILIAR SCIENTIFIC|BUILT AROUND/i);assert.equal(await page.locator('link[rel=icon]').getAttribute('href'),'logo.png');});
+    await test('Anonymous workspace access renders account form',async()=>{await goto('#projects');await page.locator('#account-form').waitFor();assert.equal(await page.locator('.portfolio-shell').count(),0);});
+    await test('Seven policies, accept-all, and password visibility',async()=>{await goto('#signin');assert.equal(await page.locator('input[name=legal]').count(),7);await page.locator('#accept-all').check();assert.equal(await page.locator('input[name=legal]:checked').count(),7);await page.locator('[data-password=account-password]').click();assert.equal(await page.locator('#account-password').getAttribute('type'),'text');});
+    await test('Wrong credentials and cancelled Google show friendly errors',async()=>{await page.locator('#account-email').fill('ui-test@example.com');await page.locator('#account-password').fill('wrong');await page.locator('.account-primary').click();await page.getByText('Incorrect email or password.',{exact:true}).waitFor();await page.locator('#account-google').click();await page.getByText('Google sign-in was cancelled.',{exact:true}).waitFor();});
+    await test('Signup requests branded-link endpoint without a password',async()=>{await goto('#signup');await page.locator('#account-name').fill('UI Test');await page.locator('#account-email').fill('ui-test@example.com');await page.locator('#accept-all').check();await page.locator('.account-primary').click();await page.getByText(/your setup link will arrive/).waitFor();assert.equal(emails.at(-1).purpose,'signup');assert.equal(emails.at(-1).name,'UI Test');assert.equal(await page.locator('input[type=password]').count(),0);});
+    await test('Recovery requests a link',async()=>{await goto('#forgot-password');await page.locator('#account-email').fill('ui-test@example.com');await page.locator('.account-primary').click();await page.getByText(/a recovery link will arrive/).waitFor();assert.equal(emails.at(-1).purpose,'recovery');});
+    await test('Cross-device email link and confirmation validation',async()=>{await page.evaluate(()=>localStorage.removeItem('stratax.emailAddress'));await goto('?mode=signIn&oobCode=test&purpose=signup#email-action');assert.equal(await page.locator('#account-email').inputValue(),'');await page.locator('#account-email').fill('ui-test@example.com');await page.locator('#account-password').fill('StrongPass123!');await page.locator('#account-confirm').fill('Different123!');await page.locator('#accept-all').check();await page.locator('.account-primary').click();await page.getByText('The passwords do not match.',{exact:true}).waitFor();const href=await page.getByRole('link',{name:'Privacy Policy',exact:true}).getAttribute('href');assert.equal(href,'/#privacy');});
+    await test('Expired link remains recoverable',async()=>{await goto('?mode=signIn&oobCode=expired&purpose=recovery#email-action');await page.locator('#account-email').fill('ui-test@example.com');await page.locator('#account-password').fill('StrongPass123!');await page.locator('#account-confirm').fill('StrongPass123!');await page.locator('#accept-all').check();await page.locator('.account-primary').click();await page.getByText('This link has expired. Request a new one.',{exact:true}).waitFor();});
+    await test('Successful login, reload, logo home, and sign-out',async()=>{await goto('#signin');await page.evaluate(()=>localStorage.setItem('stratax.projects.v2',JSON.stringify({records:[{name:'PRIVATE LEGACY PROJECT'}]})));await page.locator('#account-email').fill('ui-test@example.com');await page.locator('#account-password').fill('StrongPass123!');await page.locator('#accept-all').check();await page.locator('.account-primary').click();await page.locator('.landing-hero').waitFor();assert.equal(new URL(page.url()).hash,'#home');await page.locator('.public-header').getByRole('link',{name:'Open workspace',exact:true}).click();await page.locator('.portfolio-shell').waitFor();assert.doesNotMatch(await page.locator('body').innerText(),/PRIVATE LEGACY PROJECT/);await page.reload();await page.locator('.portfolio-shell').waitFor();await page.getByRole('link',{name:'StrataX home',exact:true}).click();await page.locator('.landing-hero').waitFor();await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.locator('.public-signin').waitFor();assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('stratax.projects.v2')).records[0].name),'PRIVATE LEGACY PROJECT');});
+    await test('Public legal pages work without sign-in',async()=>{for(const route of ['terms','privacy','cookies','acceptable-use','data-ownership','ai-processing','disclaimer']){await goto('#'+route);assert.equal(await page.locator('.legal-page h1').count(),1);}});
+    await test('Expired remembered session signs out before workspace rendering',async()=>{await page.evaluate(()=>{sessionStorage.setItem('test-user','1');localStorage.setItem('stratax.keepSignedIn','1');localStorage.setItem('stratax.rememberUntil:ui-test-user',String(Date.now()-1000));});await goto('#projects');await page.locator('#account-form').waitFor();assert.equal(await page.locator('.portfolio-shell').count(),0);});
+    await test('Unknown Firebase errors do not expose provider diagnostics',async()=>{const message=await page.evaluate(async()=>{const auth=await import('./auth.js');return auth.friendlyError({code:'auth/internal-error',message:'private provider diagnostic'});});assert.equal(message,'Sign-in could not be completed. Please try again.');});
+    for(const width of [320,768,1024,1440])for(const route of ['home','signin','signup'])await test(`${route} fits ${width}px viewport`,async()=>{await page.setViewportSize({width,height:900});await goto('#'+route);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Horizontal overflow at ${width}px`);await page.screenshot({path:`.release/${route}-${width}.png`,fullPage:true});});
+    assert.deepEqual(errors,[]);
+  }finally{fs.writeFileSync('.release/ui-verification.json',JSON.stringify({kind:'controlled-provider browser tests',results,pageErrors:errors},null,2));console.log(JSON.stringify({passed:results.filter(r=>r.passed).length,failed:results.filter(r=>!r.passed),pageErrors:errors}));await browser.close();await new Promise(resolve=>server.close(resolve));}
+  if(results.some(r=>!r.passed)||errors.length)process.exitCode=1;
+})().catch(error=>{console.error(error);server.close();process.exitCode=1;});

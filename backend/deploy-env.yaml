@@ -1,0 +1,8 @@
+GOOGLE_CLOUD_PROJECT: project-9afac
+STRATAX_SITE_ORIGIN: https://stratax-workbench.cometcrab258.chatgpt.site
+FIREBASE_API_KEY: AIzaSyCeATsKgFLSuNnYHYZ5ewZ9MKOShECM5lQ
+FIREBASE_APP_ID: 1:227436363119:web:a01865da7615f56878fc9a
+SMTP_HOST: mail.spacemail.com
+SMTP_PORT: '465'
+SMTP_USER: contact@terracodeanalytics.com
+SMTP_FROM_EMAIL: contact@terracodeanalytics.com
