@@ -4,12 +4,14 @@
 
 Landing-page simplification, corporate footer, favicon/logo navigation, G-RES-style account UI, shared Firebase integration, real branded setup/recovery/verification emails, current-policy acceptance and StrataX-specific profile persistence are implemented. Project/scientific backend work remains separate.
 
+Latest follow-up: the signed-in public header now shows an initials avatar and account dropdown instead of Open workspace/Sign out. Menu links point to working project/settings/policy/support destinations. The 25-check browser suite passed. Published source `6d7fc4edee622ab41e98ffefc18bd30970fba3dc`, deployment `appgdep_6adf950bb1248191a387076843ec40bd`; 13 live hosted checks passed and the isolated account was removed. Backend unchanged.
+
 ## Live state
 
 - Frontend: https://stratax-workbench.cometcrab258.chatgpt.site/#home; existing owner-only Sites audience retained.
 - API: https://stratax-api-227436363119.us-central1.run.app; `stratax-api-00002-wep` at 100% in `project-9afac/us-central1`.
 - Backend build `b55bd7b5-d9b9-4a0c-84f2-82e9cabaf95d`; current digest `sha256:34e409263b204eb0fd2e89dd352fba8c42db7be36c2ba4e851926055817e0881`.
-- Frontend version 5 is published from Sites source commit `ada5a76bb12fd1c9b497ead5ef4d347f1dac9f0b`, deployment `appgdep_6adf9142539c8191ac0586e567fcaf49`. Version 4 passed the complete real sign-in/email/browser checks; version 5 adds provider-error redaction and account-aware profile labels and passed the 24-check focused browser suite.
+- Previous frontend version 5 was published from Sites source commit `ada5a76bb12fd1c9b497ead5ef4d347f1dac9f0b`, deployment `appgdep_6adf9142539c8191ac0586e567fcaf49`. Version 4 passed the complete real sign-in/email/browser checks; version 5 adds provider-error redaction and account-aware profile labels and passed the 24-check focused browser suite.
 
 ## Verification and tools
 

@@ -1,5 +1,13 @@
 # StrataX status
 
+## 2026-10-26 — header account avatar
+
+- Removed the header's Open workspace link and standalone Sign out button. Signed-in users now see a circular teal initials avatar with their name/email and My projects, Account settings, Privacy & policies, Contact support and Sign out in its dropdown.
+- Added keyboard navigation, Escape/focus return, outside-click dismissal, bounded mobile positioning and friendly sign-out failure feedback. Existing hero navigation and signed-out account links remain functional.
+- Controlled browser checks: 25 passed, including avatar initials, menu keyboard behavior, mobile bounds, settings navigation and sign-out. Live hosted checks: 13 passed, including real Firebase sign-in, dropdown project navigation, refresh and menu sign-out; the isolated fixture account was removed.
+- Sites version 6 release source: `6d7fc4edee622ab41e98ffefc18bd30970fba3dc`; deployment `appgdep_6adf950bb1248191a387076843ec40bd`. Owner-only audience preserved. Backend and its two protected tagged images are unchanged; no cloud cleanup deletion was needed.
+- Design references: https://atlassian.design/components/avatar and https://www.radix-ui.com/primitives/docs/components/dropdown-menu. Implemented in existing vanilla JavaScript without adding a UI dependency.
+
 ## 2026-10-26 — landing and account release
 
 - Landing hero retained; requested marketing sections, section-navigation links, public demo access and preview notices removed. Corporate-style footer, public StrataX policies, home-linked branding and logo favicon added.
