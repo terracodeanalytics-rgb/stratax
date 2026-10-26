@@ -1,7 +1,7 @@
 import {session, logout} from './auth.js';
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let menuBinding;
-function accountMenu(icon){
+export function accountMenu(icon){
   const name=session.account?.display_name?.trim()||session.user.displayName?.trim()||session.user.email?.split('@')[0]||'Your account';
   const words=name.split(/[\s._+-]+/).filter(Boolean),letters=words.length>1?[...words[0]][0]+[...words.at(-1)][0]:[...words[0]||'U'].slice(0,2).join('');
   return `<div class="public-account"><button type="button" class="public-avatar" id="public-account-trigger" aria-label="Open account menu for ${escape(name)}" aria-haspopup="menu" aria-expanded="false" aria-controls="public-account-menu" title="${escape(name)}">${escape(letters.toLocaleUpperCase())}</button><div class="public-account-menu" id="public-account-menu" role="menu" aria-label="Your account" hidden><div class="public-account-identity" role="presentation"><strong>${escape(name)}</strong><span>${escape(session.user.email||'')}</span></div><a role="menuitem" tabindex="-1" href="#projects">${icon('layers')}My projects</a><a role="menuitem" tabindex="-1" href="#settings">${icon('settings')}Account settings</a><a role="menuitem" tabindex="-1" href="#privacy">${icon('shield')}Privacy & policies</a><a role="menuitem" tabindex="-1" href="mailto:contact@terracodeanalytics.com">${icon('help')}Contact support</a><div class="public-account-divider" role="separator"></div><button type="button" role="menuitem" tabindex="-1" id="public-signout">${icon('arrow')}Sign out</button><p id="public-account-error" role="status" hidden></p></div></div>`;

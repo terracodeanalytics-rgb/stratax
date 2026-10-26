@@ -2,6 +2,8 @@
 
 ## Completed
 
+Latest release: Projects page and shared navigation/header redesigned, using the same initials avatar as the landing page. The library sidebar, compact workflow/resume panels, stage-rail cards and responsive controls retain existing behavior. Scientific screens were not redesigned. Sites version 7 source `530a817355cfb4111b42b5b52721a8f5df2815c1`, deployment `appgdep_6adf9c6e43d881918be33ba24fa81bfc`. Controlled browser suite: 30 passed; 17 live hosted checks passed; isolated test account removed.
+
 Landing-page simplification, corporate footer, favicon/logo navigation, G-RES-style account UI, shared Firebase integration, real branded setup/recovery/verification emails, current-policy acceptance and StrataX-specific profile persistence are implemented. Project/scientific backend work remains separate.
 
 Latest follow-up: the signed-in public header now shows an initials avatar and account dropdown instead of Open workspace/Sign out. Menu links point to working project/settings/policy/support destinations. The 25-check browser suite passed. Published source `6d7fc4edee622ab41e98ffefc18bd30970fba3dc`, deployment `appgdep_6adf950bb1248191a387076843ec40bd`; 13 live hosted checks passed and the isolated account was removed. Backend unchanged.

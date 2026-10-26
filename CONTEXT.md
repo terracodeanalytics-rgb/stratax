@@ -5,7 +5,9 @@
 - Git root is this STRATAX repository; destination is `https://github.com/terracodeanalytics-rgb/stratax`.
 - Canonical frontend is `frontend/`; backend is `backend/`. Static ES modules require no frontend build.
 - Existing Sites ID: `appgprj_6adc66e963588191a4154ab09c724471`, recorded in `frontend/.openai/hosting.json`. Preserve the Site and its owner-only audience.
-- Current frontend: Sites version 6 account-avatar release, source `6d7fc4edee622ab41e98ffefc18bd30970fba3dc`; previous saved release version 5 used source `ada5a76bb12fd1c9b497ead5ef4d347f1dac9f0b`.
+- Current frontend: Sites version 7 Projects redesign, source `530a817355cfb4111b42b5b52721a8f5df2815c1`. Previous saved release version 6 used source `6d7fc4edee622ab41e98ffefc18bd30970fba3dc`.
+- Project library rendering lives in `frontend/dist/projects-view.js`, with `workspace.css` for library/shared shell styles. Existing controller/event handlers remain in `app.js`. Filters/counts, stage rails, responsive cards and search states reflect existing local records.
+- All public/project/workspace headers reuse exported `accountMenu()` and `bindPublic()` from `public.js`. Each page has one avatar; scoped AbortController bindings prevent listener accumulation.
 - The public header uses an initials-avatar menu after sign-in; My projects, account settings, policies, support and sign-out are available there. Menu controls support keyboard navigation, focus return and outside dismissal.
 - Hosted Site source is a separate managed repository opened under ignored `.sites-source/`. Do not replace the root Git remote with the Sites remote. Use the Sites source helper, hidden stdin credentials and matching source/archive provenance for publication.
 - The initial published frontend source matched the original local app/styles exactly.

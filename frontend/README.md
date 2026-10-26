@@ -15,8 +15,10 @@ Static ES-module frontend published to the existing StrataX Sites project. Landi
 - dist/auth.js: Firebase, API access, session restoration and account operations.
 - dist/auth-ui.js: G-RES-style account screens, policy controls and email-link completion.
 - dist/public.js: landing hero, navigation and corporate footer.
+- dist/projects-view.js: project library, cards and truthful workflow progress summaries.
 - dist/legal-pages.js: current StrataX policy documents.
 - dist/styles.css and dist/account.css: responsive workspace, public and account styles.
+- dist/workspace.css: project library and shared navigation/header design.
 - dist/catalog.js and dist/workbenches.js: inventory and specialist reference layouts.
 - contracts.d.ts: proposed scientific integration contracts, not available calculations.
 - .openai/hosting.json: existing Sites identity; preserve its project ID and audience.

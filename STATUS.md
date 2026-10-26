@@ -1,5 +1,15 @@
 # StrataX status
 
+## 2026-10-26 — project workspace redesign
+
+- Redesigned the Projects page with a library sidebar, compact portfolio/resume panels, searchable project cards, six-stage progress rails, grid/list controls, and focused empty states. Preserved existing project management and local persistence behavior.
+- Reused the landing initials-avatar component in the Projects header and the top-right header inside selected projects. Removed the previous sidebar profile tile; feature inventory and help remain available through sidebar utility links.
+- Refined shared typography, navigation, spacing and surfaces without changing scientific content or calculation behavior. Browser-local project storage and illustrative data labels remain explicit.
+- Scope confirmed by the user: Projects page plus shared navigation/header. Design direction is in `.better-web-ui.md`; no framework or dependency was added.
+- Controlled browser suite: 30 passed, covering create/edit, search, favorite, progress, duplicate, archive, Trash/restore, grid/list, persistence, avatar navigation, account regressions and 320/768/1024/1440px layouts. Live hosted checks: 17 passed, including the redesigned library at 320/768/1440px and the shared selected-project avatar. The isolated account was removed.
+- Sites version 7 source: `530a817355cfb4111b42b5b52721a8f5df2815c1`; deployment `appgdep_6adf9c6e43d881918be33ba24fa81bfc`. Backend and owner-only Site audience unchanged.
+- Removed the one-use redesign generator; retained design/test evidence and operational tooling. No backend images were built; the two existing protected tagged API images remain retained.
+
 ## 2026-10-26 — header account avatar
 
 - Removed the header's Open workspace link and standalone Sign out button. Signed-in users now see a circular teal initials avatar with their name/email and My projects, Account settings, Privacy & policies, Contact support and Sign out in its dropdown.
