@@ -1,3 +1,4 @@
+import {configureMapWorkspace,mapWorkspaceView,bindMapWorkspace} from './map-workspace.js';
 import {configureData,dataPageView,bindDataPage,openImporter} from './data-page.js';
 import * as repository from './project-repository.js';
 
@@ -83,7 +84,7 @@ function wellTable(list){return `<div class="table-wrap"><table><thead><tr><th>W
 
 function mapArt(){return '';}
 
-function mapPage(){const p=projectContext();return heading('Study map','Site coordinates · WGS84',btn('Edit location','project-settings'))+panel('Project location',p.coordinates?'<div id="project-map" class="real-map full-project-map"></div>':'<div class="location-empty"><h3>No location added yet</h3><p>Set your site coordinates in Project settings.</p>'+btn('Add location','project-settings')+'</div>')+'<p class="sub">Only saved site coordinates are displayed. Well and survey geometry require validated source records.</p>'; }
+function mapPage(){return mapWorkspaceView();}
 
 const demoFiles=[];
 
@@ -239,7 +240,7 @@ function flushProjectSaves(){clearTimeout(saveTimer);const uid=session.user?.uid
 function conflictDialog(){const p=projectContext();modal('This project changed elsewhere',`<p>Your pending changes remain on this device. Download them before continuing, or retain a recovery copy and load the current cloud version.</p><div class="actions"><button id="conflict-export">Download pending project</button><button id="conflict-reload" class="primary">Keep recovery copy & reload</button></div>`);$('#conflict-export').onclick=()=>projectAction('export-workspace');$('#conflict-reload').onclick=async()=>{try{localStorage.setItem(storageKey('stratax.conflict.'+p.id),JSON.stringify({project:p,workspace:state}));const record=await repository.load(p);Object.assign(p,record.project,{revision:record.revision,pendingSave:false});state={...structuredClone(initial),...record.workspace};portfolio.contexts[p.id]=structuredClone(state);saveConflicts.delete(p.id);rememberSnapshot(p);saveStates.set(p.id,'Saved');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));$('#dialog').close();render();}catch(error){toast(error.message);}};}
 function unavailablePage(title,message){return heading(title,message)+panel('Evidence required',`<div class="empty">${icon('logs')}<strong>No scientific results available</strong><p>Original sources and saved configurations remain available in this project.</p>${go('files','View source files')}</div>`);}
 
-function bindProjectUI(){if(['data','collection','files','wells','documents'].includes(route))bindDataPage();bindSwitcher({portfolio,openProject,navigate,esc,icon});if(route==='overview'&&projectContext()?.coordinates)mountMap($('#overview-map'),projectContext().coordinates);if(route==='map'&&projectContext()?.coordinates)mountMap($('#project-map'),projectContext().coordinates);}
+function bindProjectUI(){if(['data','collection','files','wells','documents'].includes(route))bindDataPage();bindSwitcher({portfolio,openProject,navigate,esc,icon});if(route==='overview'&&projectContext()?.coordinates)mountMap($('#overview-map'),projectContext().coordinates);if(route==='map')bindMapWorkspace();}
 
 function blobDownload(name,blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
 
@@ -249,5 +250,6 @@ async function attachLocal(record){if(portfolio.records.some(p=>p.id===record.pr
 
 window.addEventListener('beforeunload',event=>{if([...saveStates.values()].some(s=>/Unsaved|Saving|failed/.test(s))){event.preventDefault();event.returnValue='';}});
 
-configureData({getProject:projectContext,getState:()=>state,icon,modal,toast,save,flush:flushProjectSaves,render,navigate,download:blobDownload,reload:async()=>{const p=projectContext();if(p?.storage==='cloud'){const record=await repository.load(p);Object.assign(p,record.project,{revision:record.revision});const cached=state.ingestion;state={...structuredClone(initial),...record.workspace,ingestion:cached};portfolio.contexts[p.id]=structuredClone(state);wells=state.wellDrafts||[];rememberSnapshot(p);saveStates.set(p.id,'Saved');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}}});
+const workspaceHost={getProject:projectContext,getState:()=>state,icon,modal,toast,save,flush:flushProjectSaves,render,navigate,download:blobDownload,reload:async()=>{const p=projectContext();if(p?.storage==='cloud'){const record=await repository.load(p);Object.assign(p,record.project,{revision:record.revision});const cached=state.ingestion;state={...structuredClone(initial),...record.workspace,ingestion:cached};portfolio.contexts[p.id]=structuredClone(state);wells=state.wellDrafts||[];rememberSnapshot(p);saveStates.set(p.id,'Saved');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}}};
+configureData(workspaceHost);configureMapWorkspace(workspaceHost);
 render();initializeAuth(restoreUserWorkspace);

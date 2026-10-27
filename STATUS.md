@@ -1,5 +1,15 @@
 # StrataX status
 
+## 2026-10-27 — map workspace and well-linked deviation data
+
+- Published Sites version 11: source `8942c1e69d25bdc251cf5e38f467a14a24f55cc3`, deployment `appgdep_6ae111c125948191a830f0f213a62580`. Existing owner-only audience preserved; version 10 retained for rollback. No backend deployment or Cloud image build.
+- Added compact Add/Basemap/View/Style/Export ribbon, searchable well/layer contents, large field-grid/Google map canvas, grid scale/north indicator, legend and a collapsible selected-well inspector. Symbol/label controls, well-location review and SVG field-map export work with real saved records.
+- Selected-well Add deviation data opens the existing guided importer preselected to Deviation and attached to that well. Defaults do not create another well automatically. Local contents retain their existing local-only path.
+- Orange lines represent deviation trajectories drawn from complete supplied coordinate stations with explicit WGS84 and coordinate-order references. MD/inclination/azimuth-only surveys are retained/associated, with trajectory calculation explicitly unavailable. Unconfirmed LAS positions are not plotted; reviewed WGS84 well locations are stored separately from source records. Last survey stations are labelled survey ends, not assumed bottom-hole positions.
+- Field grid uses EPSG:3857 and E/N kilometre labels; no invented boundaries/positions. Google basemaps reuse existing runtime Maps configuration and load only when selected. Map display reads Local artifacts or bounded Cloud originals (32 MiB / 50,000 stations per survey); larger/unreferenced/unsupported surveys remain retained with useful feedback.
+- Verification: 8 focused map browser checks and 10 existing ingestion checks passed, zero page errors. Covered collapse/restore, selected-well deviation identity, persistence/zero coordinates, three real coordinate stations vs angle-only exclusion, Google adapter geometry/zoom, SVG download and 320/768/1024/1440px layouts. External font loading was isolated after one reload timeout; the full map pass then succeeded. All five published JS/CSS modules match tested source bytes; published HTML references the new map assets (Sites adds its own bootstrap).
+- Cleanup: test browsers/servers closed, no isolated Cloud accounts or source uploads created. Kept original assets, user data, recovery copies and test evidence. No backend image changes/deletions; existing live/tagged/worker image protections unchanged. Source helper credentials renewed through hidden stdin; none persisted.
+
 ## 2026-10-27 — Data filters and tabs hotfix
 
 - Fixed `#documents` and `#wells` entry defaults being reapplied on every render, which locked the data-type dropdown and forced tab selections back. Defaults now apply when the data route/project changes; user filters/tabs survive renders and Cloud refreshes. Entering the main Data route clears the document-only filter.

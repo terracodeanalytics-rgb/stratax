@@ -16,3 +16,14 @@ export async function mountMap(element,coordinates,{pick,search,searchButton,fee
     if(search)search.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();searchButton.click();}};
   }catch(error){element.textContent=error.message;element.classList.add('map-unavailable');}
 }
+
+export async function mountWorkspaceMap(element,{points=[],paths=[],site,basemap='terrain',labels=true,symbols={},select}={}){
+ const g=await maps();if(!element.isConnected)return;
+ const locations=[...points,...paths.flatMap(p=>p.points),...(site?[site]:[])];
+ const map=new g.Map(element,{center:locations[0]||{lat:0,lng:0},zoom:locations.length?12:2,mapTypeId:basemap,streetViewControl:false,mapTypeControl:false,fullscreenControl:false,scaleControl:true,zoomControl:true});
+ const bounds=new g.LatLngBounds();locations.forEach(p=>bounds.extend(p));if(locations.length>1)map.fitBounds(bounds,60);
+ if(site)new g.Marker({position:site,map,title:'Project site',icon:{path:g.SymbolPath.CIRCLE,scale:4,fillColor:'#7d9186',fillOpacity:1,strokeWeight:1}});
+ for(const point of points){const symbol=symbols[point.id]||'Wellhead';const marker=new g.Marker({position:point,map,title:point.id,label:labels?{text:point.id,color:'#164b40',fontSize:'11px'}:undefined,icon:{path:symbol==='Circle'?g.SymbolPath.CIRCLE:symbol==='Square'?'M-5 -5H5V5H-5Z':'M0 -10L-6 8H6Z M-4 2H4',scale:1,fillColor:'#ffffff',fillOpacity:1,strokeColor:'#087c73',strokeWeight:1.5,labelOrigin:new g.Point(0,-22)}});marker.addListener('click',()=>select?.(point.id));}
+ for(const path of paths){new g.Polyline({map,path:path.points,strokeColor:'#b47c51',strokeOpacity:1,strokeWeight:2});new g.Marker({map,position:path.points.at(-1),title:path.well+' · last deviation station',icon:{path:g.SymbolPath.CIRCLE,scale:4,fillColor:'#ffffff',fillOpacity:1,strokeColor:'#b47c51',strokeWeight:1.5}});}
+ return map;
+}

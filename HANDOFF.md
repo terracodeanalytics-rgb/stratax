@@ -2,7 +2,7 @@
 
 ## Completed and live
 
-Guided Data ingestion and the filter/tab correction are published as Sites version 10 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `06b7c257a47483c625f1316fd7de34d5e97edf6b`; deployment `appgdep_6ae10923c50c8191bccf4b0c6b98f454`. Existing owner-only audience unchanged. Version 9 remains the frontend rollback.
+The map workspace and well-linked deviation entry are published as Sites version 11 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `8942c1e69d25bdc251cf5e38f467a14a24f55cc3`; deployment `appgdep_6ae111c125948191a830f0f213a62580`. Existing owner-only audience unchanged. Version 10 remains the frontend rollback.
 
 API `stratax-api-00009-yeb` serves 100% in project-9afac/us-central1. Build `72eb2f31-fa5c-4ac9-b7ab-ee002b96805d`, digest `sha256:b2b3a6944c4b668b72c83f9dd00fe9e378c419d1206ec45ffd51033532dd8cc4`. Parser job `stratax-import-worker` uses build `21bbcecd-6842-43b8-86d1-39c649741e7e` / digest `sha256:758865c702747ef3e3c210244e25d07c448fcee0f4c603c6b2334da3c95e745b`. Prior API project/auth revisions and tagged images retained.
 
@@ -36,3 +36,11 @@ No paid vendor SDK, full Petrel/Techlog project migration, live WITSML/ETP, OCR,
 Hosted hotfix verification limit: the initial harness reached an unfinished setup-save modal; the directly created replacement Cloud fixture then did not appear in the Projects UI. Both isolated identities/projects/objects were removed. No page errors occurred. This was not broadened into an unrelated project-sync change; local document-route regression passes. `verify-live-data-filters.cjs --assets-only` separately compares production bytes with tested source.
 
 Production asset comparison passed: `data-page.js` exactly matches tested source, SHA-256 `94654f6020a94b26805bd3a2988ee685242eab82e00887f26bb1431729f213df`. Backend, worker and user datasets were unchanged.
+
+## Map release
+
+Map now has a compact ribbon, contents/well list, EPSG:3857 field grid, Google basemap adapter, collapsible inspector, reviewed well locations, styling and SVG export. Add deviation opens the guided importer attached to the selected well. Orange lines are complete supplied WGS84 coordinate stations; angles-only surveys remain evidence without invented trajectories. Location review requires explicit datum confirmation. Local data never uploads for map parsing. Map read limits: 32 MiB Cloud source, 50,000 coordinate stations; projected-CRS conversion/angle-based trajectory algorithms remain unavailable.
+
+Focused map browser suite: 8 passed; ingestion regression: 10 passed; zero page errors. Includes persistence, zero coordinates, source association, coordinate/angles distinction, Google adapter/zoom, export and four viewport widths. External font fetching caused one harness reload timeout; isolating that network dependency produced the full passing run. No Cloud fixture accounts, uploads, new API/worker builds or image deletions. Original/recovery assets preserved; browser suites close their owned resources.
+
+Production map JS/CSS asset comparison passed for all five modules; HTML asset references validated. New map module SHA-256: `bc8e58bc2dc413b1f34d6b216dcd372345e5d4a645e417fd216cf6d6d1c61ea1`. Site owner-only access remains unchanged. No backend resources or images changed.
