@@ -1,6 +1,6 @@
 # StrataX screen inventory
 
-38 workspaces and 248 feature groups. Coverage is explicit. Synthetic visual references and editable specifications do not constitute a completed specialist editor or scientific implementation.
+38 workspaces and 248 feature groups. Coverage is explicit. Editable specifications do not constitute a completed specialist editor or scientific implementation. Synthetic visual references have been removed; unavailable processing uses empty states. Current project/storage contracts are in PROJECT_STORAGE.md.
 
 ## Source files
 

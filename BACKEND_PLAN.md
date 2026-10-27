@@ -1,13 +1,13 @@
 # StrataX backend architecture and implementation plan
 
 Date: 2026-10-26
-Status: Landing and production authentication implemented and deployed; project persistence and scientific backend phases remain planned.
+Status: Landing/authentication and Cloud/Local project setup, storage and overview are implemented and deployed. Scientific processing remains planned. See PROJECT_STORAGE.md.
 
 ## Working agreement
 
 - Discuss and implement the backend page by page, starting with the existing landing page.
 - Design shared services across the whole product rather than creating a service per page.
-- Use the existing hosted site as the review target. The user explicitly authorized frontend publication and the landing/authentication backend on 2026-10-26, superseding the earlier deployment hold for this phase only. Local checks remain part of QA; later backend phases remain separate.
+- Use the existing hosted site as the review target. The user explicitly authorized frontend publication and the landing/authentication backend on 2026-10-26, superseding the earlier deployment hold for that phase. The user also authorized Cloud/Local project storage and publication on 2026-10-27. Local checks remain part of QA; later backend phases remain separate.
 - Use Google Cloud services under the active account. Prioritize low idle cost, bounded processing costs, and reuse of calculated results.
 - Preserve the current frontend design as the starting point. Replace demonstration behavior with real functionality as each page is completed.
 

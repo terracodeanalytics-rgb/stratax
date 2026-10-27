@@ -1,5 +1,17 @@
 # StrataX status
 
+## 2026-10-27 — project setup, Cloud/Local storage and real overview
+
+- Published Sites version 8: source `7f3c1b2b2162a1ba1815f346ce312055473b26e4`, deployment `appgdep_6ae052b94e648191a702c1f72dc27347`. Existing owner-only audience retained.
+- Four-step Project → Location → Storage → Review setup supports Petrophysics, Seismic or both, optional WGS84 coordinates, editable workflows and an explicit destination. Shared navigation/search/direct-route guards follow workflow selections; well tie requires both.
+- Compact searchable project switcher includes Active/Archived projects and ends with All projects. Overview uses genuine stored source/configuration/registration counts, workflow tracking, real activity and Google Maps site coordinates. Fabricated wells, curves, maps, summaries, candidates and reports are removed; scientific processing remains unavailable.
+- Cloud projects use owner-scoped Firestore and original files in the existing private `project-9afac-stratax-raw` bucket. Local folders save manifests/originals with reconnectable browser handles; unsupported/embedded contexts offer portable packages. Saving/error/unsaved states, revision conflicts, legacy recovery and original downloads are implemented. Limits/contracts: `PROJECT_STORAGE.md`.
+- API revision `stratax-api-00005-xav` serves 100%; build `dc2b1a2a-42f8-407d-b4c8-42a47d746ba4`, image digest `sha256:65a3b738755635a20b784c94689f85a9a0b9c3ad07f8aa3f70bb44797ae17187`. Scale-to-zero, maximum two instances, request-based billing, concurrency eight. Prior auth revision/image retained.
+- Reused the existing StrataX-only Maps browser key, preserving prior origins/tile access and adding Maps JavaScript/geocoding plus the hosted origin. G-RES configuration is unchanged. Runtime secrets stay in Secret Manager; runtime identity receives bucket-scoped access. Seven StrataX policies are version 1.1.
+- Verification: 12 backend tests, 20 candidate API checks, 16 project browser checks and 11 account/landing regressions passed. Published browser: 11 passed, including real Firebase sign-in, actual Google Maps, source-byte integrity, refresh, cross-device project restoration and 320/768/1024/1440px layouts. Zero page/Maps errors. Fresh API ERROR query returned no entries.
+- Tests used isolated accounts; their records and source objects were removed. No email was sent. The first second-session browser attempt omitted policy checkboxes; the harness was corrected and the full hosted pass succeeded. No existing account password was changed.
+- Cleanup: removed the one-use source normalizer and stopped two verified sandbox-stalled pytest processes. Retained original assets, recovery data, test evidence, operational scripts and all four registry-tagged StrataX images; zero cloud images deleted. No unrelated service or G-RES data changed.
+
 ## 2026-10-26 — project workspace redesign
 
 - Redesigned the Projects page with a library sidebar, compact portfolio/resume panels, searchable project cards, six-stage progress rails, grid/list controls, and focused empty states. Preserved existing project management and local persistence behavior.

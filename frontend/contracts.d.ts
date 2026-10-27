@@ -9,3 +9,28 @@ export interface CalculationResult { id:string; configurationId:string; inputFin
 export interface SpatialReference { horizontalEPSG:number; verticalDatum:string; sourceNote:string; reviewedBy:string; reviewedAt:string; }
 export interface ProjectLayer { id:string; type:'vector'|'raster'|'wms'|'wmts'|'xyz'; source:EvidenceReference; crs:SpatialReference; visible:boolean; opacity:number; order:number; }
 export interface BackendAdapter { listCurves(projectId:string,wellId:string):Promise<Curve[]>; saveConfiguration(config:Configuration):Promise<Configuration>; run(config:Configuration):Promise<{jobId:string}>; getResult(jobId:string):Promise<CalculationResult>; }
+
+export type ProjectWorkflow = 'petrophysics' | 'seismic';
+export type ProjectStorage = 'cloud' | 'local' | 'portable' | 'legacy';
+export interface StudyProject {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  workflows: ProjectWorkflow[];
+  storage: ProjectStorage;
+  coordinates: {lat:number; lng:number} | null;
+  siteName?: string;
+  region?: string;
+  country?: string;
+  description?: string;
+  directoryName?: string;
+  status: 'Active' | 'Archived' | 'Trash';
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProjectRecord {
+  project: StudyProject;
+  workspace: Record<string, unknown>;
+  revision: number;
+}

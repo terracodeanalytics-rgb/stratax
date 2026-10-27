@@ -1,37 +1,29 @@
 # StrataX handoff
 
-## Completed
+## Completed and live
 
-Latest release: Projects page and shared navigation/header redesigned, using the same initials avatar as the landing page. The library sidebar, compact workflow/resume panels, stage-rail cards and responsive controls retain existing behavior. Scientific screens were not redesigned. Sites version 7 source `530a817355cfb4111b42b5b52721a8f5df2815c1`, deployment `appgdep_6adf9c6e43d881918be33ba24fa81bfc`. Controlled browser suite: 30 passed; 17 live hosted checks passed; isolated test account removed.
+Project setup, Cloud/Local storage, compact switcher, real-data overview and removal of fabricated scientific displays are published as Sites version 8. Source `7f3c1b2b2162a1ba1815f346ce312055473b26e4`; deployment `appgdep_6ae052b94e648191a702c1f72dc27347`. Existing owner-only Site audience unchanged.
 
-Landing-page simplification, corporate footer, favicon/logo navigation, G-RES-style account UI, shared Firebase integration, real branded setup/recovery/verification emails, current-policy acceptance and StrataX-specific profile persistence are implemented. Project/scientific backend work remains separate.
+API `stratax-api-00005-xav` serves 100% in project-9afac/us-central1. Build `dc2b1a2a-42f8-407d-b4c8-42a47d746ba4`; digest `sha256:65a3b738755635a20b784c94689f85a9a0b9c3ad07f8aa3f70bb44797ae17187`. Prior auth revision/images and previous Sites versions are retained.
 
-Latest follow-up: the signed-in public header now shows an initials avatar and account dropdown instead of Open workspace/Sign out. Menu links point to working project/settings/policy/support destinations. The 25-check browser suite passed. Published source `6d7fc4edee622ab41e98ffefc18bd30970fba3dc`, deployment `appgdep_6adf950bb1248191a387076843ec40bd`; 13 live hosted checks passed and the isolated account was removed. Backend unchanged.
+Read `PROJECT_STORAGE.md` for implemented behavior, schema, routes, file-size limits, folder/portable compatibility, legacy migration and conflict recovery. Scientific parsing, OCR, interpretation engines and results remain unavailable. No fabricated data is generated in their place.
 
-## Live state
+## Verification
 
-- Frontend: https://stratax-workbench.cometcrab258.chatgpt.site/#home; existing owner-only Sites audience retained.
-- API: https://stratax-api-227436363119.us-central1.run.app; `stratax-api-00002-wep` at 100% in `project-9afac/us-central1`.
-- Backend build `b55bd7b5-d9b9-4a0c-84f2-82e9cabaf95d`; current digest `sha256:34e409263b204eb0fd2e89dd352fba8c42db7be36c2ba4e851926055817e0881`.
-- Previous frontend version 5 was published from Sites source commit `ada5a76bb12fd1c9b497ead5ef4d347f1dac9f0b`, deployment `appgdep_6adf9142539c8191ac0586e567fcaf49`. Version 4 passed the complete real sign-in/email/browser checks; version 5 adds provider-error redaction and account-aware profile labels and passed the 24-check focused browser suite.
+- Backend: `python -m pytest backend/tests -q`: 12 passed; one upstream TestClient deprecation warning.
+- Controlled projects: `node scripts/verify-projects.cjs`: 16 passed, zero page errors. Includes real browser filesystem write/reopen through a controlled chooser, portable export/import original-byte round trips, workflow selections/guards, saved configurations, permission renewal, failed-save retry and responsive layouts.
+- Account/landing subset of `verify-ui.cjs`: 11 passed, zero page errors. Use STRATAX_UI_TEST_FILTER; previous single-form project tests have been superseded.
+- Candidate `verify-project-api.py`: 20 passed; two isolated identities plus project/source records removed. Real upload/download integrity, owner isolation, stale revisions, archive retention and validation verified.
+- Published `verify-live-projects.cjs`: 11 passed, zero page/Maps errors. Real Firebase sign-in/policies, actual Google Maps, original download bytes, refresh, cross-device project/files and four viewport widths verified. Isolated account/records/original objects removed.
+- First second-session browser attempt omitted policy checkbox selection in the harness; corrected and rerun successfully. Existing account credentials were never used or reset. No email sent.
+- Fresh StrataX API ERROR logs were empty after verification.
 
-## Verification and tools
+## Cleanup and repository
 
-- `python -m pytest backend/tests -q`: 10 passed. Use the repository virtual environment; Windows TestClient needs loopback access.
-- `node scripts/verify-ui.cjs`: 24 controlled-provider browser checks passed. Runtime paths can be overridden with PLAYWRIGHT_MODULE and CHROMIUM_EXECUTABLE.
-- `scripts/live-account-qa.py`: 20 real Firebase/Firestore checks passed; deletes its isolated identities and account/policy documents.
-- `scripts/verify-live-site.cjs`: hidden stdin `{siteToken}` runs hosted real sign-in/layout checks; `{siteToken, flow:"email"}` tests real cross-device link completion/password recovery and Google popup/cancellation. No tokens are persisted or printed.
-- `scripts/verify-live-assets.cjs`: hidden Sites token input; verifies all logo images decode and captures final mobile/desktop renders.
-- Final version-5 asset/source verification passed seven checks, including exact published app/auth bytes and provider-error redaction. Fresh API ERROR logs remained empty.
-- `scripts/verify-email.py`: one real message was authorized only for `contact@terracodeanalytics.com`; delivery and inbox receipt passed. Do not rerun casually because it sends mail.
-- Sanitized evidence and screenshots are under ignored `.release/`. Isolated Sites source is under ignored `.sites-source/`. Preserve operational tooling and recovery evidence.
-- Live Google provider popup and cancellation passed; entering real Google credentials was not automated.
+One-use source normalizer removed; two verified sandbox-stalled pytest processes stopped. Browser suites close their owned browsers/servers. Retained original assets, user recovery copies, ignored evidence, Sites checkout and operational tools. Four registry-tagged StrataX images retained; zero image deletions. Shared/G-RES services and data untouched.
 
-## Next actions
+Root Git destination remains https://github.com/terracodeanalytics-rgb/stratax. Finish with only reviewed scoped files staged; never stage .release, .sites-source, credentials or private runtime data.
 
-1. Discuss the project directory’s backend ownership, persistence, duplication, archive/Trash and cross-device behavior with the user.
-2. Continue page by page. Do not silently claim scientific reference screens are completed editors or calculations.
+## Next
 
-## Cleanup and preservation
-
-One-use integration script removed; six blocked session test processes stopped. Both StrataX image digests are tagged/current-or-rollback and were retained; zero images deleted. No unrelated services, accounts, data, settings or images were changed. The existing untracked BACKEND_PLAN.md belongs to this conversation and should be preserved and committed with its updated phase status.
+Continue page-by-page with real scientific import/parsing before enabling calculations or derived geometry. User decisions are still needed for those scientific workflows. Cloud/Local automatic synchronization and collaboration are not implemented. Portable duplicates are independent complete copies and must be downloaded; local folder permissions may require reconnecting after a browser restart.

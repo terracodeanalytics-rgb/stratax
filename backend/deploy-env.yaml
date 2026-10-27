@@ -6,3 +6,4 @@ SMTP_HOST: mail.spacemail.com
 SMTP_PORT: '465'
 SMTP_USER: contact@terracodeanalytics.com
 SMTP_FROM_EMAIL: contact@terracodeanalytics.com
+STRATAX_PROJECT_BUCKET: project-9afac-stratax-raw
