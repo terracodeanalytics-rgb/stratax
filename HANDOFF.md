@@ -2,7 +2,7 @@
 
 ## Completed and live
 
-Guided Data ingestion is published as Sites version 9 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `d73ebab5c5ec3872add9a88fb2b6f6d731cd1483`; deployment `appgdep_6ae0a2de067c8191acb0d4a09b00622e`. Existing owner-only audience unchanged. Version 8 remains the frontend rollback.
+Guided Data ingestion and the filter/tab correction are published as Sites version 10 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `06b7c257a47483c625f1316fd7de34d5e97edf6b`; deployment `appgdep_6ae10923c50c8191bccf4b0c6b98f454`. Existing owner-only audience unchanged. Version 9 remains the frontend rollback.
 
 API `stratax-api-00009-yeb` serves 100% in project-9afac/us-central1. Build `72eb2f31-fa5c-4ac9-b7ab-ee002b96805d`, digest `sha256:b2b3a6944c4b668b72c83f9dd00fe9e378c419d1206ec45ffd51033532dd8cc4`. Parser job `stratax-import-worker` uses build `21bbcecd-6842-43b8-86d1-39c649741e7e` / digest `sha256:758865c702747ef3e3c210244e25d07c448fcee0f4c603c6b2334da3c95e745b`. Prior API project/auth revisions and tagged images retained.
 
@@ -28,3 +28,11 @@ Root remote is https://github.com/terracodeanalytics-rgb/stratax. Only reviewed 
 ## Follow-up boundaries
 
 No paid vendor SDK, full Petrel/Techlog project migration, live WITSML/ETP, OCR, interpretation algorithms or simulation execution. VDS/closed variants offer retention and conversion instructions. Expanded malformed-binary fixtures for every advertised vendor dialect and full capacity stress tests remain further validation work. Parsed Cloud-to-portable conversion and automatic Cloud/Local synchronization are explicitly unavailable. Unconfirmed source CRS/datums do not enter confirmed map geometry.
+
+## Filter hotfix
+
+`#documents` forced `typeFilter=documents` and tab=sources on every render, so changing the dropdown or opening Datasets appeared broken. `#wells` had the same tab issue. Defaults now apply on route/project changes, and filtered zero results have an explicit Clear filters action. The importer also disables Continue during preflight. Local suite: 10 passed; focused hosted filter verification recorded in STATUS. No user data or backend/image changes.
+
+Hosted hotfix verification limit: the initial harness reached an unfinished setup-save modal; the directly created replacement Cloud fixture then did not appear in the Projects UI. Both isolated identities/projects/objects were removed. No page errors occurred. This was not broadened into an unrelated project-sync change; local document-route regression passes. `verify-live-data-filters.cjs --assets-only` separately compares production bytes with tested source.
+
+Production asset comparison passed: `data-page.js` exactly matches tested source, SHA-256 `94654f6020a94b26805bd3a2988ee685242eab82e00887f26bb1431729f213df`. Backend, worker and user datasets were unchanged.

@@ -1,5 +1,14 @@
 # StrataX status
 
+## 2026-10-27 — Data filters and tabs hotfix
+
+- Fixed `#documents` and `#wells` entry defaults being reapplied on every render, which locked the data-type dropdown and forced tab selections back. Defaults now apply when the data route/project changes; user filters/tabs survive renders and Cloud refreshes. Entering the main Data route clears the document-only filter.
+- Filtered-out inventories now say No matching data and provide Clear filters instead of claiming no sources exist. Imported files, datasets and backend services are unchanged.
+- Continue is disabled while source preflight runs, avoiding an ignored early click. Test waits now follow the actual button state instead of a brittle progress-text match.
+- Published Sites version 10, source `06b7c257a47483c625f1316fd7de34d5e97edf6b`, deployment `appgdep_6ae10923c50c8191bccf4b0c6b98f454`; owner-only audience preserved. Version 9 retained for rollback.
+- Syntax passed; local browser suite 10 passed, zero page errors, including the exact document-route filter/tab/clear/preview regression. The full hosted browser check could not reach the filter assertion because its isolated Cloud project did not appear in the browser; both attempted fixtures were removed. Production module bytes match the tested source (SHA-256 `94654f6020a94b26805bd3a2988ee685242eab82e00887f26bb1431729f213df`).
+- No API deployment or new Cloud image. No images deleted; existing tagged/live/worker protections unchanged. Interrupted initial browser check was stopped; final suite closes its owned browser/server. Verification evidence, source assets and recovery copies retained.
+
 ## 2026-10-27 — guided Data ingestion release
 
 - Published Sites version 9: source `d73ebab5c5ec3872add9a88fb2b6f6d731cd1483`, deployment `appgdep_6ae0a2de067c8191acb0d4a09b00622e`. Existing owner-only audience retained. Data now has Sources/Wells/Datasets/Import history, searchable inventories, real previews and a six-step importer.

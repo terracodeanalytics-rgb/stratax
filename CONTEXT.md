@@ -4,7 +4,7 @@
 
 - Git root: STRATAX; remote `https://github.com/terracodeanalytics-rgb/stratax`. Canonical frontend: `frontend/dist`; API: `backend`. No frontend build/framework is required.
 - Site: https://stratax-workbench.cometcrab258.chatgpt.site/#home. Preserve project ID `appgprj_6adc66e963588191a4154ab09c724471` and its owner-only audience.
-- Current frontend: Sites version 9, source `d73ebab5c5ec3872add9a88fb2b6f6d731cd1483`, deployment `appgdep_6ae0a2de067c8191acb0d4a09b00622e`. Version 8 remains the prior saved frontend.
+- Current frontend: Sites version 10, source `06b7c257a47483c625f1316fd7de34d5e97edf6b`, deployment `appgdep_6ae10923c50c8191bccf4b0c6b98f454`. Version 9 remains the prior saved frontend.
 - API: https://stratax-api-227436363119.us-central1.run.app. `stratax-api-00009-yeb` at 100% in `project-9afac/us-central1`; candidate alias https://candidate---stratax-api-fwy32oha6q-uc.a.run.app.
 - Backend build `72eb2f31-fa5c-4ac9-b7ab-ee002b96805d`; digest `sha256:b2b3a6944c4b668b72c83f9dd00fe9e378c419d1206ec45ffd51033532dd8cc4`. Prior project revision `stratax-api-00005-xav` remains available for rollback.
 - Cloud Run: zero minimum/two maximum instances, request-based CPU, 512 MiB, concurrency eight and existing 60-second timeout.
@@ -48,3 +48,5 @@
 - Browser `ingestion-worker.js` uses streamed reads and vendored SHA-256/SheetJS; Local native-only formats receive conversion guidance, never server upload. Folder chunks live in `datasets/{importId}`; portable packages preserve supported chunks/originals within explicit budgets. Parsed Cloud-to-portable conversion is unavailable and blocked explicitly.
 - PowerShell comma-separated gcloud environment values MUST be quoted or passed as one structured subprocess argument. An unquoted value caused the candidate preview 503 and was corrected before publication. Cloud Run image-pull DEADLINE_EXCEEDED can occur before worker code starts; API tracks execution failure so imports can retry without re-upload.
 - Six Downloads LAS files are local read-only acceptance fixtures. Never upload them or activate unspecified source datums as WGS84 automatically. No email was sent during ingestion QA.
+
+- Data route defaults apply only when its route/project changes. Never assign document filters or wells tabs unconditionally inside `dataPageView`: that overrides user controls on every render. Filtered empty states offer Clear filters. Preflight disables Continue until parsing finishes; tests should wait on the control state, not progress copy.

@@ -3,7 +3,7 @@ import {browserRead,loadCloud,nativeImport,commitNative,cancelNative,nativePrevi
 import * as repository from './project-repository.js';
 import {api} from './auth.js';
 
-let lastProject=null;
+let lastProject=null,lastViewRoute=null,lastViewProject=null;
 let host,tab='sources',query='',typeFilter='',statusFilter='',loading=false,lastCloud=0,refreshTimer;
 const $=s=>document.querySelector(s);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -14,7 +14,12 @@ export function configureData(context){host=context;}
 function context(){return host.getState().ingestion||{imports:[],datasets:[],templates:[]};}
 const datasetKey=d=>`${d.importId}:${d.id}`;
 export function dataPageView(route){
- if(route==='wells')tab='wells';if(route==='documents'){tab='sources';typeFilter='documents';}
+ const projectId=host.getProject()?.id;
+ if(route!==lastViewRoute||projectId!==lastViewProject){
+  tab=route==='wells'?'wells':'sources';
+  typeFilter=route==='documents'?'documents':'';query='';statusFilter='';
+  lastViewRoute=route;lastViewProject=projectId;
+ }
  const state=host.getState(),project=host.getProject(),data=context();
  const matching=item=>(text(item.name||item.id)+' '+text(item.well||'')).toLowerCase().includes(query.toLowerCase())&&(!typeFilter||(item.family||item.type)===typeFilter)&&(!statusFilter||(item.status||'').includes(statusFilter));
  const files=state.files||[],datasets=data.datasets||[],imports=data.imports||[];
@@ -27,12 +32,13 @@ export function dataPageView(route){
  else body=table(['Import','Data type','Sources','State',''],imports.filter(matching).map(r=>`<tr><td><strong>${esc(new Date(r.createdAt).toLocaleString())}</strong><small>${esc(r.id.slice(0,16))}</small></td><td>${esc(nameOf(r.family))}</td><td>${r.assets?.length||0}</td><td>${pill(r.status)}</td><td><button data-import="${esc(r.id)}">${['inspecting','importing','uploading'].includes(r.status)?'View progress':'Review'}</button></td></tr>`),'Your import history starts here','Completed imports, warnings and retained originals stay traceable.');
  return `<section class="data-library"><div class="data-page-head"><div><div class="study-kicker">PROJECT EVIDENCE</div><h1>Data</h1><p>Keep the originals. Confirm the meaning. Import with confidence.</p></div><div class="actions"><button id="data-formats">Supported formats</button><button class="primary" data-action="upload">${host.icon('plus')}Add data</button></div></div><div class="data-summary"><span><strong>${files.length}</strong> originals</span><span><strong>${active.length}</strong> datasets</span><span><strong>${active.filter(d=>d.status==='retained/unresolved').length}</strong> need reference review</span><span>${project.storage==='cloud'?'Cloud storage':project.storage==='local'?'Local folder':'Portable project'}${data.quota?` · ${bytes(data.quota.used)} / ${bytes(data.quota.projectLimit)}`:''}</span></div><div class="data-surface"><nav class="data-tabs" aria-label="Data sections">${tabs.map(([id,title,count])=>`<button data-data-section="${id}" aria-current="${id===tab?'page':'false'}">${title}<span>${count}</span></button>`).join('')}</nav><div class="data-filter-bar"><label class="data-search">${host.icon('search')}<input id="data-query" aria-label="Search project data" placeholder="Search by name or well…" value="${esc(query)}"></label>${tab!=='wells'?`<select id="data-type-filter" aria-label="Filter data type"><option value="">All data types</option>${families.map(f=>`<option value="${f.id}" ${typeFilter===f.id?'selected':''}>${f.name}</option>`).join('')}</select><select id="data-status-filter" aria-label="Filter import status"><option value="">All states</option>${['ready','retained','awaiting','failed','cancelled','inspecting'].map(v=>`<option ${statusFilter===v?'selected':''}>${v}</option>`).join('')}</select>`:''}<button id="refresh-data" class="quiet">${loading?'Refreshing…':'Refresh'}</button></div>${body}</div><p class="data-footnote">Ready means imported—not scientifically approved. Unconfirmed units, coordinates and datums remain visible.</p></section>`;
 }
-function table(headers,rows,title,description){return rows.length?`<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`:`<div class="data-empty"><span>${host.icon('file')}</span><h2>${title}</h2><p>${description}</p><button data-action="upload">Add data ${host.icon('arrow')}</button></div>`;}
+function table(headers,rows,title,description){const filtered=!!(query||typeFilter||statusFilter)&&((host.getState().files||[]).length+(context().datasets||[]).length+(host.getState().wellDrafts||[]).length)>0;return rows.length?`<div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`:`<div class="data-empty"><span>${host.icon('file')}</span><h2>${filtered?'No matching data':title}</h2><p>${filtered?'Your saved data is still here. Change or clear the filters to see it.':description}</p>${filtered?'<button id="clear-data-filters">Clear filters</button>':`<button data-action="upload">Add data ${host.icon('arrow')}</button>`}</div>`;}
 function pill(status){return `<span class="data-status ${/failed|blocking/.test(status)?'failed':/ready/.test(status)?'ready':'neutral'}">${esc(status||'Not classified')}</span>`;}
 export function bindDataPage(){if(lastProject!==host.getProject()?.id){lastProject=host.getProject()?.id;lastCloud=0;}
  document.querySelectorAll('[data-data-section]').forEach(b=>b.onclick=()=>{tab=b.dataset.dataSection;host.render();});
  $('#data-query')?.addEventListener('input',e=>{query=e.target.value;const position=e.target.selectionStart;host.render();$('#data-query').focus();$('#data-query').setSelectionRange(position,position);});
  $('#data-type-filter')?.addEventListener('change',e=>{typeFilter=e.target.value;host.render();});$('#data-status-filter')?.addEventListener('change',e=>{statusFilter=e.target.value;host.render();});
+ $('#clear-data-filters')?.addEventListener('click',()=>{query='';typeFilter='';statusFilter='';host.render();});
  $('#data-formats')?.addEventListener('click',()=>host.modal('Format coverage',`<p class="sub">Coverage depends on the documented version and selected storage. Closed variants require conversion; no format is accepted by extension alone.</p><div class="table-wrap"><table class="data-table"><thead><tr><th>Format</th><th>Versions / boundaries</th><th>Cloud</th><th>Local</th></tr></thead><tbody>${formatCatalog.map(f=>`<tr><td>${esc(f.name)}</td><td>${esc(f.versions)}</td><td>${esc(f.server)}</td><td>${esc(f.local)}</td></tr>`).join('')}</tbody></table></div>`));
  $('#refresh-data')?.addEventListener('click',()=>refreshData(true));
  document.querySelectorAll('[data-source]').forEach(b=>b.onclick=()=>sourceDetail(b.dataset.source));
@@ -72,7 +78,7 @@ export async function openImporter({existing}={}){
  const input=(name,label,value='',placeholder='')=>`<label class="field">${label}<input name="${name}" value="${esc(value)}" placeholder="${esc(placeholder)}"></label>`;
  function close(event){event?.preventDefault();if(wizard.busy){host.toast('Import continues in the background. Use Cancel import to stop it.');return;}if(wizard.assets.length&&!wizard.record){capture();const body=dialog.querySelector('.dialog-body');body.innerHTML='<h3>Leave this import setup?</h3><p>No new Cloud transfer has started. Selected files and settings will be cleared.</p><div class="actions"><button id="import-keep" class="primary">Keep editing</button><button id="import-leave">Leave setup</button></div>';$('#import-keep').onclick=draw;$('#import-leave').onclick=()=>dialog.close();}else dialog.close();}
  async function preflight(){
-  wizard.busy=true;if($('#import-feedback'))$('#import-feedback').textContent='Reading source headers and previews…';wizard.previews={};wizard.nativeNotice='';
+  wizard.busy=true;const continueButton=$('#ingestion-form [type=submit]');if(continueButton){continueButton.disabled=true;continueButton.textContent='Reading files…';}if($('#import-feedback'))$('#import-feedback').textContent='Reading source headers and previews…';wizard.previews={};wizard.nativeNotice='';
   for(const asset of wizard.assets){if(/\.(shx|dbf|prj|cpg|h5)$/i.test(asset.file.name))continue;try{const result=await browserRead(asset.file,wizard.family,{...wizard.options,...wizard.options.perFile[asset.file.name]},{previewOnly:true,signal:wizard.controller.signal});const preview=result.datasets[0];wizard.previews[asset.file.name]=preview;wizard.preview||=preview;if(preview?.well&&!wizard.options.perFile[asset.file.name])wizard.options.perFile[asset.file.name]={well:preview.well,createWell:!(workspace.wellDrafts||[]).some(w=>w.id===preview.well)};}catch(error){wizard.nativeNotice=error.message;}}
   wizard.busy=false;draw();
  }
