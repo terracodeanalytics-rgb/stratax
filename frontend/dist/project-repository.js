@@ -64,9 +64,9 @@ export async function save(project, workspace) {
   const uid=session.user?.uid;
   const record = {schemaVersion:1, project:structuredClone(project), workspace:structuredClone(workspace), revision:project.revision || 0};
   // Recovery cache is never represented as a destination save.
-  await item(key(project.id, 'draft'), record);
+  try {await item(key(project.id, 'draft'), record);} catch(error) {if(project.storage !== 'cloud' && project.storage !== 'local')throw error;}
   if (!uid || activeUid !== uid || session.user?.uid !== uid) throw new Error('Sign in again before saving.');
-  if (project.storage === 'cloud') return api('/api/projects/'+project.id, {method:'PUT', body:{revision:record.revision, project:record.project, workspace:record.workspace}});
+  if (project.storage === 'cloud') {delete record.workspace.ingestion;return api('/api/projects/'+project.id, {method:'PUT', body:{revision:record.revision, project:record.project, workspace:record.workspace}});}
   if (project.storage === 'local') {
     const dir = await directory(project.id);
     await writeFile(dir, 'project.stratax.json', JSON.stringify(record, null, 2));
@@ -75,7 +75,8 @@ export async function save(project, workspace) {
   return {...record, unsaved:true};
 }
 export async function upload(project, file) {
-  if (!file.size || file.size > 64*1024*1024) throw new Error('Choose a non-empty source file smaller than 64 MiB.');
+  if (!file.size || file.size > (project.storage==='cloud'?64*1024*1024:10*1024**3)) throw new Error('This file exceeds the selected storage transfer limit. Use the guided Cloud importer for large uploads.');
+  if(project.storage==='portable'&&file.size>128*1024**2)throw new Error('Use a local folder or Cloud project for this large file. Portable packages cannot retain it safely.');
   const fileId = id();
   if (project.storage === 'cloud') {
     const response = await fetch(API_ORIGIN+`/api/projects/${project.id}/files/${fileId}`, {method:'PUT', headers:{Authorization:'Bearer '+await session.user.getIdToken(), 'Content-Type':'application/octet-stream', 'X-File-Name':encodeURIComponent(file.name)}, body:file});
@@ -97,12 +98,15 @@ export async function source(project, file) {
     if (!response.ok) throw new Error('The original file could not be opened.');
     return response.blob();
   }
+  if(file.external){const handle=await item(key(project.id,'external:'+file.id));if(!handle)throw new Error('Reconnect the linked original file.');if(await handle.queryPermission({mode:'read'})!=='granted')throw new Error('Permission to the linked original is required. Reconnect it from the import panel.');return handle.getFile();}
   if (project.storage === 'local') return (await (await directory(project.id)).getDirectoryHandle('originals')).getFileHandle(file.id).then(h=>h.getFile());
   const value = await item(key(project.id, 'file:'+file.id));
   if (!value) throw new Error('The original file is missing from this device.');
   return value;
 }
 export async function exportPackage(project, workspace) {
+  if(project.storage==='cloud'&&workspace.ingestion?.datasets?.length)throw new Error('This Cloud project includes native parsed artifacts. Keep it in Cloud storage or download its originals individually; a complete Cloud-to-portable conversion is not available yet. No partial package was created.');
+  if((workspace.files||[]).reduce((sum,f)=>sum+(Number(f.size)||0),0)>128*1024**2)throw new Error('This project is too large for a portable download. Keep the complete local folder bundle, or download originals individually from Cloud. No originals have been omitted.');
   const originals = [];
   for (const file of workspace.files || []) {
     if (!file.id) continue;
@@ -110,7 +114,9 @@ export async function exportPackage(project, workspace) {
     const data = await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob);});
     originals.push({id:file.id, data});
   }
-  return new Blob([JSON.stringify({schemaVersion:1, project, workspace, originals})], {type:'application/json'});
+  const artifacts=[];let total=0;
+  for(const session of workspace.ingestion?.imports||[])for(const dataset of session.datasets||[])for(const chunk of dataset.chunks||[]){const blob=await getArtifact(project,session.id,chunk.name);total+=blob.size;if(total>64*1024**2)throw new Error('Derived data exceeds the portable package budget. Retain the complete project folder instead.');const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob);});artifacts.push({importId:session.id,name:chunk.name,data});}
+  return new Blob([JSON.stringify({schemaVersion:1, project, workspace, originals, artifacts})], {type:'application/json'});
 }
 function validate(record) {
   if (record.schemaVersion !== 1 || !record.project || !record.workspace || !Array.isArray(record.workspace.files)) throw new Error('Choose a valid StrataX project package.');
@@ -141,7 +147,14 @@ export async function importPackage(file) {
     const bytes=Uint8Array.from(atob(f.data),c=>c.charCodeAt(0));
     await item(key(record.project.id,'file:'+f.id),new Blob([bytes]));
   }
+  for(const artifact of record.artifacts||[]){await putArtifact(record.project,artifact.importId,artifact.name,new Blob([Uint8Array.from(atob(artifact.data),c=>c.charCodeAt(0))]));}
+  delete record.artifacts;
   delete record.originals;
   await item(key(record.project.id,'draft'),record);
   return record;
 }
+
+function artifactName(value){if(!/^[\w.-]{1,180}$/.test(value)||value==='.'||value==='..')throw new Error('Invalid artifact reference.');return value;}
+export async function putArtifact(project,importId,name,blob){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id);const dir=await(await root.getDirectoryHandle('datasets',{create:true})).getDirectoryHandle(importId,{create:true});await writeFile(dir,name,blob);}else await item(key(project.id,'artifact:'+importId+':'+name),blob);}
+export async function getArtifact(project,importId,name){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id);const dir=await(await root.getDirectoryHandle('datasets')).getDirectoryHandle(importId);return(await dir.getFileHandle(name)).getFile();}const blob=await item(key(project.id,'artifact:'+importId+':'+name));if(!blob)throw new Error('A derived artifact is missing. Reinspect the retained original.');return blob;}
+export async function linkOriginal(project,handle){if(project.storage!=='local')throw new Error('Linked originals require a local folder project.');const file=await handle.getFile();const fileId=id();await item(key(project.id,'external:'+fileId),handle);return {id:fileId,name:file.name,size:file.size,type:'Source file',well:'',status:'Linked original · not parsed',external:true,local:true};}

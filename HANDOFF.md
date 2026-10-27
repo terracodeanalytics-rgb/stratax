@@ -2,28 +2,29 @@
 
 ## Completed and live
 
-Project setup, Cloud/Local storage, compact switcher, real-data overview and removal of fabricated scientific displays are published as Sites version 8. Source `7f3c1b2b2162a1ba1815f346ce312055473b26e4`; deployment `appgdep_6ae052b94e648191a702c1f72dc27347`. Existing owner-only Site audience unchanged.
+Guided Data ingestion is published as Sites version 9 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `d73ebab5c5ec3872add9a88fb2b6f6d731cd1483`; deployment `appgdep_6ae0a2de067c8191acb0d4a09b00622e`. Existing owner-only audience unchanged. Version 8 remains the frontend rollback.
 
-API `stratax-api-00005-xav` serves 100% in project-9afac/us-central1. Build `dc2b1a2a-42f8-407d-b4c8-42a47d746ba4`; digest `sha256:65a3b738755635a20b784c94689f85a9a0b9c3ad07f8aa3f70bb44797ae17187`. Prior auth revision/images and previous Sites versions are retained.
+API `stratax-api-00009-yeb` serves 100% in project-9afac/us-central1. Build `72eb2f31-fa5c-4ac9-b7ab-ee002b96805d`, digest `sha256:b2b3a6944c4b668b72c83f9dd00fe9e378c419d1206ec45ffd51033532dd8cc4`. Parser job `stratax-import-worker` uses build `21bbcecd-6842-43b8-86d1-39c649741e7e` / digest `sha256:758865c702747ef3e3c210244e25d07c448fcee0f4c603c6b2334da3c95e745b`. Prior API project/auth revisions and tagged images retained.
 
-Read `PROJECT_STORAGE.md` for implemented behavior, schema, routes, file-size limits, folder/portable compatibility, legacy migration and conflict recovery. Scientific parsing, OCR, interpretation engines and results remain unavailable. No fabricated data is generated in their place.
+Read `DATA_INGESTION.md` for the format/version matrix, API/storage schema, parser and portable limits, conversion paths and provenance. `PROJECT_STORAGE.md` covers setup and destination behavior. Data contains real sources/wells/datasets/history; no fabricated scientific output. A 10 GiB upload does not imply every binary frame can be materialized: reader-specific bounds remain explicit.
 
 ## Verification
 
-- Backend: `python -m pytest backend/tests -q`: 12 passed; one upstream TestClient deprecation warning.
-- Controlled projects: `node scripts/verify-projects.cjs`: 16 passed, zero page errors. Includes real browser filesystem write/reopen through a controlled chooser, portable export/import original-byte round trips, workflow selections/guards, saved configurations, permission renewal, failed-save retry and responsive layouts.
-- Account/landing subset of `verify-ui.cjs`: 11 passed, zero page errors. Use STRATAX_UI_TEST_FILTER; previous single-form project tests have been superseded.
-- Candidate `verify-project-api.py`: 20 passed; two isolated identities plus project/source records removed. Real upload/download integrity, owner isolation, stale revisions, archive retention and validation verified.
-- Published `verify-live-projects.cjs`: 11 passed, zero page/Maps errors. Real Firebase sign-in/policies, actual Google Maps, original download bytes, refresh, cross-device project/files and four viewport widths verified. Isolated account/records/original objects removed.
-- First second-session browser attempt omitted policy checkbox selection in the harness; corrected and rerun successfully. Existing account credentials were never used or reset. No email sent.
-- Fresh StrataX API ERROR logs were empty after verification.
+- `.venv/Scripts/python.exe -m pytest backend/tests -q`: 35 passed. Final control-plane status addition: affected API suite 6 passed. Windows sandbox blocks some temporary/TestClient paths; use the approved escalated test command.
+- Worker Docker build gate `native_selftest.py`: 26 passed, including native DLIS/LIS, SEG-Y/SU/ZGY/SGZ, grids, GIS, RESQML/HDF5, ECLIPSE and safe XML/archive handling.
+- `node scripts/verify-ingestion-ui.cjs`: 9 passed, zero page errors; includes true browser filesystem original/chunk/manifest writes and four viewport widths. Local content generated no Cloud content requests.
+- `scripts/verify-ingestion-api.py`: 34 live candidate checks passed. Real resumed GCS upload, native 160,000-row parse/32 chunks, private preview, channel selection/commit, templates/reload, owner isolation and quota checks. No full 10 GiB transfer or 50 GiB storage stress run.
+- `scripts/verify-live-ingestion.cjs`: 9 published checks passed, zero page errors. First harness attempt clicked before source preflight finished; corrected the asynchronous wait. Actual hosted native previews, download bytes, reload and responsive layouts verified.
+- Six Downloads LAS files remained read-only local fixtures; datum unresolved. No QA email sent and no existing user password changed. Isolated accounts, Firestore records and source/derived test objects removed.
 
-## Cleanup and repository
+## Operational details and cleanup
 
-One-use source normalizer removed; two verified sandbox-stalled pytest processes stopped. Browser suites close their owned browsers/servers. Retained original assets, user recovery copies, ignored evidence, Sites checkout and operational tools. Four registry-tagged StrataX images retained; zero image deletions. Shared/G-RES services and data untouched.
+PowerShell gcloud comma-separated environment values must be quoted; the first candidate bucket setting was misparsed, corrected before release. One Cloud Run image import hit a platform DEADLINE_EXCEEDED before worker code ran. API stores operation/execution references and surfaces failed executions for explicit retry. Worker has no automatic retries; per-project/global leases and artifact reservations bound processing.
 
-Root Git destination remains https://github.com/terracodeanalytics-rgb/stratax. Finish with only reviewed scoped files staged; never stage .release, .sites-source, credentials or private runtime data.
+All ten scoped registry images have tags and are protected; zero image deletions. Interrupted test leftovers were removed with strict generated-email/date/project checks (two accounts and one object generation). Three stalled sandbox pytest processes and one stalled source helper stopped. Keep ignored `.release` evidence, `.sites-source`, recovery copies, assets and operational tools. The cleanup script is dated/scoped intentionally; never broaden its match to real accounts.
 
-## Next
+Root remote is https://github.com/terracodeanalytics-rgb/stratax. Only reviewed repository files belong in the final commit; never stage `.release`, `.sites-source`, private tokens or local data. Sites source is a separate repository; never replace the root remote. Native Sites credentials are short-lived and must remain hidden stdin/session memory.
 
-Continue page-by-page with real scientific import/parsing before enabling calculations or derived geometry. User decisions are still needed for those scientific workflows. Cloud/Local automatic synchronization and collaboration are not implemented. Portable duplicates are independent complete copies and must be downloaded; local folder permissions may require reconnecting after a browser restart.
+## Follow-up boundaries
+
+No paid vendor SDK, full Petrel/Techlog project migration, live WITSML/ETP, OCR, interpretation algorithms or simulation execution. VDS/closed variants offer retention and conversion instructions. Expanded malformed-binary fixtures for every advertised vendor dialect and full capacity stress tests remain further validation work. Parsed Cloud-to-portable conversion and automatic Cloud/Local synchronization are explicitly unavailable. Unconfirmed source CRS/datums do not enter confirmed map geometry.

@@ -92,7 +92,7 @@ def install_projects(app, database, current_user, fail, acceptance_current):
             workspace = dict(body.workspace)
             # Stored source metadata can only be added by the upload endpoint.
             workspace["files"] = (old or {}).get("workspace", {}).get("files", [])
-            result = {"project": clean, "workspace": workspace, "revision": body.revision + 1, "updatedAt": datetime.now(timezone.utc).isoformat()}
+            result = {**(old or {}), "project": clean, "workspace": workspace, "revision": body.revision + 1, "updatedAt": datetime.now(timezone.utc).isoformat()}
             transaction.set(ref, result)
             return result
 
@@ -157,3 +157,18 @@ def install_projects(app, database, current_user, fail, acceptance_current):
                     yield data
 
         return StreamingResponse(chunks(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment", "Cache-Control": "no-store"})
+
+    @app.get('/api/projects/{project_id}/files/{file_id}/download-link')
+    def download_link(project_id: str, file_id: str, user=Depends(owner)):
+        import google.auth
+        from google.auth.transport.requests import Request as GoogleRequest
+        from urllib.parse import quote
+        _, record = existing(user['uid'], project_id)
+        source = next((f for f in record.get('workspace', {}).get('files', []) if f.get('id') == file_id), None)
+        if not source:
+            fail(404, 'file_missing', 'This original could not be found.')
+        credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
+        credentials.refresh(GoogleRequest())
+        blob = bucket().blob(f"owners/{user['uid']}/projects/{project_id}/originals/{file_id}")
+        url = blob.generate_signed_url(version='v4', expiration=300, method='GET', service_account_email=os.environ.get('STRATAX_SIGNING_IDENTITY','stratax-auth-runtime@project-9afac.iam.gserviceaccount.com'), access_token=credentials.token, response_type='application/octet-stream', response_disposition="attachment; filename*=UTF-8''" + quote(source['name'], safe=''))
+        return {'url':url,'expires_in':300}

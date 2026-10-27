@@ -202,3 +202,5 @@ def email_logo():
 
 from projects import install_projects
 install_projects(app, database, current_user, fail, acceptance_current)
+from imports_api import install_imports
+install_imports(app, database, current_user, fail, acceptance_current)

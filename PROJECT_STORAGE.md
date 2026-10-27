@@ -6,7 +6,7 @@ Implemented from the approved four-step setup plan on 27 October 2026.
 
 Setup uses Project, Location, Storage and Review. A name and Petrophysics, Seismic interpretation, or both are required. WGS84 site coordinates are optional; latitude and longitude must be supplied together. Zero is valid. Workflow selections can change without deleting configurations from deselected tools. Shared navigation, tool search, workflow cards and direct routes use the selected workflows; rock physics/well tie requires both.
 
-The overview displays stored source counts, user registrations/configurations, applicable workflow tracking, the saved site pin and genuine activity. Manual progress is labeled user-reported. Synthetic wells, curves, maps, candidates, reports and results are no longer generated. Scientific processing remains unavailable.
+The overview displays stored source counts, user registrations/configurations, applicable workflow tracking, the saved site pin and genuine activity. Manual progress is labeled user-reported. Synthetic wells, curves, maps, candidates, reports and results are no longer generated. Guided exchange-file ingestion is implemented; interpretation algorithms remain unavailable. See `DATA_INGESTION.md` for readers, validation, large transfers and limits.
 
 ## Destinations and recovery
 
@@ -45,3 +45,7 @@ Seven policy documents and backend versions are now 1.1, reflecting actual Cloud
 - `scripts/configure-project-storage.py`: narrowly scoped StrataX bucket/Maps-secret setup; key material remains in memory/stdin.
 
 Older project-UI assertions in `verify-ui.cjs` describe the previous single-form setup. Run its account/landing regression subset with `STRATAX_UI_TEST_FILTER`; the new project suite is authoritative for this release.
+
+## Guided ingestion update
+
+The Add data wizard supersedes the legacy upload form. Cloud guided ingestion supports 10 GiB per file and 50 GiB per project, counting original, reserved and derived bytes. Local folder originals and parsed artifacts stay local. Complete Local portable packages include derived chunks; size limits require folder/Cloud storage for large projects. Parsed Cloud-to-portable conversion is explicitly unavailable rather than exporting a partial package. See `DATA_INGESTION.md`.
