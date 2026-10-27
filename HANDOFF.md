@@ -2,7 +2,7 @@
 
 ## Completed and live
 
-The map workspace and well-linked deviation entry are published as Sites version 11 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `8942c1e69d25bdc251cf5e38f467a14a24f55cc3`; deployment `appgdep_6ae111c125948191a830f0f213a62580`. Existing owner-only audience unchanged. Version 10 remains the frontend rollback.
+Map well visibility, SVG defaults and context actions are published as Sites version 12 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `f3c07629f3b847c9c8286da40d7adf7b0537386d`; deployment `appgdep_6ae116b51fe4819187d7b9359dc40fa0`. Owner-only audience unchanged; version 11 retained for rollback.
 
 API `stratax-api-00009-yeb` serves 100% in project-9afac/us-central1. Build `72eb2f31-fa5c-4ac9-b7ab-ee002b96805d`, digest `sha256:b2b3a6944c4b668b72c83f9dd00fe9e378c419d1206ec45ffd51033532dd8cc4`. Parser job `stratax-import-worker` uses build `21bbcecd-6842-43b8-86d1-39c649741e7e` / digest `sha256:758865c702747ef3e3c210244e25d07c448fcee0f4c603c6b2334da3c95e745b`. Prior API project/auth revisions and tagged images retained.
 
@@ -44,3 +44,11 @@ Map now has a compact ribbon, contents/well list, EPSG:3857 field grid, Google b
 Focused map browser suite: 8 passed; ingestion regression: 10 passed; zero page errors. Includes persistence, zero coordinates, source association, coordinate/angles distinction, Google adapter/zoom, export and four viewport widths. External font fetching caused one harness reload timeout; isolating that network dependency produced the full passing run. No Cloud fixture accounts, uploads, new API/worker builds or image deletions. Original/recovery assets preserved; browser suites close their owned resources.
 
 Production map JS/CSS asset comparison passed for all five modules; HTML asset references validated. New map module SHA-256: `bc8e58bc2dc413b1f34d6b216dcd372345e5d4a645e417fd216cf6d6d1c61ea1`. Site owner-only access remains unchanged. No backend resources or images changed.
+
+## Latest well actions
+
+The previous blank view was truthful but unhelpful: all six wells lacked confirmed coordinate references, so only the project site plotted. Unplaced wells now remain visible as explicitly non-geographic SVG items. Bulk Review locations reads source LAS headers, allows corrections and requires explicit WGS84 confirmation before plotting. Do not silently mark the six Downloads headers as WGS84.
+
+Right-click/ellipsis actions work on well rows and markers: rename display label (source IDs stay intact), duplicate independent registration with provenance/location/style, zoom to well, delete from map and restore. No raw file or dataset deletion/copy occurs. Default icons come from shared `well-symbol.js`; Google and field-grid adapters use the same SVG. Map suite: 10 passed, zero errors; source/dataset counts preserved through management actions. No Cloud fixture accounts/uploads, new backend images or deletions; browser resources closed and original/recovery assets retained.
+
+Published well-action assets verified against local tested source: six JS/CSS modules match exactly; HTML references validated. Map module SHA-256 `b0336a2359d224124f86103219c292f8e5535a992f84454a0e3402828628437b`. No source data mutations were performed during this session.

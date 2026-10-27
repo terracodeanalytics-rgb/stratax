@@ -1,0 +1,2 @@
+export const WELL_SVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 32" width="24" height="32"><g fill="white" stroke="#087c73" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 5 28h14L12 4Z"/><path fill="none" d="M12 1v3M9 13h6M7 20h10M5 28h14M9 13l8 7M15 13l-8 7M7 20l12 8M17 20 5 28M2 30h20"/></g></svg>';
+export const WELL_ICON_URL='data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(WELL_SVG);

@@ -1,4 +1,5 @@
 import {api} from './auth.js';
+import {WELL_ICON_URL} from './well-symbol.js';
 let loading;
 async function maps(){
   if(window.google?.maps?.Map)return window.google.maps;
@@ -17,13 +18,14 @@ export async function mountMap(element,coordinates,{pick,search,searchButton,fee
   }catch(error){element.textContent=error.message;element.classList.add('map-unavailable');}
 }
 
-export async function mountWorkspaceMap(element,{points=[],paths=[],site,basemap='terrain',labels=true,symbols={},select}={}){
+export async function mountWorkspaceMap(element,{points=[],paths=[],site,basemap='terrain',labels=true,symbols={},select,contextMenu,focus}={}){
  const g=await maps();if(!element.isConnected)return;
  const locations=[...points,...paths.flatMap(p=>p.points),...(site?[site]:[])];
  const map=new g.Map(element,{center:locations[0]||{lat:0,lng:0},zoom:locations.length?12:2,mapTypeId:basemap,streetViewControl:false,mapTypeControl:false,fullscreenControl:false,scaleControl:true,zoomControl:true});
  const bounds=new g.LatLngBounds();locations.forEach(p=>bounds.extend(p));if(locations.length>1)map.fitBounds(bounds,60);
+ if(focus){map.setCenter(focus);map.setZoom(16);}
  if(site)new g.Marker({position:site,map,title:'Project site',icon:{path:g.SymbolPath.CIRCLE,scale:4,fillColor:'#7d9186',fillOpacity:1,strokeWeight:1}});
- for(const point of points){const symbol=symbols[point.id]||'Wellhead';const marker=new g.Marker({position:point,map,title:point.id,label:labels?{text:point.id,color:'#164b40',fontSize:'11px'}:undefined,icon:{path:symbol==='Circle'?g.SymbolPath.CIRCLE:symbol==='Square'?'M-5 -5H5V5H-5Z':'M0 -10L-6 8H6Z M-4 2H4',scale:1,fillColor:'#ffffff',fillOpacity:1,strokeColor:'#087c73',strokeWeight:1.5,labelOrigin:new g.Point(0,-22)}});marker.addListener('click',()=>select?.(point.id));}
+ for(const point of points){const symbol=symbols[point.id]||'Wellhead',icon=symbol==='Wellhead'?{url:WELL_ICON_URL,scaledSize:new g.Size(22,30),anchor:new g.Point(11,27),labelOrigin:new g.Point(11,-4)}:{path:symbol==='Circle'?g.SymbolPath.CIRCLE:'M-5 -5H5V5H-5Z',scale:1,fillColor:'#ffffff',fillOpacity:1,strokeColor:'#087c73',strokeWeight:1.5,labelOrigin:new g.Point(0,-22)};const marker=new g.Marker({position:point,map,title:point.name||point.id,label:labels?{text:point.name||point.id,color:'#164b40',fontSize:'11px'}:undefined,icon});marker.addListener('click',()=>select?.(point.id));marker.addListener('rightclick',event=>contextMenu?.(point.id,event?.domEvent));}
  for(const path of paths){new g.Polyline({map,path:path.points,strokeColor:'#b47c51',strokeOpacity:1,strokeWeight:2});new g.Marker({map,position:path.points.at(-1),title:path.well+' · last deviation station',icon:{path:g.SymbolPath.CIRCLE,scale:4,fillColor:'#ffffff',fillOpacity:1,strokeColor:'#b47c51',strokeWeight:1.5}});}
  return map;
 }

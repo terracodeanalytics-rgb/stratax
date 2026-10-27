@@ -1,5 +1,14 @@
 # StrataX status
 
+## 2026-10-27 — well visibility, SVG symbols and context actions
+
+- Published Sites version 12: source `f3c07629f3b847c9c8286da40d7adf7b0537386d`, deployment `appgdep_6ae116b51fe4819187d7b9359dc40fa0`. Owner-only audience preserved; version 11 retained for rollback. Frontend-only update.
+- Map now shows registered but unlocated wells in an explicit Unplaced wells panel with SVG icons; these are not geographic positions. A prominent bulk review reads retained LAS header coordinates in parallel and requires the user to confirm WGS84 before saving/plotting selected locations. Missing/unknown datums remain unresolved; no automatic coordinate assumption.
+- Added right-click, keyboard context-menu and ellipsis actions to well rows, map symbols and the selected-well inspector: Rename display name, Duplicate well registration, Zoom to well and Delete from map. Source well identifiers/dataset associations remain intact. Copies receive independent IDs/location/style with source-well provenance; original datasets/files are not duplicated. Delete preserves original evidence and is reversible through View → Removed wells.
+- Default well icons use one shared derrick SVG in contents, unplaced wells, field grid, Google basemap and legend. Zoom centers the selected well independently of distant project extents; unlocated wells open location review instead of pretending to zoom.
+- Verification: map suite 10 passed, zero page errors, including all management actions/persistence, original-file/dataset preservation, explicit bulk datum confirmation, Google adapter and four viewport widths. Syntax/diff checks passed. All six production JS/CSS modules match tested bytes; HTML asset references validated.
+- Cleanup: browser/server resources closed; no Cloud accounts, content uploads, API/worker builds or image deletions. Original sources, recovery copies, rollback releases and ignored evidence preserved. No unrelated resources changed.
+
 ## 2026-10-27 — map workspace and well-linked deviation data
 
 - Published Sites version 11: source `8942c1e69d25bdc251cf5e38f467a14a24f55cc3`, deployment `appgdep_6ae111c125948191a830f0f213a62580`. Existing owner-only audience preserved; version 10 retained for rollback. No backend deployment or Cloud image build.
