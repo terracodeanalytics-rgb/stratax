@@ -1,0 +1,10 @@
+google-cloud-firestore==2.21.0
+google-cloud-storage==3.5.0
+fastapi==0.121.3
+numpy==2.3.5
+scipy==1.16.3
+scikit-learn==1.7.2
+gstools==1.7.0
+segyio==1.9.14
+pyzgy==0.1.1
+seismic-zfp==0.5.0

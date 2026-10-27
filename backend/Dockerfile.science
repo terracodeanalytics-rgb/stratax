@@ -1,0 +1,10 @@
+FROM python:3.12-slim
+RUN apt-get update -qq && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements-science.txt .
+RUN pip install --no-cache-dir -r requirements-science.txt
+COPY scientific_*.py ingestion_core.py ./
+COPY tests/test_science.py tests/test_science.py
+RUN pip install --no-cache-dir pytest==9.0.2 && python -m pytest tests/test_science.py -q --disable-warnings
+ENV PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+CMD ["python", "scientific_worker.py"]

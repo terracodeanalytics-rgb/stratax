@@ -1,0 +1,32 @@
+# Interpretation workspace and processing
+
+The buildless frontend has a unified SVG ribbon and persistent canvas. Cloud methods use the existing Firebase/policy boundary and owner-scoped project records. Local evidence viewing stays on the device; server execution requires an explicitly authorized independent Cloud copy.
+
+## Execution contract
+
+- `scientific_catalog.py` is the versioned public method registry (`stratax-science/1.0`, 58 methods). `frontend/dist/science-methods.js` is its generated public mirror. Runtime Cloud capabilities remain authoritative.
+- Project endpoints: `/science/capabilities`, `/science/validate`, `/science/configurations/{id}`, `/science/runs`, `/science/runs/{id}`, `/science/runs/{id}/cancel`, `/science/runs/{id}/result`, `/science/runs/{id}/artifacts/{name}`, `/science/runs/{id}/review`, `/science/datasets/{id}/rows`; `/science` lists configurations/recent runs.
+- All identity comes from verified tokens. Current policies, owner scope, project workflows, selected source versions, input meaning/units and configuration revisions are checked. Cross-dataset row alignment requires explicit confirmation; no implicit joining or resampling.
+- Firestore `scienceConfigurations`, `scienceRuns`, `scienceReviews` are subcollections of existing owner/project records. Numerical artifacts use the private derived bucket under `owners/{uid}/projects/{pid}/science/{run}/{dispatch}/`. Original sources are immutable.
+- Independent accepted datasets remain scientifically unapproved. Review records retain server timestamps and comments. Source replacement makes dependent results stale; stale results cannot activate. Changed drafts no longer display an old result as their output.
+- On-demand `stratax-science-worker`, us-central1, 2 CPU/4 GiB, 1800 seconds, zero automatic retries. Transactional capacity is two concurrent executions globally and one per project. Each run reserves 256 MiB from the shared 50 GiB project quota. Cancellation retains the reservation until the worker settles its actual bytes.
+- Processing bounds: 250,000 rows, two million selected cells; tighter mineral/grid/section bounds are enforced. Large inputs are rejected rather than silently sampled. Display previews are labelled separately from complete chunked output.
+- Seismic sections read retained SEG-Y/SU/ZGY/SGZ originals at explicitly selected full resolution. Importer sample previews are never substituted for computational seismic samples.
+
+## Implemented method families
+
+Curve viewing; depth integrity; despiking/interpolation/smoothing/normalization/shift/splice/borehole checks; crossplots, reviewed threshold facies and clustering; fluid indicators; five shale transforms; density/sonic/calibrated-neutron/effective porosity; Archie/Indonesian/Simandoux saturation; calibrated permeability, regression and hydraulic units; constrained mineral response inversion; NMR partitions/SDR; core comparison; Brooks–Corey/Thomeer fits and Leverett J; image normalization; pressure gradients; blind-well ridge/forest predictions; authorized correction tables; zonal cutoffs; coverage-aware summaries; seismic envelope/RMS; explicit constant-velocity conversion; interpolated surfaces; kriging/conditional realizations; log upscaling; elastic properties/Gassmann/synthetics; calibrated 1D stress screening; calibrated spinner response; minimum-curvature/DLS and sampled offset clearance; imported simulation comparison; volumetrics; transparent evidence scores; seeded Monte Carlo/Latin-hypercube volumetrics.
+
+## Scientific and UI boundaries
+
+This is not Petrel/Techlog feature parity or universal scientific certification. Missing calibration and unsupported vendor variants are blocked, not approximated silently. Waxman–Smits/Dual Water, proprietary environmental/cased-hole inversions, complex faulted-grid generation and simulation execution are not executable. Correction tables require the exact tool and an authorized documented reference. Geological picks and notes are user-entered evidence, not computed discoveries. Model outputs are bounded surfaces/property fields, not complete simulator models. Point-clearance and geomechanical results are labelled screening; they are not operational anti-collision or mud-window certification.
+
+The canvas supports actual stored log tracks, configurable axes/ranges, linked metric-depth cursor, formation markers, table/array/result views, annotation metadata, close/reopen, drag/resize and persisted layouts. Advanced interactive 3D editing, automatic horizon picking, automatic correlation/ghost-curve workflows, calibrated prediction-interval coverage and full simulation handoff/export adapters remain incomplete. These limitations must not be described as a completed full interpretation product.
+
+## Verification and references
+
+- Local: 74 science/API checks; 35 pre-existing backend tests; 10 interpretation UI checks; 10 map regressions. Worker image: 71 numerical/artifact checks. Tests include every advertised operator on a bounded fixture, analytical petrophysics, trajectory geometry, capillary-fit recovery, units/nulls, leakage prevention and native full-resolution seismic extraction.
+- Six Downloads LAS fixtures compared read-only against lasio, preserving duplicate identities, nulls and unknown datums; no fixture upload or file change. QA outputs are ignored under `.release/`.
+- Live candidate acceptance is tracked in STATUS/HANDOFF; no broad claim that every specialist workflow was field-validated is made.
+- References: [AAPG](https://wiki.aapg.org/Standard_interpretation), [SciPy](https://docs.scipy.org/doc/scipy/reference/), [USGS minimum curvature](https://pubs.usgs.gov/wri/1983/4275/report.pdf), [GSTools](https://geostat-framework.readthedocs.io/projects/gstools/en/stable/), [scikit-learn validation](https://scikit-learn.org/stable/modules/cross_validation.html), [SLB corrections](https://glossary.slb.com/en/terms/e/environmental_corrections).
+- Worker libraries: NumPy/SciPy/scikit-learn (BSD), GSTools (LGPL), segyio (LGPL), pyzgy/OpenZGY and seismic-zfp retain their installed package notices. No vendor SDK or paid license was purchased. Bruges/resqpy are research references, not installed dependencies or a claim of their full capabilities.

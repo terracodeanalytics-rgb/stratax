@@ -4,6 +4,7 @@ export function allowedTool(id,project,modules){
   const selected=workflows(project),petro=selected.includes('petrophysics'),seismic=selected.includes('seismic');
   if(['home','projects','overview','data','collection','files','documents','map','reports','reviews','settings','catalog'].includes(id))return true;
   if(id==='rockphysics')return petro&&seismic;
+  if(['structure','properties','simulation','volumes','opportunities','uncertainty'].includes(id))return petro||seismic;
   if(id==='seismic')return seismic;
   if(['interpretation','models','decisions'].includes(id))return petro||seismic;
   return petro;

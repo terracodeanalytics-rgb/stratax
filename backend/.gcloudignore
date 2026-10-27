@@ -1,6 +1,7 @@
 .git
 __pycache__
 .venv
-tests
+tests/*
+!tests/test_science.py
 *.log
 .env*

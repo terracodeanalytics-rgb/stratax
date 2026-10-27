@@ -1,5 +1,13 @@
 # StrataX context
 
+## Current development candidate — 2026-10-27
+
+The interpretation/science implementation is a verified development candidate, not a completed production release. Production remains Site version 12 and API stratax-api-00009-yeb. Candidate API stratax-api-00011-vij serves zero normal traffic at the science-candidate tag; new stratax-science-worker executes bounded explicit candidate runs. Project/region: project-9afac/us-central1.
+
+Scientific contracts and explicit boundaries: SCIENTIFIC_WORKSPACE.md; registry scientific_catalog.py; numerical operators scientific_core.py; API scientific_api.py; worker scientific_worker.py; UI interpretation-workspace.js / interpretation.css. Input source versions/units are explicit, arrays live outside Firestore, and local content requires consented independent Cloud copying before remote calculation.
+
+User chose one complete release. Do not publish the prepared Sites source `8b72167f49352ab1a42565a99531f904b24f11f6` or promote the API until remaining planned functionality and integrated acceptance are complete. Successful candidate checks do not certify every catalog feature. Current proof: 74 local science/API checks, 71 image checks, 34 real candidate checks, six read-only user LAS comparisons, 10 canvas browser checks and 10 map regressions.
+
 ## Repository and live state
 
 - Git root: STRATAX; remote `https://github.com/terracodeanalytics-rgb/stratax`. Canonical frontend: `frontend/dist`; API: `backend`. No frontend build/framework is required.

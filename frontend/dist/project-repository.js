@@ -158,3 +158,37 @@ function artifactName(value){if(!/^[\w.-]{1,180}$/.test(value)||value==='.'||val
 export async function putArtifact(project,importId,name,blob){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id);const dir=await(await root.getDirectoryHandle('datasets',{create:true})).getDirectoryHandle(importId,{create:true});await writeFile(dir,name,blob);}else await item(key(project.id,'artifact:'+importId+':'+name),blob);}
 export async function getArtifact(project,importId,name){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id);const dir=await(await root.getDirectoryHandle('datasets')).getDirectoryHandle(importId);return(await dir.getFileHandle(name)).getFile();}const blob=await item(key(project.id,'artifact:'+importId+':'+name));if(!blob)throw new Error('A derived artifact is missing. Reinspect the retained original.');return blob;}
 export async function linkOriginal(project,handle){if(project.storage!=='local')throw new Error('Linked originals require a local folder project.');const file=await handle.getFile();const fileId=id();await item(key(project.id,'external:'+fileId),handle);return {id:fileId,name:file.name,size:file.size,type:'Source file',well:'',status:'Linked original · not parsed',external:true,local:true};}
+
+export async function copyToCloud(project,workspace,name,onProgress=()=>{}){
+  if(project.storage==='cloud')throw new Error('This project is already stored in Cloud.');
+  if(!name.trim()||name.length>100)throw new Error('Enter a Cloud project name up to 100 characters.');
+  const {nativeImport,commitNative}=await import('./ingestion-client.js');
+  const copy={...structuredClone(project),id:id(),name:name.trim(),storage:'cloud',status:'Active',revision:0,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  delete copy.directoryName;delete copy.pendingSave;
+  const context=structuredClone(workspace);context.project=copy.name;context.files=[];delete context.ingestion;
+  if(context.interpretation){for(const w of context.interpretation.windows||[]){delete w.runId;delete w.configurationId;delete w.configurationRevision;}}
+  let record=await save(copy,context);copy.revision=record.revision;
+  onProgress('Cloud copy created. Retaining originals…');
+  const datasetIds={},sourceIds={};let completed=0;
+  try{
+    for(const original of workspace.files||[]){
+      const blob=await source(project,original),file=new File([blob],original.name,{type:blob.type});
+      const previous=workspace.ingestion?.imports?.find(r=>r.assets?.some(a=>a.id===original.id));
+      const family=previous?.family||'documents',options=structuredClone(previous?.options||{});
+      const imported=await nativeImport(copy,[{file}],family,options,{onProgress:text=>onProgress(`${completed+1}/${workspace.files.length} · ${text}`)});
+      sourceIds[original.id]=imported.assets[0].id;
+      const oldActive=(workspace.ingestion?.datasets||[]).filter(d=>d.sourceId===original.id&&d.active!==false);
+      const chosen=(imported.datasets||[]).filter(d=>oldActive.some(old=>old.name===d.name&&old.rowCount===d.rowCount));
+      for(const d of chosen){const old=oldActive.find(v=>v.name===d.name&&v.rowCount===d.rowCount);if(old)datasetIds[old.id]=d.id;}
+      if(chosen.length&&!imported.issues?.some(i=>i.severity==='blocking'))await commitNative(copy,imported,true,null,null,{selected_dataset_ids:chosen.map(d=>d.id)});
+      completed++;onProgress(`${completed}/${workspace.files.length} originals retained in Cloud.`);
+    }
+    record=await load(copy);copy.revision=record.revision;
+    for(const w of context.interpretation?.windows||[]){if(w.datasetId)w.datasetId=datasetIds[w.datasetId]||'';for(const b of Object.values(w.bindings||{})){b.datasetId=datasetIds[b.datasetId]||'';b.confirmed=false;}}
+    for(const note of context.interpretation?.annotations||[])if(note.datasetId)note.datasetId=datasetIds[note.datasetId]||null;
+    context.files=record.workspace.files;
+    context.audit||=[];context.audit.unshift({action:'Created independent Cloud copy from Local originals',time:new Date().toISOString()});
+    record=await save(copy,context);
+    return record;
+  }catch(error){throw new Error(`Cloud copy “${copy.name}” retains ${completed} completed source transfers and is available in My projects. Your Local project is unchanged. ${error.message}`);}
+}

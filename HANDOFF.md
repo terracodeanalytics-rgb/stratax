@@ -1,5 +1,18 @@
 # StrataX handoff
 
+## Resume interpretation implementation — 2026-10-27
+
+User asked for a fast wrap-up at 5% account credits. Meaningful implementation and verification are saved, but the full requested plan is NOT complete and no integrated release was published.
+
+1. Read SCIENTIFIC_WORKSPACE.md for exact capability boundaries. Finish the outstanding agreed UI/method paths, particularly ghost-curve/correlation behavior, validated simulation handoff adapters and specialist interaction/acceptance coverage. Do not represent the 58 operator fixtures as full end-to-end validation of every tool.
+2. Exercise actual Local-folder reopening and the explicit Local-to-Cloud copying path, including companion bundles, partial transfer recovery and source/dataset identity remapping. Current copy logic reimports originals one at a time; companion-bundle handling is not yet accepted.
+3. Complete cancel/timeout/orphan reconciliation and concurrent global-capacity live checks, stale-input propagation tests and integrated Cloud browser runs. Verify numeric outputs against independent references for specialist methods beyond analytical/generated fixtures. Review worker resource limits and quota cleanup under abnormal termination.
+4. Run `python -m pytest backend/tests/test_science.py backend/tests/test_scientific_api.py -q` in the repository venv and `node scripts/verify-interpretation.cjs`; use elevated execution where this Windows sandbox stalls test clients/browser/network access. `scripts/verify-science-api.py` uses isolated generated identities/data and cleans them; set STRATAX_QA_API to the candidate URL. Never upload the user's Downloads LAS sources for QA.
+5. Preserve production API revision `stratax-api-00009-yeb`, Site version 12 and its owner-only audience until all single-release gates pass. Candidate `stratax-api-00011-vij` and worker image build `6629e4ad-1936-4ea0-bf20-9bcff27d5a7b` are verified; fresh worker logs showed successful exit. Existing import/auth services were not replaced.
+6. Frontend source was packaged/pushed to the Sites repository at `8b72167f49352ab1a42565a99531f904b24f11f6` but NOT saved/deployed. Archive `.release/interpretation-site.tar.gz` is retained. Renew source credentials through hidden stdin when needed, never files/arguments. Check source parity before further edits.
+
+Completed checks: 74 science/API tests, 71 worker-image tests, 34 live candidate checks, 35 earlier backend regressions, 10 canvas browser checks, 10 map regressions, six read-only LAS comparisons. Candidate QA records/accounts/objects removed. All 13 registry-tagged StrataX images retained; no deletions. One-use integration generators removed; operational verification/provisioning scripts retained. Root commit/branch will contain the reviewed implementation and these docs.
+
 ## Completed and live
 
 Map well visibility, SVG defaults and context actions are published as Sites version 12 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `f3c07629f3b847c9c8286da40d7adf7b0537386d`; deployment `appgdep_6ae116b51fe4819187d7b9359dc40fa0`. Owner-only audience unchanged; version 11 retained for rollback.

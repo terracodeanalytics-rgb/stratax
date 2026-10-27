@@ -1,5 +1,17 @@
 # StrataX status
 
+## 2026-10-27 — interpretation canvas and scientific candidate (not published)
+
+- Implemented unified SVG-only ribbon/canvas, collapsible browser/properties, persisted windows/configurations, real local/cloud curve previews and annotation records. Existing Modeling/Decisions routes open the unified workspace. Local server runs require an explicitly authorized independent Cloud copy.
+- Added 58 versioned bounded numerical methods and owner/policy-scoped configuration, validation, idempotent run, cancellation, result/artifact and review APIs. Originals are immutable; arrays stay in chunked private GCS artifacts. Accepted results are independent datasets with provenance, not automatic scientific approval.
+- Local verification: 74 science/API tests, 35 existing backend tests, 10 canvas browser checks and 10 map regressions passed. Six Downloads LAS files passed read-only lasio/QC comparisons, with zero user-file uploads and unresolved datums preserved. Scientific image build passed 71 numerical/artifact tests.
+- Zero-traffic API candidate `stratax-api-00011-vij`, build `aeedff22-f30e-43c0-a025-a60517bf9d95`, digest `sha256:da05be25431ab491b5542161570806f21592622d8125e3d415f550fb0e53a045`. Candidate URL: https://science-candidate---stratax-api-fwy32oha6q-uc.a.run.app . Production remains revision `stratax-api-00009-yeb`.
+- New on-demand job `stratax-science-worker` in project-9afac/us-central1: 2 CPU/4 GiB/1800s, zero retries; dedicated service identity, scoped bucket access and transactional two-global/one-project capacity. Build `6629e4ad-1936-4ea0-bf20-9bcff27d5a7b`, digest `sha256:23461566dbe391425c496c0d7d5062fdc903343d54987fcb254a926a5003a70e`.
+- Live candidate: 34 checks passed through real Firebase, import worker, scientific worker, private artifacts and result activation. Verified analytical values, ownership isolation, revisions, idempotency, quota settlement and original integrity. Both isolated accounts and their records/objects were removed; no mail or existing password resets.
+- Sites frontend source pushed/prepared at `8b72167f49352ab1a42565a99531f904b24f11f6`; archive retained in ignored `.release/interpretation-site.tar.gz`. No version saved/deployed; production remains Site version 12 with its original audience. Do not promote this candidate as completion of the full approved plan.
+- Full-release gaps: advanced UI/method coverage beyond the bounded registry, ghost-curve correlation, complete simulation handoff adapters, specialist workflow/Cloud-copy acceptance and authenticated integrated hosted-browser verification. See SCIENTIFIC_WORKSPACE.md. User requested rapid wrap-up because account credits were nearly exhausted; the single-complete-release gate remains in force.
+- Release fixes: included the numerical fixture in the GCloud build context after the first science build failed; corrected local plain-NDJSON handling; corrected missing-job detection. Initial source-helper push stalled in the sandbox; elevated retry succeeded. All 13 StrataX registry images are tagged and retained; zero image deletions. Removed two one-use integration generators, retained original assets/recovery/test evidence and operational scripts. No G-RES changes.
+
 ## 2026-10-27 — well visibility, SVG symbols and context actions
 
 - Published Sites version 12: source `f3c07629f3b847c9c8286da40d7adf7b0537386d`, deployment `appgdep_6ae116b51fe4819187d7b9359dc40fa0`. Owner-only audience preserved; version 11 retained for rollback. Frontend-only update.
