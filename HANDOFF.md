@@ -1,19 +1,16 @@
 # StrataX handoff
 
-## Resume interpretation implementation — 2026-10-27
+## Current live interpretation release — 2026-10-28
 
-User asked for a fast wrap-up at 5% account credits. Meaningful implementation and verification are saved, but the full requested plan is NOT complete and no integrated release was published.
+The user explicitly requested publication after the previous development-only delivery. Sites version 13 and API `stratax-api-00011-vij` are now live; the prior instruction to keep this candidate unpublished is superseded. Deployment `appgdep_6ae2164d50008191a1243a3c66351a71`, source `8b72167f49352ab1a42565a99531f904b24f11f6`. Original audience unchanged; version 12 and API revision 9 retained for rollback.
 
-1. Read SCIENTIFIC_WORKSPACE.md for exact capability boundaries. Finish the outstanding agreed UI/method paths, particularly ghost-curve/correlation behavior, validated simulation handoff adapters and specialist interaction/acceptance coverage. Do not represent the 58 operator fixtures as full end-to-end validation of every tool.
-2. Exercise actual Local-folder reopening and the explicit Local-to-Cloud copying path, including companion bundles, partial transfer recovery and source/dataset identity remapping. Current copy logic reimports originals one at a time; companion-bundle handling is not yet accepted.
-3. Complete cancel/timeout/orphan reconciliation and concurrent global-capacity live checks, stale-input propagation tests and integrated Cloud browser runs. Verify numeric outputs against independent references for specialist methods beyond analytical/generated fixtures. Review worker resource limits and quota cleanup under abnormal termination.
-4. Run `python -m pytest backend/tests/test_science.py backend/tests/test_scientific_api.py -q` in the repository venv and `node scripts/verify-interpretation.cjs`; use elevated execution where this Windows sandbox stalls test clients/browser/network access. `scripts/verify-science-api.py` uses isolated generated identities/data and cleans them; set STRATAX_QA_API to the candidate URL. Never upload the user's Downloads LAS sources for QA.
-5. Preserve production API revision `stratax-api-00009-yeb`, Site version 12 and its owner-only audience until all single-release gates pass. Candidate `stratax-api-00011-vij` and worker image build `6629e4ad-1936-4ea0-bf20-9bcff27d5a7b` are verified; fresh worker logs showed successful exit. Existing import/auth services were not replaced.
-6. Frontend source was packaged/pushed to the Sites repository at `8b72167f49352ab1a42565a99531f904b24f11f6` but NOT saved/deployed. Archive `.release/interpretation-site.tar.gz` is retained. Renew source credentials through hidden stdin when needed, never files/arguments. Check source parity before further edits.
+Hosted browser verification passed 5 checks with no page errors, covering byte-exact published assets, real sign-in, Cloud project restoration, ribbon/method opening, inspector and four viewport widths. Test fixtures were removed. Production API health passed and fresh API error logs were empty. Prior acceptance results and exact methods are in STATUS.md / SCIENTIFIC_WORKSPACE.md.
 
-Completed checks: 74 science/API tests, 71 worker-image tests, 34 live candidate checks, 35 earlier backend regressions, 10 canvas browser checks, 10 map regressions, six read-only LAS comparisons. Candidate QA records/accounts/objects removed. All 13 registry-tagged StrataX images retained; no deletions. One-use integration generators removed; operational verification/provisioning scripts retained. Root commit/branch will contain the reviewed implementation and these docs.
+Remaining work is real and must not be claimed complete: ghost-curve/correlation functionality, complete simulation handoff adapters, specialist interaction/reference validation, companion-bundle Cloud-copy handling/recovery, and live abnormal-termination/cancellation/capacity checks. The 58 method fixtures do not establish full Petrel/Techlog parity. No fabricated outputs or silent unit/datum assumptions are permitted.
 
-## Completed and live
+Use `scripts/verify-live-interpretation.cjs` with private Sites access supplied only through hidden stdin; never persist tokens. Existing candidate/API numerical verification scripts remain available. Local source content still needs explicit consented independent Cloud copying before remote execution. All 13 tagged StrataX images and worker/rollback images were retained, with zero deletions.
+
+## Earlier map release (historical)
 
 Map well visibility, SVG defaults and context actions are published as Sites version 12 at https://stratax-workbench.cometcrab258.chatgpt.site. Source `f3c07629f3b847c9c8286da40d7adf7b0537386d`; deployment `appgdep_6ae116b51fe4819187d7b9359dc40fa0`. Owner-only audience unchanged; version 11 retained for rollback.
 

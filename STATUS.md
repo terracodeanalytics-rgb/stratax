@@ -1,5 +1,13 @@
 # StrataX status
 
+## 2026-10-28 — interpretation canvas published
+
+- User explicitly requested publication of the prepared implementation after seeing unchanged production. Published Sites version 13, source `8b72167f49352ab1a42565a99531f904b24f11f6`, deployment `appgdep_6ae2164d50008191a1243a3c66351a71`; existing owner-only audience preserved. Version 12 remains rollback.
+- Promoted previously verified API revision `stratax-api-00011-vij` to 100% traffic; prior `stratax-api-00009-yeb` retained. Scientific worker/image unchanged from the 34-check candidate acceptance. Main API health passed; fresh API ERROR query returned no entries. The old tagged candidate URL returned an edge 404 during preflight; revision readiness and the actual production API URL were verified instead.
+- Hosted browser: 5 checks passed, zero page errors: exact canvas asset hashes, real Firebase sign-in, Cloud project restoration/11 SVG-only ribbon groups, method opening, inspector collapse/restore and 320/768/1024/1440px layouts. First harness attempt changed only the hash while its in-memory project selection was stale; forcing a full navigation fixed the harness and the complete pass succeeded. Both isolated browser accounts and records removed; no mail or existing-account password resets.
+- This publishes the bounded canvas/method implementation, not all remaining specialist features in the broader plan. Boundaries and unfinished advanced workflows remain documented in SCIENTIFIC_WORKSPACE.md and the handoff. Local server processing still requires explicit Cloud copying.
+- Cleanup: all 13 StrataX images are registry-tagged and protected; zero deletions. No new image build, original-file changes or user-data uploads. Verification browser closed; source package, rollback versions, recovery copies and operational tooling retained.
+
 ## 2026-10-27 — interpretation canvas and scientific candidate (not published)
 
 - Implemented unified SVG-only ribbon/canvas, collapsible browser/properties, persisted windows/configurations, real local/cloud curve previews and annotation records. Existing Modeling/Decisions routes open the unified workspace. Local server runs require an explicitly authorized independent Cloud copy.

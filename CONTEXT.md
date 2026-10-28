@@ -1,19 +1,17 @@
 # StrataX context
 
-## Current development candidate — 2026-10-27
+## Current interpretation release — 2026-10-28
 
-The interpretation/science implementation is a verified development candidate, not a completed production release. Production remains Site version 12 and API stratax-api-00009-yeb. Candidate API stratax-api-00011-vij serves zero normal traffic at the science-candidate tag; new stratax-science-worker executes bounded explicit candidate runs. Project/region: project-9afac/us-central1.
+Sites version 13 is live at https://stratax-workbench.cometcrab258.chatgpt.site, source `8b72167f49352ab1a42565a99531f904b24f11f6`, deployment `appgdep_6ae2164d50008191a1243a3c66351a71`. The user explicitly requested publishing the prepared canvas and verified backend; the earlier hold on the development candidate is superseded. API revision `stratax-api-00011-vij` serves 100% in project-9afac/us-central1. Scientific job/image remains build `6629e4ad-1936-4ea0-bf20-9bcff27d5a7b`.
 
-Scientific contracts and explicit boundaries: SCIENTIFIC_WORKSPACE.md; registry scientific_catalog.py; numerical operators scientific_core.py; API scientific_api.py; worker scientific_worker.py; UI interpretation-workspace.js / interpretation.css. Input source versions/units are explicit, arrays live outside Firestore, and local content requires consented independent Cloud copying before remote calculation.
-
-User chose one complete release. Do not publish the prepared Sites source `8b72167f49352ab1a42565a99531f904b24f11f6` or promote the API until remaining planned functionality and integrated acceptance are complete. Successful candidate checks do not certify every catalog feature. Current proof: 74 local science/API checks, 71 image checks, 34 real candidate checks, six read-only user LAS comparisons, 10 canvas browser checks and 10 map regressions.
+The release has 58 bounded numerical methods and a unified SVG ribbon/canvas. See SCIENTIFIC_WORKSPACE.md for exact implementation boundaries; this is not completion/certification of every specialist feature in the broader plan. Local content requires explicit Cloud copying before server processing. Prior proof: 74 local science/API checks, 71 image checks, 34 candidate checks, six read-only LAS comparisons and 10 canvas checks. Published-browser verification: 5 checks, zero page errors; production health passed and fresh API error logs were empty.
 
 ## Repository and live state
 
 - Git root: STRATAX; remote `https://github.com/terracodeanalytics-rgb/stratax`. Canonical frontend: `frontend/dist`; API: `backend`. No frontend build/framework is required.
 - Site: https://stratax-workbench.cometcrab258.chatgpt.site/#home. Preserve project ID `appgprj_6adc66e963588191a4154ab09c724471` and its owner-only audience.
-- Current frontend: Sites version 12, source `f3c07629f3b847c9c8286da40d7adf7b0537386d`, deployment `appgdep_6ae116b51fe4819187d7b9359dc40fa0`. Version 11 remains the prior saved frontend.
-- API: https://stratax-api-227436363119.us-central1.run.app. `stratax-api-00009-yeb` at 100% in `project-9afac/us-central1`; candidate alias https://candidate---stratax-api-fwy32oha6q-uc.a.run.app.
+- Current frontend: Sites version 13, source `8b72167f49352ab1a42565a99531f904b24f11f6`, deployment `appgdep_6ae2164d50008191a1243a3c66351a71`. Version 12 is retained for rollback.
+- API: https://stratax-api-227436363119.us-central1.run.app. `stratax-api-00011-vij` at 100% in `project-9afac/us-central1`; candidate alias https://candidate---stratax-api-fwy32oha6q-uc.a.run.app.
 - Backend build `72eb2f31-fa5c-4ac9-b7ab-ee002b96805d`; digest `sha256:b2b3a6944c4b668b72c83f9dd00fe9e378c419d1206ec45ffd51033532dd8cc4`. Prior project revision `stratax-api-00005-xav` remains available for rollback.
 - Cloud Run: zero minimum/two maximum instances, request-based CPU, 512 MiB, concurrency eight and existing 60-second timeout.
 - Sites source is the separate ignored `.sites-source` repository. Never change the root Git remote to the Sites remote. Use hidden stdin credentials and exact pushed source/archive provenance.
