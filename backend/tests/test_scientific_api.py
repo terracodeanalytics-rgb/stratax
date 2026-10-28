@@ -100,3 +100,24 @@ def test_review_stale_inputs_and_independent_result_activation():
             assert len([k for k in db.records if '/scienceReviews/' in k])==1
             assert client.get(f'/api/projects/project/science/runs/{rid}/artifacts/unsafe.txt').status_code==400
     finally:main.app.dependency_overrides.clear()
+
+
+def test_canvas_scope_rejects_invalid_and_cross_project_indices():
+    db=Database();main.app.dependency_overrides[main.current_user]=lambda:dict(uid='owner');client=TestClient(main.app)
+    try:
+        with patch.object(main,'_db',db),patch.object(science.firestore,'transactional',lambda f:f):
+            body=config(scope=dict(datasetId='source',columnId='column-0',unit='ft',reference='Unconfirmed',top=0,base=100,rowRanges=[[0,1]]))
+            saved=client.put('/api/projects/project/science/configurations/scoped',json=body).json()
+            assert saved['scope']['rowRanges']==[dict(start=0,end=1)]
+            assert client.post('/api/projects/project/science/validate',json=body).status_code==200
+            for invalid in [dict(columnId='missing'),dict(datasetId='other'),dict(unit='unknown'),dict(top=10,base=1),dict(rowRanges=[[0,10]]),dict(rowRanges=[[1,2],[1,1]])]:
+                bad=copy.deepcopy(body);bad['scope'].update(invalid)
+                assert client.post('/api/projects/project/science/validate',json=bad).status_code==400
+    finally:main.app.dependency_overrides.clear()
+
+
+def test_matrix_parameters_roundtrip_without_nested_firestore_arrays():
+    original={'parameters':{'matrix':[[1,2],[3,4]],'mixed':[{'values':[[0,1]]}]}}
+    stored=science.firestore_value(original)
+    assert isinstance(stored['parameters']['matrix'][0],dict)
+    assert science.restore_value(stored)==original

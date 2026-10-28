@@ -2,17 +2,21 @@
 
 ## Current interpretation release — 2026-10-28
 
-Sites version 13 is live at https://stratax-workbench.cometcrab258.chatgpt.site, source `8b72167f49352ab1a42565a99531f904b24f11f6`, deployment `appgdep_6ae2164d50008191a1243a3c66351a71`. The user explicitly requested publishing the prepared canvas and verified backend; the earlier hold on the development candidate is superseded. API revision `stratax-api-00011-vij` serves 100% in project-9afac/us-central1. Scientific job/image remains build `6629e4ad-1936-4ea0-bf20-9bcff27d5a7b`.
+Sites version 15 is live, source `f75d8450cb28a413b17a0d286ce9abb1f06092b0`, deployment `appgdep_6ae272eb44448191af2fd56b34a50527`. API `stratax-api-00017-saf` is at 100%; API build `6c1074de-1a62-458c-a923-632b0c1e21dc`, scientific worker build `b2fcd1f5-e87b-4180-b075-a1a38e35a18d`. Same Site audience and project-9afac/us-central1. Previous versions/images are retained.
 
-The release has 58 bounded numerical methods and a unified SVG ribbon/canvas. See SCIENTIFIC_WORKSPACE.md for exact implementation boundaries; this is not completion/certification of every specialist feature in the broader plan. Local content requires explicit Cloud copying before server processing. Prior proof: 74 local science/API checks, 71 image checks, 34 candidate checks, six read-only LAS comparisons and 10 canvas checks. Published-browser verification: 5 checks, zero page errors; production health passed and fresh API error logs were empty.
+Interpretation now contains the actual well-log board described in WELL_LOG_CANVAS.md. Full retained sample chunks replace the former 2,000-row view limit. Cache and remote state are scoped to UID/project; Local content remains local. Known depth units are converted for display only, without assuming CRS/datum or converting MD/TVD. Ordinary scrolling preserves depth; Ctrl+wheel zooms, with legacy empty-range recovery and a visible Fit action.
+
+Scientific source scope preserves exact depth/brush rows and emits indexed pointwise outputs. Proposed full curves can be compared before review; only accepted versions become downstream inputs. `scientific_api.firestore_value/restore_value` encode nested JSON matrices with a non-reserved Firestore map key and are also used by project saves. Public reads preserve the original JSON. Existing arrays do not enter database documents as scientific samples.
+
+The registry retains 58 bounded methods. Eighty-one scientific/API/project tests, 16 six-LAS interaction groups, 57 menu/config checks, five depth-recovery checks, 10 map regressions and 36 live scoped-API checks pass. Eight hosted end-to-end checks also pass with zero page errors, including live calculation, proposal comparison, acceptance and persisted reload. These are implementation checks, not universal specialist certification; see SCIENTIFIC_WORKSPACE.md and STATUS.md for exact verification/boundaries.
 
 ## Repository and live state
 
 - Git root: STRATAX; remote `https://github.com/terracodeanalytics-rgb/stratax`. Canonical frontend: `frontend/dist`; API: `backend`. No frontend build/framework is required.
 - Site: https://stratax-workbench.cometcrab258.chatgpt.site/#home. Preserve project ID `appgprj_6adc66e963588191a4154ab09c724471` and its owner-only audience.
-- Current frontend: Sites version 13, source `8b72167f49352ab1a42565a99531f904b24f11f6`, deployment `appgdep_6ae2164d50008191a1243a3c66351a71`. Version 12 is retained for rollback.
-- API: https://stratax-api-227436363119.us-central1.run.app. `stratax-api-00011-vij` at 100% in `project-9afac/us-central1`; candidate alias https://candidate---stratax-api-fwy32oha6q-uc.a.run.app.
-- Backend build `72eb2f31-fa5c-4ac9-b7ab-ee002b96805d`; digest `sha256:b2b3a6944c4b668b72c83f9dd00fe9e378c419d1206ec45ffd51033532dd8cc4`. Prior project revision `stratax-api-00005-xav` remains available for rollback.
+- Current frontend: Sites version 15; source/deployment above. Versions 13/14 are retained for rollback.
+- API: https://stratax-api-227436363119.us-central1.run.app. `stratax-api-00017-saf` at 100% in `project-9afac/us-central1`; candidate alias https://candidate---stratax-api-fwy32oha6q-uc.a.run.app.
+- Backend build `6c1074de-1a62-458c-a923-632b0c1e21dc`; worker build `b2fcd1f5-e87b-4180-b075-a1a38e35a18d`. Prior project revision `stratax-api-00005-xav` remains available for rollback.
 - Cloud Run: zero minimum/two maximum instances, request-based CPU, 512 MiB, concurrency eight and existing 60-second timeout.
 - Sites source is the separate ignored `.sites-source` repository. Never change the root Git remote to the Sites remote. Use hidden stdin credentials and exact pushed source/archive provenance.
 
@@ -32,7 +36,7 @@ The release has 58 bounded numerical methods and a unified SVG ribbon/canvas. Se
 - Local folders contain `project.stratax.json` and `originals/{id}`. Browser handles and recovery drafts use UID-scoped IndexedDB; permission may need renewal. Direct directory writing requires a supporting browser/top-level context. Portable JSON packages include originals and require explicit download to retain changes. Local project contents do not upload to StrataX cloud storage; Maps/search still contact Google.
 - Existing scoped browser data is retained as a recovery copy. Genuine projects require a chosen destination; seeded Tomboy content is removed without deleting genuine additions. Unscoped legacy keys remain unassigned. Sign-out hides active data without deleting saved files.
 - The compact switcher lists Active/Archived projects, excludes Trash and ends with All projects. Public/shared headers reuse the landing initials account menu. Search, navigation and direct routes enforce selected workflows.
-- Overview counts/activity are real. Manual stage tracking is labeled user-reported. Scientific fake plots/results/maps/candidates are removed; exchange readers and bounded previews are available; OCR, interpretation calculations, simulation and derived GIS remain unavailable.
+- Overview counts/activity are real. Manual stage tracking is labeled user-reported. Scientific fake plots/results/maps/candidates are removed; exchange readers and bounded previews are available; OCR/digitization and simulator execution remain unavailable; bounded scientific calculations are documented separately.
 
 ## Maps and operational details
 

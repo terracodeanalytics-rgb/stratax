@@ -57,6 +57,10 @@ def test_project_owner_revision_and_validation():
             body["revision"] = 1
             body["workspace"]["files"] = [{"id": "invented", "name": "fake.csv"}]
             assert client.put("/api/projects/study-a", json=body).json()["workspace"]["files"] == []
+            body["revision"]=2
+            body["workspace"]["interpretation"]={"parameters":{"matrix":[[1,2],[3,4]]}}
+            assert client.put("/api/projects/study-a",json=body).status_code==200
+            assert client.get("/api/projects/study-a").json()["workspace"]["interpretation"]["parameters"]["matrix"]==[[1,2],[3,4]]
             main.app.dependency_overrides[main.current_user] = lambda: {"uid": "other"}
             assert client.get("/api/projects/study-a").status_code == 404
             assert client.get("/api/projects/study-a/files/invented").status_code == 404

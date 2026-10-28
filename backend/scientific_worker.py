@@ -8,9 +8,9 @@ from pathlib import Path
 
 from google.cloud import firestore
 from ingestion_core import column, output_dataset
-from scientific_api import fingerprint, settle_run
+from scientific_api import fingerprint, settle_run, restore_value
 from scientific_catalog import ARTIFACT_BUDGET, MAX_ROWS, MAX_CELLS, METHODS
-from scientific_core import ScienceProblem, evaluate, require
+from scientific_core import ScienceProblem, evaluate, require, unit_factor, clean
 
 logger = logging.getLogger("stratax-science")
 
@@ -122,6 +122,9 @@ def write_result(output, prefix, rid, result, sources, configuration):
         # IDs are unique across runs even when result shape/names repeat.
         original_id=ds["id"];ds["id"]="sci-"+rid[4:20]+"-"+str(len(datasets))
         ds.update(well=next(iter({s.get("well","") for s in sources.values()}),"") if len({s.get("well","") for s in sources.values()})==1 else "",family="derived",references={"userConfirmedInputs":True},mapping={})
+        if any(key == "depth" for key,_ in items) and configuration.get("scope"):
+            ds["indexColumnId"] = cols[next(i for i,(key,_) in enumerate(items) if key == "depth")]["id"]
+            ds["references"].update(depthReference=configuration["scope"]["reference"], depthUnit="m")
         (output/(original_id+".json")).write_text(json.dumps(ds,allow_nan=False),encoding="utf-8")
         datasets.append(ds)
     preview={key:values[:min(2000,len(values))] if not values or not isinstance(values[0],list) else [row[:512] for row in values[:256]] for key,values in result["series"].items()}
@@ -139,6 +142,28 @@ def write_result(output, prefix, rid, result, sources, configuration):
     return total,dict(summary=result["summary"],warnings=result["warnings"],datasetCount=len(datasets))
 
 
+def scoped_inputs(inputs, units, selection):
+    """Use exact reviewed source rows, retaining the real index alongside derived values."""
+    import numpy as np
+    if not selection:return inputs,units,None
+    raw=inputs.pop("__canvas_index")
+    units.pop("__canvas_index",None)
+    depth=np.asarray(raw,dtype=float)*unit_factor("length",selection["unit"])
+    mask=np.ones(len(depth),dtype=bool)
+    if selection.get("top") is not None:mask &= np.isfinite(depth)&(depth>=selection["top"])&(depth<=selection["base"])
+    if selection.get("rowRanges") is not None:
+        rows=np.zeros(len(depth),bool)
+        for item in selection["rowRanges"]:
+            lo,hi=(item["start"],item["end"]) if isinstance(item,dict) else item
+            rows[lo:hi+1]=True
+        mask &= rows
+    require(bool(mask.any()),"The selected interval/brush contains no finite source-index samples.","empty_selection")
+    for role,values in inputs.items():
+        require(len(values)==len(depth),"Canvas interval inputs do not have a common stored row index.","scope_alignment")
+        inputs[role]=np.asarray(values)[mask].tolist()
+    return inputs,units,depth[mask]
+
+
 def run():
     uid,pid,rid,dispatch=[os.environ[k] for k in ("SCIENCE_UID","SCIENCE_PROJECT","SCIENCE_RUN","SCIENCE_DISPATCH")]
     require(all(re.fullmatch(r"[\w-]{1,128}",v,re.ASCII) for v in (uid,pid,rid,dispatch)),"Invalid execution scope.")
@@ -146,7 +171,7 @@ def run():
     project=db.collection("stratax_projects").document(uid).collection("records").document(pid)
     ref=project.collection("scienceRuns").document(rid)
     capacity=db.collection("stratax_science_runtime").document("capacity")
-    record=ref.get().to_dict()
+    record=restore_value(ref.get().to_dict())
     if not record or record.get("dispatch")!=dispatch or record["status"] not in ("queued","cancelling"):return
     project_root=Path(os.environ.get("DERIVED_MOUNT","/derived"))/"owners"/uid/"projects"/pid
     relative_prefix=f"owners/{uid}/projects/{pid}/science/{rid}/{dispatch}"
@@ -176,9 +201,18 @@ def run():
                 traces,extra_geometry=seismic_section(linked,record["parameters"],source_import.get("options",{}),cancelled)
             inputs={"traces":traces};units={"traces":binding["unit"]}
         else:
-            inputs,units=read_inputs(project_root,{k:dict(v,manifest=v["manifest"].removeprefix(f"owners/{uid}/projects/{pid}/")) for k,v in record["inputSnapshots"].items()},record["configuration"]["bindings"],cancelled)
+            bindings=dict(record["configuration"]["bindings"])
+            selection=record["configuration"].get("scope")
+            if selection:bindings["__canvas_index"]={k:selection[k] for k in ("datasetId","columnId","unit")}
+            inputs,units=read_inputs(project_root,{k:dict(v,manifest=v["manifest"].removeprefix(f"owners/{uid}/projects/{pid}/")) for k,v in record["inputSnapshots"].items()},bindings,cancelled)
+            inputs,units,index=scoped_inputs(inputs,units,selection)
         require(not cancelled(),"Calculation cancelled.","cancelled")
         result=evaluate(record["method"],inputs,record["parameters"],units)
+        if not extra_geometry and record["configuration"].get("scope"):
+            if any(len(values)==len(index) for values in result["series"].values()):
+                if "depth" not in result["series"]:result["series"]={"depth":clean(index),**result["series"]}
+                result["units"]["depth"]="m"
+            result["summary"]["canvasScope"]={"sourceRows":len(index),"reference":record["configuration"]["scope"]["reference"],"selection":"Exact retained source rows; no resampling"}
         if extra_geometry:result["summary"].update(extra_geometry)
         require(not cancelled(),"Calculation cancelled.","cancelled")
         total,extra=write_result(output,relative_prefix,rid,result,record["inputSnapshots"],record["configuration"])

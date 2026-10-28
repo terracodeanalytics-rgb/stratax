@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from google.cloud import firestore, storage
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
+from scientific_api import firestore_value, restore_value
 
 MAX_FILE = 64 * 1024 * 1024
 
@@ -59,7 +60,7 @@ def install_projects(app, database, current_user, fail, acceptance_current):
 
     @app.get("/api/projects/{project_id}")
     def get_project(project_id: str, user=Depends(owner)):
-        return existing(user["uid"], project_id)[1]
+        return restore_value(existing(user["uid"], project_id)[1])
 
     @app.put("/api/projects/{project_id}")
     def put_project(project_id: str, body: ProjectWrite, user=Depends(owner)):
@@ -86,14 +87,14 @@ def install_projects(app, database, current_user, fail, acceptance_current):
 
         @firestore.transactional
         def write(transaction):
-            old = ref.get(transaction=transaction).to_dict()
+            old = restore_value(ref.get(transaction=transaction).to_dict())
             if (old or {}).get("revision", 0) != body.revision:
                 fail(409, "project_conflict", "This project changed elsewhere. Reopen it before saving; your pending changes remain on this device.")
             workspace = dict(body.workspace)
             # Stored source metadata can only be added by the upload endpoint.
             workspace["files"] = (old or {}).get("workspace", {}).get("files", [])
             result = {**(old or {}), "project": clean, "workspace": workspace, "revision": body.revision + 1, "updatedAt": datetime.now(timezone.utc).isoformat()}
-            transaction.set(ref, result)
+            transaction.set(ref, firestore_value(result))
             return result
 
         return write(database().transaction())

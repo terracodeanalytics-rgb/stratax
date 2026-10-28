@@ -160,3 +160,30 @@ def test_full_resolution_seismic_selection_not_decimated_preview(tmp_path):
     assert meta['traceHeaders'][0]['inline']==20
     p['sampleCount']=200
     with pytest.raises(ScienceProblem):seismic_section(path,p,{})
+
+
+def test_canvas_scope_preserves_exact_index_and_selected_rows(tmp_path):
+    from scientific_worker import scoped_inputs
+    values,units,depth=scoped_inputs({'gr':[10,20,30,40,50],'__canvas_index':[0,10,20,30,40]}, {'gr':'gAPI','__canvas_index':'ft'},dict(unit='ft',top=3,base=10,rowRanges=[dict(start=1,end=1),dict(start=3,end=4)]))
+    assert values=={'gr':[20,40]}
+    np.testing.assert_allclose(depth,[3.048,9.144])
+    result=evaluate('shale-linear',values,dict(clean=0,shale=100),units)
+    result['series']={'depth':depth.tolist(),**result['series']};result['units']['depth']='m'
+    config=dict(scope=dict(reference='MD'))
+    write_result(tmp_path,'owners/o/projects/p/science/r/d','run-scope',result,{'source':{'well':'WELL-A'}},config)
+    manifest=json.loads((tmp_path/'manifest.json').read_text())
+    assert manifest['datasets'][0]['indexColumnId']=='column-0'
+    assert manifest['datasets'][0]['references']['depthReference']=='MD'
+    assert manifest['datasets'][0]['preview']==[[3.048,.2,.2],[9.144,.4,.4]]
+
+
+def test_full_canvas_index_does_not_hide_null_depths_from_qc():
+    from scientific_worker import scoped_inputs
+    inputs,units,index=scoped_inputs({'depth':[0,None,2],'curve':[1,2,3],'__canvas_index':[0,None,2]}, {'depth':'m','curve':'counts','__canvas_index':'m'},dict(unit='m'))
+    assert len(inputs['curve'])==3 and len(index)==3
+    assert np.isnan(index[1])
+
+
+def test_empty_canvas_selection_is_blocked():
+    from scientific_worker import scoped_inputs
+    with pytest.raises(ScienceProblem):scoped_inputs({'curve':[1,2],'__canvas_index':[0,1]},{'curve':'counts'},dict(unit='m',top=10,base=20))

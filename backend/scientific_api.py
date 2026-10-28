@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from fastapi import Depends
 from fastapi.responses import Response
 from google.cloud import firestore, storage
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from scientific_catalog import METHODS, VERSION, ARTIFACT_BUDGET, MAX_ROWS, MAX_CELLS, allowed, capabilities
 
@@ -28,6 +28,29 @@ class Binding(Strict):
     confirmed: bool = False
 
 
+class RowRange(Strict):
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+
+
+class IndexSelection(Strict):
+    datasetId: str = Field(min_length=1, max_length=100)
+    columnId: str = Field(min_length=1, max_length=100)
+    unit: str = Field(min_length=1, max_length=80)
+    reference: str = Field(default="Unconfirmed", max_length=80)
+    top: float | None = Field(default=None, allow_inf_nan=False)
+    base: float | None = Field(default=None, allow_inf_nan=False)
+    rowRanges: list[RowRange] | None = Field(default=None, max_length=1000)
+
+    @field_validator("rowRanges", mode="before")
+    @classmethod
+    def ranges_as_records(cls, value):
+        # Firestore cannot persist arrays nested directly inside arrays.
+        if isinstance(value, list):
+            return [dict(start=r[0], end=r[1]) if isinstance(r, (list, tuple)) and len(r)==2 else r for r in value]
+        return value
+
+
 class Configuration(Strict):
     revision: int = Field(ge=0)
     method: str
@@ -35,6 +58,7 @@ class Configuration(Strict):
     parameters: dict = Field(default_factory=dict)
     alignmentConfirmed: bool = False
     notes: str = Field(default="", max_length=4000)
+    scope: IndexSelection | None = None
 
 
 class RunRequest(Strict):
@@ -51,6 +75,23 @@ class Review(Strict):
 
 
 def now(): return datetime.now(timezone.utc).isoformat()
+
+
+def firestore_value(value, inside_array=False):
+    """Keep explicit matrix parameters lossless within Firestore's array rules."""
+    if isinstance(value, dict): return {k:firestore_value(v) for k,v in value.items()}
+    if isinstance(value, (list, tuple)):
+        items=[firestore_value(v, True) for v in value]
+        return {"strataxNestedArrayV1":items} if inside_array else items
+    return value
+
+
+def restore_value(value):
+    if isinstance(value, dict):
+        if set(value)=={"strataxNestedArrayV1"}:return [restore_value(v) for v in value["strataxNestedArrayV1"]]
+        return {k:restore_value(v) for k,v in value.items()}
+    if isinstance(value, list):return [restore_value(v) for v in value]
+    return value
 
 
 def fingerprint(dataset):
@@ -84,7 +125,7 @@ def install_science(app, database, current_user, fail, acceptance_current):
     def scoped(uid, pid, rid):
         pr, record = project(uid, pid)
         rr = pr.collection("scienceRuns").document(valid(rid))
-        run = rr.get().to_dict()
+        run = restore_value(rr.get().to_dict())
         if not run: fail(404, "run_missing", "This calculation could not be found.")
         return pr, rr, run
 
@@ -122,6 +163,19 @@ def install_science(app, database, current_user, fail, acceptance_current):
             snapshots[binding.datasetId]["fingerprint"] = fingerprint(ds)
         if len(snapshots) > 1 and not body.alignmentConfirmed:
             fail(400, "alignment_required", "Confirm common row alignment after an explicit join/resampling before combining datasets.")
+        if body.scope:
+            scope = body.scope
+            if set(snapshots) != {scope.datasetId}:
+                fail(400, "scope_alignment", "Selected-interval calculations need one aligned dataset. Disable canvas scope for an independently mapped calculation.")
+            dataset = pr.collection("datasets").document(valid(scope.datasetId)).get(transaction=transaction).to_dict()
+            if not dataset or not any(c["id"] == scope.columnId for c in dataset.get("columns", [])) or dataset.get("activeColumns") and scope.columnId not in dataset["activeColumns"]:
+                fail(400, "scope_index", "Choose an active source index for the canvas interval.")
+            if scope.unit.strip().lower() not in ("m", "metres", "meters", "ft", "feet", "km"):
+                fail(400, "scope_unit", "Confirm a supported length unit for the selected index.")
+            if (scope.top is None) != (scope.base is None) or scope.top is not None and scope.base <= scope.top:
+                fail(400, "scope_interval", "Select an interval with a base deeper than its top, in metres.")
+            if scope.rowRanges is not None and (not scope.rowRanges or any(r.end<r.start or r.end>=dataset["rowCount"] for r in scope.rowRanges) or any(scope.rowRanges[i].start<=scope.rowRanges[i-1].end for i in range(1,len(scope.rowRanges)))):
+                fail(400, "scope_rows", "Choose nonoverlapping ordered source-row ranges inside this dataset.")
         return spec, snapshots, parameters
 
     @app.get("/api/projects/{pid}/science/capabilities")
@@ -171,8 +225,8 @@ def install_science(app, database, current_user, fail, acceptance_current):
     @app.get("/api/projects/{pid}/science")
     def list_science(pid: str, user=Depends(owner)):
         pr, record = project(user["uid"], pid)
-        configs = [d.to_dict() for d in pr.collection("scienceConfigurations").limit(200).stream()]
-        runs = [public(d.to_dict()) for d in pr.collection("scienceRuns").order_by("createdAt", direction=firestore.Query.DESCENDING).limit(100).stream()]
+        configs = [restore_value(d.to_dict()) for d in pr.collection("scienceConfigurations").limit(200).stream()]
+        runs = [public(restore_value(d.to_dict())) for d in pr.collection("scienceRuns").order_by("createdAt", direction=firestore.Query.DESCENDING).limit(100).stream()]
         sources = {d.id: d.to_dict() for d in pr.collection("datasets").limit(1000).stream()}
         for run in runs:
             run["stale"] = any(sources.get(key, {}).get("active") is not True or fingerprint(sources.get(key, {})) != value for key, value in run.get("inputFingerprints", {}).items())
@@ -190,7 +244,7 @@ def install_science(app, database, current_user, fail, acceptance_current):
             if (old or {}).get("revision", 0) != body.revision:
                 fail(409, "configuration_conflict", "This configuration changed elsewhere. Reload it before saving; your draft is retained.")
             result = body.model_dump() | dict(id=cid, revision=body.revision+1, updatedAt=now(), methodVersion=VERSION)
-            tx.set(cr, result); return result
+            tx.set(cr, firestore_value(result)); return result
         return write(database().transaction())
 
     @app.post("/api/projects/{pid}/science/runs", status_code=202)
@@ -205,7 +259,7 @@ def install_science(app, database, current_user, fail, acceptance_current):
 
         @firestore.transactional
         def claim(tx):
-            record = pr.get(transaction=tx).to_dict(); existing = rr.get(transaction=tx).to_dict(); config = cr.get(transaction=tx).to_dict(); capacity = global_ref.get(transaction=tx).to_dict() or {}
+            record = pr.get(transaction=tx).to_dict(); existing = restore_value(rr.get(transaction=tx).to_dict()); config = restore_value(cr.get(transaction=tx).to_dict()); capacity = global_ref.get(transaction=tx).to_dict() or {}
             if existing:
                 if existing["configurationId"] != body.configurationId or existing["configurationRevision"] != body.revision:
                     fail(409, "idempotency_conflict", "Use a new submission identifier for this changed configuration.")
@@ -231,7 +285,7 @@ def install_science(app, database, current_user, fail, acceptance_current):
                        dispatch=dispatch, inputSnapshots=snapshots,
                        inputFingerprints={k:v["fingerprint"] for k,v in snapshots.items()},
                        reservation=ARTIFACT_BUDGET, scientificApproval=False)
-            tx.set(pr, record); tx.set(global_ref, dict(leases=leases)); tx.set(rr, run)
+            tx.set(pr, record); tx.set(global_ref, dict(leases=leases)); tx.set(rr, firestore_value(run))
             return run, True
         run, claimed = claim(database().transaction())
         if not claimed: return public(run)
@@ -273,7 +327,7 @@ def install_science(app, database, current_user, fail, acceptance_current):
         def mark(tx):
             current=rr.get(transaction=tx).to_dict()
             if current["status"] in ("queued","running"):
-                current.update(status="cancelling",revision=current["revision"]+1);tx.set(rr,current)
+                current.update(status="cancelling",revision=current["revision"]+1);tx.set(rr,firestore_value(current))
             return public(current)
         return mark(database().transaction())
 
@@ -328,7 +382,7 @@ def install_science(app, database, current_user, fail, acceptance_current):
                     tx.set(pr.collection("datasets").document(entry["id"]),entry)
                 if old_ref:tx.update(old_ref,dict(active=False,supersededBy=datasets[0]["id"]))
             current.update(status="accepted" if body.decision=="accept" else "rejected",revision=current["revision"]+1,reviewedAt=now())
-            tx.set(rr,current);tx.set(pr.collection("scienceReviews").document(review_id),dict(id=review_id,runId=rid,decision=body.decision,comment=body.comment,createdAt=firestore.SERVER_TIMESTAMP,uid=user["uid"]))
+            tx.set(rr,firestore_value(current));tx.set(pr.collection("scienceReviews").document(review_id),dict(id=review_id,runId=rid,decision=body.decision,comment=body.comment,createdAt=firestore.SERVER_TIMESTAMP,uid=user["uid"]))
             return public(current)
         return activate(database().transaction())
 

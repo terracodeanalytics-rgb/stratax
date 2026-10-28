@@ -297,9 +297,11 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
             for zone in zones:
                 top,base=number(zone,"top"),number(zone,"base");require(base>top,"Zone base must exceed top.");inside=(d>=top)&(d<base);require(not np.any(occupied&inside),"Zonal overrides must not overlap.");occupied|=inside;mask[inside]=mask_for(zone["rules"])[inside]
             bed=number(p,"minimumBed",low=0)
-            for label in range(1,ndimage.label(mask==1)[1]+1):
-                indices=np.flatnonzero(ndimage.label(mask==1)[0]==label);end=min(indices[-1]+1,len(d)-1)
-                if d[end]-d[indices[0]]<bed:mask[indices]=0
+            components,count=ndimage.label(mask==1)
+            for region in ndimage.find_objects(components):
+                if region is None:continue
+                bounds=region[0];end=min(bounds.stop,len(d)-1)
+                if d[end]-d[bounds.start]<bed:mask[bounds]=0
             out=dict(depth=d,qualified=mask);summary=dict(unknownRows=int(np.isnan(mask).sum()),ruleType="User-defined; reservoir/pay meaning must be assigned explicitly")
         elif m == "reservoir-summary":
             text(p,"depthReference");require(p["depthReference"] in ("MD","TVD","TVDSS"),"Confirm the summary depth basis.");top,base,gap=number(p,"top"),number(p,"base"),number(p,"maxGap",positive=True);w=thickness(a["depth"],top,base,gap);gross=base-top

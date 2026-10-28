@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import runpy
 import secrets
+import sys
 import subprocess
 import time
 import urllib.parse
@@ -60,6 +61,8 @@ def main():
         check('Source dataset activated',request(iurl+'/commit','POST',dict(revision=imported['revision'],acknowledge_warnings=True),token)[0]==200)
         source=imported['datasets'][0]
         configuration=dict(revision=0,method='shale-linear',bindings=dict(gr=dict(datasetId=source['id'],columnId='column-1',unit='gAPI',confirmed=True)),parameters=dict(clean=0,shale=100))
+        scoped='--canvas-scope' in sys.argv
+        if scoped:configuration['scope']=dict(datasetId=source['id'],columnId='column-0',unit='m',reference='MD',top=10,base=19,rowRanges=[[10,12],[18,19]])
         bad=json.loads(json.dumps(configuration));bad['bindings']['gr']['confirmed']=False
         check('Unconfirmed mapping rejected',request(base+'/science/validate','POST',bad,token)[0]==400)
         check('Mapped input preflight passes',request(base+'/science/validate','POST',configuration,token)[0]==200)
@@ -77,7 +80,7 @@ def main():
         if complete['status']!='completed':print(json.dumps({'run':complete}),flush=True)
         check('Scientific worker completed full stored dataset',complete['status']=='completed')
         status,result=request(rurl+'/result',token=token)
-        check('Numerical result equals analytical expectation',status==200 and abs(result['preview']['vsh'][0]-.25)<1e-12 and abs(result['preview']['vsh'][-1]-.369)<1e-12)
+        check('Numerical result equals analytical expectation',status==200 and abs(result['preview']['vsh'][0]-(.26 if scoped else .25))<1e-12 and abs(result['preview']['vsh'][-1]-(.269 if scoped else .369))<1e-12)
         check('Method and source provenance retained',result['methodVersion']==caps['version'] and result['provenance']['sources'][0]['sourceSha256']==source['sourceSha256'])
         check('Original source remains unchanged',request(base+'/files/'+aid,token=token,raw=True)[1]==las)
         check('Stale result-review revision blocked',request(rurl+'/review','POST',dict(revision=1,decision='accept',comment='stale'),token)[0]==409)
@@ -88,10 +91,13 @@ def main():
         check('Calculation reservation released and bytes counted',inventory['quota']['reserved']==0 and inventory['quota']['used']>len(las))
         derived=next(d for d in inventory['datasets'] if d.get('scientificRunId')==rid)
         status,rows=request(base+'/science/datasets/'+derived['id']+'/rows?limit=120',token=token)
-        check('Activated result chunk preview reads real stored values',status==200 and len(rows['rows'])==120 and rows['columns'][1]['unit']=='v/v')
+        check('Activated result chunk preview reads real stored values',status==200 and len(rows['rows'])==(5 if scoped else 120) and rows['columns'][1]['unit']=='v/v')
+        if scoped:
+            check('Exact brushed source depths preserved',result['preview']['depth']==[10,11,12,18,19])
+            check('Activated curve carries a real index and MD reference',derived['indexColumnId']=='column-0' and derived['references']['depthReference']=='MD' and rows['columns'][0]['unit']=='m')
         check('Unsafe artifact name blocked',request(rurl+'/artifacts/secrets.txt',token=token)[0]==400)
         report=dict(api=API,passed=len(checks),checks=checks,runId=rid)
-        Path('.release/science-api-verification.json').write_text(json.dumps(report,indent=2),encoding='utf-8');print(json.dumps(report))
+        Path('.release/canvas-api-verification.json' if scoped else '.release/science-api-verification.json').write_text(json.dumps(report,indent=2),encoding='utf-8');print(json.dumps(report))
     finally:
         root=f'https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/(default)/documents/'
         for user in fixtures:
