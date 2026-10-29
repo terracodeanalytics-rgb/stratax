@@ -21,9 +21,10 @@ from policies import POLICY_VERSIONS, acceptance_current
 
 PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "project-9afac")
 SITE_ORIGIN = os.environ.get("STRATAX_SITE_ORIGIN", "https://stratax-workbench.cometcrab258.chatgpt.site").rstrip("/")
+SITE_ORIGINS = list(dict.fromkeys([SITE_ORIGIN, *[origin.strip().rstrip('/') for origin in os.environ.get('STRATAX_ADDITIONAL_SITE_ORIGINS','').split(',') if origin.strip()]]))
 logger = logging.getLogger("stratax")
 app = FastAPI(title="StrataX account API", docs_url=None, redoc_url=None, openapi_url=None)
-app.add_middleware(CORSMiddleware, allow_origins=[SITE_ORIGIN], allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-File-Name"], expose_headers=["Retry-After", "X-Request-ID"])
+app.add_middleware(CORSMiddleware, allow_origins=SITE_ORIGINS, allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-File-Name"], expose_headers=["Retry-After", "X-Request-ID"])
 _db = None
 
 def database():
@@ -53,7 +54,7 @@ async def boundaries(request: Request, call_next):
     request.state.request_id = uuid.uuid4().hex
     try:
         origin = request.headers.get("origin")
-        if origin and origin != SITE_ORIGIN:
+        if origin and origin not in SITE_ORIGINS:
             return JSONResponse({"code": "origin_not_allowed", "message": "This request origin is not supported."}, status_code=403)
         if request.method in ("POST", "PUT") and not (request.url.path.startswith("/api/projects/") and "/files/" in request.url.path):
             if request.headers.get("content-type", "").split(";")[0] != "application/json":

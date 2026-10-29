@@ -61,13 +61,16 @@ seismic_batch_worker.firestore.Client = lambda:db
 
 
 class Provider:
-    def post(self, url, params, json, **kwargs):
-        run_path = json['taskGroups'][0]['taskSpec']['runnables'][0]['environment']['variables']['STRATAX_SEISMIC_RUN']
+    def post(self, url, json, **kwargs):
+        environment = json['overrides']['containerOverrides'][0]['env']
+        run_path = next(item['value'] for item in environment if item['name'] == 'STRATAX_SEISMIC_RUN')
         def run():
             os.environ['STRATAX_SEISMIC_RUN'] = run_path
             seismic_batch_worker.main()
         threading.Thread(target=run, daemon=False).start()
-        return Mock(status_code=201)
+        response = Mock(status_code=200)
+        response.json.return_value = dict(name='projects/project-9afac/locations/us-central1/operations/fixture')
+        return response
 
     def get(self, *args, **kwargs):
         value = Mock(status_code=200)

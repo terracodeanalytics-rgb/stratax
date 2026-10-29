@@ -1,5 +1,13 @@
 # StrataX context
 
+## Active deployment — 2026-10-29 bounded tool jobs
+
+New private frontend is https://stratax-seismic-workbench.neonwhale8.chatgpt.site, Site `appgprj_6ae37700e488819196b149dee2c6053f`; old Site remains intact. The connected Sites account cannot access the old project; user explicitly authorised creating this replacement. New source checkout is ignored `.release/sites-seismic-v2`, while `.sites-source` retains the inaccessible old identity. Never substitute their IDs/remotes. Cloud Firebase/project data is shared; origin-local data/handles were not migrated.
+
+API revision `stratax-api-00024-diw` is the new production target;22 is tagged rollback. `STRATAX_SITE_ORIGIN` points to the new Site and `STRATAX_ADDITIONAL_SITE_ORIGINS` retains the old origin. Shared Firebase domains and only the StrataX Maps key referrers were extended additively. No account/password/provider changes.
+
+`seismic_tool_jobs.py` + `seismic_tool_worker.py` now connect bounded tools to on-demand jobs, approval-bound profiles, private artifacts and review using existing owner/run/quota infrastructure. `STRATAX_SEISMIC_TOOL_PROFILES` maps seismic/models/acoustic to exact job/digest/resources; graph preview uses the existing compatibility profile. Small CPU profile2/4GiB/600s, heavier4/16GiB/1800s, zero retries. No real calculation jobs submitted. Tests remain explicitly deferred; do not run pytest/browser/fixtures until authorised. Read SEISMIC_JOBS_DEPLOYMENT_2026-10-29.md before continuing; full workspaces, distributed field processing and MPI/OpenACC remain incomplete.
+
 ## Engine v2 source — 2026-10-29
 
 Read SEISMIC_ENGINES_V2.md before resuming. Numerical source has substantial new processing/imaging/model/4D/acoustic paths; all-programme completion is not claimed. User now requests engine implementation only and explicitly defers data testing to a later frontend pass. Do not restart pytest/browser/fixture calculations unless authorised again. Parsing/compilation/packaging are permitted; Docker engine tests default off.

@@ -196,4 +196,8 @@ def main():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    main()
+    if os.environ.get('STRATAX_SEISMIC_TOOL_JOB') == '1':
+        from seismic_tool_worker import main as tool_main
+        tool_main()
+    else:
+        main()

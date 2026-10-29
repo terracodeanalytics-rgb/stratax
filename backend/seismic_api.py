@@ -402,6 +402,8 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
     from seismic_tools_api import install_seismic_tools
     install_seismic_runs(app, database, owner, project, source, retained_section, valid, fail)
     install_seismic_tools(app, owner, project, fail)
+    from seismic_tool_jobs import install_tool_jobs
+    install_tool_jobs(app, database, owner, project, source, fail)
 
     @app.post("/api/projects/{pid}/seismic/graphs/validate")
     def graph_validation(pid: str, body: Graph, user=Depends(owner)):

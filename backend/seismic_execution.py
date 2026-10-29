@@ -130,7 +130,7 @@ def batch_request(project, region, service_account, run_path, run_id, estimate_v
     return dict(
         provider='cloud-run-jobs',
         job=f'projects/{project}/locations/{region}/jobs/{job_name}',
-        overrides=dict(containerOverrides=[dict(env=[
+        overrides=dict(taskCount=1, timeout=f"{r['maxSeconds']}s", containerOverrides=[dict(env=[
             dict(name='STRATAX_SEISMIC_RUN', value=run_path),
             dict(name='GOOGLE_CLOUD_PROJECT', value=project),
             dict(name='STRATAX_SEISMIC_RUN_ID', value=run_id),

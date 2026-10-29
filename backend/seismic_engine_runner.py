@@ -42,6 +42,25 @@ def pack_result(value):
     return arrays
 
 
+def unpack_result(raw):
+    import io
+    import zipfile
+    archive=io.BytesIO(raw)
+    with zipfile.ZipFile(archive) as z:
+        require(sum(i.file_size for i in z.infolist()) <= 512*1024**2, 'Checkpoint expanded size exceeds its memory budget.')
+    with np.load(io.BytesIO(raw),allow_pickle=False) as values:
+        tree=json.loads(values['metadata'].tobytes())
+        def restore(value):
+            if isinstance(value,dict) and set(value)=={'array','shape','dtype'}:
+                array=values[value['array']]
+                require(list(array.shape)==value['shape'] and str(array.dtype)==value['dtype'],'Checkpoint array schema changed.')
+                return array.copy()
+            if isinstance(value,dict):return {k:restore(v) for k,v in value.items()}
+            if isinstance(value,list):return [restore(v) for v in value]
+            return value
+        return restore(tree)
+
+
 def execute_manifest(manifest, *, checkpoint=lambda value:None):
     require(isinstance(manifest,dict) and manifest.get("engineVersion") == "stratax-seismic/2.0",
             "Provide an explicit engine-version-2 manifest.")

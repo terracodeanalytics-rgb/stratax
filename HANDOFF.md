@@ -1,5 +1,15 @@
 # StrataX handoff
 
+## Latest — 2026-10-29 jobs and new Site deployment, no tests
+
+- User authorised1–5 but **do not test yet**. No scientific, pytest, browser, sign-in or application endpoint tests run. Only compile/parse/diff/package and platform deployment metadata. New private Site deployment succeeded; API candidate ready then traffic promoted. Do not turn readiness into an acceptance claim.
+- Site https://stratax-seismic-workbench.neonwhale8.chatgpt.site; ID `appgprj_6ae37700e488819196b149dee2c6053f`, source `50841428b30536653d5f63c580769937f5311c15`, deployment `appgdep_6ae37a1a1b4481919d0689bac2f64f2c`. User explicitly chose new Site after old project404 in selected connection. Original Site remains intact. Existing Firebase authorised domains/StrataX Maps referrers retained plus neworigin; API supports both. New Site credentials only passed via hidden stdin; none saved.
+- API revision24 (`stratax-api-00024-diw`), build `cf81126b-f14a-499e-b7ad-7ba68e258105`; exact API/worker digests in SEISMIC_JOBS_DEPLOYMENT_2026-10-29.md. Workers provisioned as `stratax-seismic-worker`, `stratax-models-worker`, `stratax-acoustic-worker` using existing scoped seismic identity. No worker executions, min instances or standby disks; zero retries. Existing petrophysics/import workers unchanged.
+- Implemented bounded asynchronous engine estimate/approval/submission, source/version/image checks, shared quota/capacity reservation, private NPZ result, cancellation/status, acoustic checkpoints/restart checks, preview/download/review and accepted resource references. New workbook tabs/name/source controls, exact run approval and retained run state are implemented, but full graphical well-tie/QI/model/4D workbooks remain incomplete.
+- Known503 adapter mismatch corrected statically in `serve-seismic-fixture.py`: Cloud Run overrides replace old Batch shape/requiredparams. Not rerun. Live profiles were previously absent and are now configured. Scheduling claims/uncertain status prevent automatic duplicate billed executions; run polling waits for actual execution completion.
+- Windows `.cmd` interpreted pipe-delimited env flags as commands. Replaced with nonsecret structured `.release/seismic-api-deploy-flags.json`; reran API-only deployment. Preserve the ignored flags/receipts and both Site checkouts. Cleanup47 tagged scoped images, zero deletions; no disposable source/data removed.
+- **Not all requested1–5 are complete**: distributed field processing/storage, MPI/GPU runtime qualification, full source-driven graphical workspaces and field-grade gaps remain. No M0–M9 acceptance gate closed. Continue those implementations; testing must wait for new permission. Repository origin/branch unchanged; source/docs checkpoint publication follows cleanup.
+
 ## Latest — 2026-10-29 engine v2 build-only continuation
 
 - User: build remaining engines quickly; **no more data testing**, frontend testing later. Honour that override. No tests/fixtures/browser runs were initiated after it; compile/parse/diff checks only. See SEISMIC_ENGINES_V2.md for exact code, constraints, test chronology and remaining gaps.

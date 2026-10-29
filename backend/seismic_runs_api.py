@@ -198,6 +198,15 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         run = admit(database().transaction())
         if run.get('settled') or run.get('cancelRequested') or run.get('dispatchState') != 'pending':
             return public_run(run)
+        @firestore.transactional
+        def claim_dispatch(tx):
+            current = restore_value(item.get(transaction=tx).to_dict())
+            if current.get('dispatchState') != 'pending': return False
+            current['dispatchState'] = 'scheduling'
+            tx.set(item, firestore_value(current))
+            return True
+        if not claim_dispatch(database().transaction()):
+            return public_run(restore_value(item.get().to_dict()))
         try:
             response = provider().post(
                 f'https://run.googleapis.com/v2/{run["jobName"]}:run',
@@ -205,7 +214,8 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
                 timeout=30,
             )
             if response.status_code not in (200, 201):
-                fail(503, 'batch_submission', 'Scheduling could not be confirmed. Retry this same submission key or cancel it; no duplicate job will be created.')
+                item.update(dict(dispatchState='pending'))
+                fail(503, 'batch_submission', 'Scheduling was rejected. Retry this submission or cancel it.')
             payload = response.json() if callable(getattr(response, 'json', None)) else {}
             if not isinstance(payload, dict):
                 payload = {}
@@ -213,7 +223,8 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
             item.update(dict(dispatchState='submitted', operation=payload.get('name'), execution=metadata.get('name')))
             run['dispatchState'] = 'submitted'
         except requests.RequestException:
-            fail(503, 'batch_submission', 'Scheduling is not confirmed. Retry this same submission key; the deterministic run identity prevents duplicate scientific writes.')
+            item.update(dict(dispatchState='uncertain'))
+            fail(503, 'batch_submission', 'Scheduling confirmation was interrupted. This run is held for reconciliation to avoid duplicate compute charges.')
         return public_run(run)
 
     @app.get('/api/projects/{pid}/seismic/runs')
@@ -231,6 +242,15 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
                 if re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/operations/[\w-]+', op or ''):
                     response = provider().get('https://run.googleapis.com/v2/'+op, timeout=20)
                     if response.status_code == 200 and response.json().get('done'):
+                        operation=response.json()
+                        execution=(operation.get('response') or {}).get('name') or (operation.get('metadata') or {}).get('name') or run.get('execution')
+                        if execution and re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/jobs/[\w-]+/executions/[\w-]+',execution):
+                            item.update(dict(execution=execution))
+                            status=provider().get('https://run.googleapis.com/v2/'+execution,timeout=20)
+                            if status.status_code!=200 or not status.json().get('completionTime'):
+                                return public_run(restore_value(item.get().to_dict()))
+                        elif not operation.get('error'):
+                            return public_run(restore_value(item.get().to_dict()))
                         prefix = f'owners/{user["uid"]}/projects/{pid}/seismic/runs/{rid}/'
                         actual = sum(blob.size or 0 for blob in storage.Client().list_blobs(run['input']['outputBucket'], prefix=prefix))
                         # Worker settles successful runs; a done operation without settlement is a failed execution.
