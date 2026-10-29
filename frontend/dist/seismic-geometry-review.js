@@ -2,18 +2,20 @@ import {api,session} from './auth.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fields={sourceX:73,sourceY:77,receiverX:81,receiverY:85,midpointX:181,midpointY:185,inline:189,crossline:193,shot:9,receiver:13,channel:25,traceCode:29,offset:37,coordinateScalar:71,elevationScalar:69,sourceElevation:45,receiverElevation:41};
 const keys=['revision','sourceVersion','dimension','dataKind','coordinateUnit','axisOrder','crs','datum','elevationUnit','elevationPositive','timeConvention','roles','notes','reviewed'];
-export async function openGeometryReview(host,book){
+export async function openGeometryReview(host,book,sourceId){
  if(!book)throw new Error('Choose a retained source before reviewing its geometry.');
- const uid=session.user?.uid,pid=host.getProject().id,did=book.graph.sourceId;
+ const uid=session.user?.uid,pid=host.getProject().id,did=sourceId||book.graph?.sourceId;
+ if(!did)throw new Error('Select a retained source before reviewing geometry.');
+ const holder=book.graph?book:((book.geometryReviews||={})[did]||={});
  if(host.getProject().storage!=='cloud')throw new Error('Create an explicit Cloud copy to save a server geometry revision. Local source contents have not been uploaded.');
- const valid=()=>session.user?.uid===uid&&host.getProject()?.id===pid&&host.getState().seismicProcessing?.books.includes(book);
+ const valid=()=>session.user?.uid===uid&&host.getProject()?.id===pid&&(host.getState().seismicProcessing?.books.includes(book)||host.getState().seismicWorkspace?.books.includes(book));
  const path=`/api/projects/${encodeURIComponent(pid)}/seismic/sources/${encodeURIComponent(did)}/geometry`;
  const call=(suffix='',options={})=>api(path+suffix,{...options,ownerUid:uid});
  const remote=await call();if(!valid())return;
  const saved=remote.review;
  const defaults={revision:0,sourceVersion:remote.sourceVersion,dimension:3,dataKind:'unstacked',coordinateUnit:'m',axisOrder:'easting-northing',crs:'',datum:'',elevationUnit:'m',elevationPositive:'up',timeConvention:'unconfirmed',notes:'',reviewed:false,
   roles:Object.fromEntries(['sourceX','sourceY','receiverX','receiverY','coordinateScalar'].map(k=>[k,{byte:fields[k],width:k==='coordinateScalar'?2:4,signed:true}]))};
- const draft=book.geometryDraft||(remote.stale?{...saved,sourceVersion:remote.sourceVersion,reviewed:false}:saved)||defaults;
+ const draft=holder.geometryDraft||(remote.stale?{...saved,sourceVersion:remote.sourceVersion,reviewed:false}:saved)||defaults;
  const select=(name,label,options)=>`<label>${label}<select name="${name}">${options.map(([value,title])=>`<option value="${value}" ${String(draft[name])===String(value)?'selected':''}>${title}</option>`).join('')}</select></label>`;
  host.modal('Review survey header geometry',`<p>Source ${esc(did)} · saved revision ${saved?.revision||0}. Assign only roles supported by the source documentation. These declarations do not establish complete survey geometry or enable geometry-dependent processing.</p>${remote.stale?'<p role="alert">The saved review belongs to an older source. Keep a copy and review the current source explicitly.</p>':''}<form id="sg-review">
  ${select('dimension','Survey dimension',[[2,'2D'],[3,'3D']])}${select('dataKind','Source observations',[['unstacked','Unstacked field traces'],['poststack','Stacked survey']])}
@@ -31,12 +33,12 @@ export async function openGeometryReview(host,book){
   const values=new FormData(form),body=Object.fromEntries(keys.filter(k=>!['roles','revision','sourceVersion','dimension','reviewed'].includes(k)).map(k=>[k,values.get(k)]));
   body.revision=draft.revision;body.sourceVersion=draft.sourceVersion;body.dimension=Number(values.get('dimension'));body.reviewed=values.has('reviewed');body.roles={};
   for(const k of Object.keys(fields))if(values.has('use:'+k))body.roles[k]={byte:Number(values.get('byte:'+k)),width:Number(values.get('width:'+k)),signed:values.has('signed:'+k)};
-  book.geometryDraft=body;host.save();return body;
+  holder.geometryDraft=body;host.save();return body;
  }
  const safe=fn=>async e=>{try{if(still())await fn(e);}catch(failure){if(still())error.textContent=failure.message;}};
  form.oninput=()=>{previewed=null;save.disabled=true;};
  document.querySelector('#sg-preview').onclick=safe(async()=>{if(!form.reportValidity())return;error.textContent='';const body=capture(),value=await call('/preview',{method:'POST',body});if(!still())return;previewed=JSON.stringify(body);output.textContent=JSON.stringify(value,null,2);save.disabled=false;});
- form.onsubmit=safe(async e=>{e.preventDefault();const body=capture();if(JSON.stringify(body)!==previewed)throw new Error('Preview these exact settings before saving a geometry revision.');save.disabled=true;const value=await call('',{method:'PUT',body});if(!still())return;book.geometryDraft=Object.fromEntries(keys.map(k=>[k,value.review[k]]));book.geometryReviewRevision=value.review.revision;host.save();document.querySelector('#dialog').close();host.render();host.toast('Geometry declaration saved. Full survey QC remains required.');});
+ form.onsubmit=safe(async e=>{e.preventDefault();const body=capture();if(JSON.stringify(body)!==previewed)throw new Error('Preview these exact settings before saving a geometry revision.');save.disabled=true;const value=await call('',{method:'PUT',body});if(!still())return;holder.geometryDraft=Object.fromEntries(keys.map(k=>[k,value.review[k]]));holder.geometryReviewRevision=value.review.revision;host.save();document.querySelector('#dialog').close();host.render();host.toast('Geometry declaration saved. Full survey QC remains required.');});
  document.querySelector('#sg-export').onclick=safe(()=>host.download('seismic-geometry-review.json',new Blob([JSON.stringify(capture(),null,2)],{type:'application/json'})));
- document.querySelector('#sg-reload').onclick=safe(async()=>{book.geometryDraftBackup=capture();delete book.geometryDraft;host.save();await openGeometryReview(host,book);});
+ document.querySelector('#sg-reload').onclick=safe(async()=>{holder.geometryDraftBackup=capture();delete holder.geometryDraft;host.save();await openGeometryReview(host,book,did);});
 }

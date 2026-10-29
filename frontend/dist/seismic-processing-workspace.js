@@ -24,7 +24,12 @@ async function refresh(){
   for(const b of state().books){const runs=history.runs.filter(r=>r.estimate?.graphId===b.id);b.run=runs.find(r=>r.id===b.run?.id)||runs[0]||b.run;}
  }host.render();}catch(error){if(scopeCurrent(g))host.toast(error.message);}finally{if(scopeCurrent(g))busy=false;}
 }
-function newBook(did){const d=sources().find(s=>s.id===did);if(!d)throw new Error('Select an active seismic source.');const id=crypto.randomUUID(),b={id,name:d.name+' processing',dirty:true,selected:null,graph:{revision:0,sourceId:d.id,sourceVersion:remoteVersion.get(d.id)||d.sourceVersion||d.sourceSha256||`${d.importId}:${d.id}`,domain:'TWT',domainConfirmed:false,amplitudeUnit:'',nodes:[],output:'',notes:''},selection:{firstTrace:0,traceCount:Math.min(128,d.metadata?.traceCount||128),firstSample:0,sampleCount:Math.min(1000,d.metadata?.sampleCount||1000)}};state().books.push(b);state().activeBook=id;changed();}
+function newBook(did){
+ const d=sources().find(s=>s.id===did);if(!d)throw new Error('Select an active seismic source.');
+ const m=d.metadata||{},variable=[m.sampleCountRange,m.sampleIntervalRange,m.sampleOriginRange].some(r=>Array.isArray(r)&&r[0]!==r[1]);
+ const id=crypto.randomUUID(),b={id,name:d.name+' processing',dirty:true,selected:null,graph:{revision:0,sourceId:d.id,sourceVersion:remoteVersion.get(d.id)||d.sourceVersion||d.sourceSha256||`${d.importId}:${d.id}`,domain:'TWT',domainConfirmed:false,amplitudeUnit:'',nodes:[],output:'',notes:''},selection:{firstTrace:0,traceCount:Math.min(variable?1:128,m.traceCount||128),firstSample:0,sampleCount:Math.min(1000,m.sampleCountRange?.[0]||m.sampleCount||1000)}};
+ state().books.push(b);state().activeBook=id;changed();
+}
 function addStep(operator){const b=current();if(!b)throw new Error('Add a seismic source first.');const node={id:crypto.randomUUID(),operator,input:b.graph.output||'source',parameters:structuredClone(operators[operator].parameters)};b.graph.nodes.push(node);b.graph.output=node.id;b.selected=node.id;changed();}
 function graphCanvas(b){
  if(!b)return '<div class="sw-empty"><h2>Build a seismic processing graph</h2><p>Choose a retained survey from the browser. Add processing steps, inspect their settings and connect their inputs.</p><button id="sp-import">Import seismic sources</button></div>';

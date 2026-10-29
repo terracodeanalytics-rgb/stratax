@@ -8,6 +8,7 @@ tests/*
 !tests/test_seismic_inversion.py
 !tests/test_seismic_execution.py
 !tests/test_seismic_trace_index.py
+!tests/test_seismic_brick.py
 !tests/test_seismic_acoustic.py
 !tests/fixtures/
 !tests/fixtures/acoustic-reference-v1.json

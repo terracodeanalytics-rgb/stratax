@@ -56,20 +56,27 @@ class GeometryReview(BaseModel):
         return self
 
 
-def header_preview(stream,size,review,*,kind='segy',endian='big',first_trace=0,trace_count=8):
+def header_preview(stream,size,review,*,kind='segy',endian='big',first_trace=0,trace_count=8,locators=None,total_traces=None):
     need(type(first_trace) is int and first_trace>=0 and type(trace_count) is int and 1<=trace_count<=64,'Choose a bounded preview of 1–64 retained headers.')
     source=layout(stream,size,kind,endian)
-    first=_read(stream,source['begin'],240)
-    ns=_integer(first,115,2,endian,False) or source['ns']
-    need(ns>0,'The source needs a native variable-trace index before header review.')
-    width=240+ns*SAMPLE_BYTES[source['format']]
-    need((size-source['begin'])%width==0,'Review indexed variable trace offsets before selecting headers from this layout.')
-    total=(size-source['begin'])//width
+    if locators is None:
+        first=_read(stream,source['begin'],240)
+        ns=_integer(first,115,2,endian,False) or source['ns']
+        need(ns>0,'The source needs a native variable-trace index before header review.')
+        width=240+ns*SAMPLE_BYTES[source['format']]
+        need((size-source['begin'])%width==0,'Review indexed variable trace offsets before selecting headers from this layout.')
+        total=(size-source['begin'])//width
+        selected=[dict(trace=i,byteOffset=source['begin']+i*width,sampleCount=ns) for i in range(first_trace,min(total,first_trace+trace_count))]
+    else:
+        total=total_traces;selected=locators
+        need(type(total) is int and total>0 and len(selected)==min(trace_count,total-first_trace),'Indexed header support is incomplete.')
     need(first_trace<total,'The selected header begins beyond the retained source.')
     rows=[]
-    for trace in range(first_trace,min(total,first_trace+trace_count)):
-        raw=_read(stream,source['begin']+trace*width,240)
-        need((_integer(raw,115,2,endian,False) or source['ns'])==ns,'This preview found variable trace lengths. Use the indexed geometry review path.')
+    for position,item in enumerate(selected):
+        trace,offset,ns=item['trace'],item['byteOffset'],item['sampleCount']
+        need(trace==first_trace+position and type(offset) is int and offset>=source['begin'] and type(ns) is int and ns>0 and offset+240+ns*SAMPLE_BYTES[source['format']]<=size,'A geometry preview locator leaves the original trace support.')
+        raw=_read(stream,offset,240)
+        need((_integer(raw,115,2,endian,False) or source['ns'])==ns,'The source header does not match this retained trace locator.')
         values={role:_integer(raw,f.byte,f.width,endian,f.signed) for role,f in review.roles.items()}
         scaled=dict(values)
         for scalar,roles in [('coordinateScalar',['sourceX','sourceY','receiverX','receiverY','midpointX','midpointY']),

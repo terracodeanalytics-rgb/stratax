@@ -11,7 +11,7 @@ The exhaustive operation/case ledger is [SEISMIC_ACCEPTANCE.md](SEISMIC_ACCEPTAN
 | Milestone | Acceptance | Status |
 | --- | --- | --- |
 | M0 | Source/operation contracts, reproducible fixtures, numerical tolerances and resource profiles | In progress |
-| M1 | Immutable survey indexing, analytical storage and bounded persistent viewer | In progress: Processing/Interpretation navigation and modes, revisioned graphs, bounded Batch control/worker source, ragged local indexing/storage and independent 2D books; Cloud indexing/3D/provider commissioning pending |
+| M1 | Immutable survey indexing, analytical storage and bounded persistent viewer | In progress: indexed Cloud native traces, bounded vtk.js 3D amplitudes and independent books; full-survey/distributed storage, linked maps/slices and provider/field qualification pending |
 | M2 | Well calibration, manual/assisted horizon/fault interpretation, export/reload | In progress: manual horizon/fault sticks and reviewed section tracking; full well ties and surfaces pending |
 | M3 | Reviewed velocity conversion, structural framework, maps and uncertainty | Numerical Dix/time–depth foundations only; complete workflow pending |
 | M4 | Actual land shot records through reviewed processing graph and image | Bounded graph execution/approval/review source and local integration fixture; full processing/field image pending |
@@ -23,7 +23,13 @@ The exhaustive operation/case ledger is [SEISMIC_ACCEPTANCE.md](SEISMIC_ACCEPTAN
 
 No milestone has met its complete acceptance gate. This is an internal source checkpoint, not the complete programme or a production release.
 
-## 2026-10-29 continued implementation
+## 2026-10-29 indexed traces and 3D continuation
+
+- See SEISMIC_INDEXED_3D.md for exact source contracts, limits, build reproduction/notices and candidate provenance. Existing import chunks now retain exact variable-trace locators/checksums and conservative bin bounds. Source/metadata generations and original headers are verified in API and Batch reads. Native newer-header fallback remains; source arrays are never regularised silently.
+- Added actual 3D poststack amplitude workbooks using locally bundled vtk.js 38.0.4. Explicit bin ranges/masks, duplicate/raw-gather rejection, matching geometry revisions, camera persistence, display scaling, JSON export and forced graphics recovery pass the loopback UI. Bin-coordinate display does not establish complete survey geometry, physical-coordinate maps or 3D interpretation/tracking.
+- Full backend: 171 passed/four acoustic skips; subsequent focused native-reader suite four passed including an additional compatibility case. JS/account: 12. Loopback browser: 10 groups, zero page errors/Local-content uploads. Linux import/seismic builds pass 27/39 checks; neither is deployed. Scope/field/capacity/hosted gates remain open; zero complete milestones are accepted.
+
+## Earlier 2026-10-29 continuation through 867fd7d
 
 - Continued beyond source checkpoint `5256b4c` with a real header-geometry review path: branded Processing dialog, explicit byte/width/signed role mapping, coordinate/elevation scalars, native units/axis order/CRS/datum declarations, retained-header preview, exact-settings save guard, immutable revisions/conflicts, reload and JSON export. Source and owner changes are checked. Only metadata is declared; no axes/units/CRS are silently transformed, and geometry-coupled execution remains blocked until survey QC is implemented. Eight new geometry tests and the expanded nine-group loopback browser suite pass.
 

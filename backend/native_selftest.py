@@ -33,6 +33,13 @@ def main():
         with segyio.create(str(source),spec) as file:
             for i in range(2):file.trace[i]=np.array([1,2,3],np.float32)+i;file.header[i]={189:1,193:i+1,181:1000,185:2000,71:-10}
         result=read(source,'seismic')[0];check('SEG-Y samples and coordinate scalars',result['preview'][0][4:7]==[100,200,-10] and result['preview'][0][7]==[1,2,3])
+        binary=bytearray(400);struct.pack_into('>H',binary,24,5);struct.pack_into('>H',binary,300,256);variable=bytearray(b' '*3200+binary)
+        for values,dt,delay in [([1,2,3],2000,0),([10,11,12,13,14],4000,17)]:
+            header=bytearray(240);struct.pack_into('>H',header,114,len(values));struct.pack_into('>H',header,116,dt);struct.pack_into('>h',header,108,delay);variable.extend(header);variable.extend(struct.pack('>'+str(len(values))+'f',*values))
+        source=root/'variable.segy';source.write_bytes(variable);result=read(source,'seismic')[0]
+        from seismic_indexed_reader import read_traces
+        with source.open('rb') as retained:indexed=read_traces(retained,len(variable),result,lambda name:(root/(source.name+'-out')/name).read_bytes(),result['metadata']['traceIndex']['sourceVersion'],[0,1],sample_count=5)
+        check('Indexed variable-length SEG-Y exact sampling',indexed['traces'][0]['samples']==[1,2,3] and indexed['traces'][1]['samples']==[10,11,12,13,14] and indexed['traces'][1]['sampleInterval']==.004 and indexed['traces'][1]['sampleStart']==.017)
         source=root/'survey.su';header=bytearray(240);struct.pack_into('>H',header,114,3);struct.pack_into('>H',header,116,2000);source.write_bytes(header+struct.pack('>fff',1,2,3));check('Seismic Unix',read(source,'seismic')[0]['rowCount']==1)
         from pyzgy.write import SeismicWriter
         values=np.arange(128,dtype=np.float32).reshape((4,4,8));source=root/'cube.zgy'

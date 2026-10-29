@@ -4,6 +4,7 @@ import os
 import socket
 import sys
 import threading
+import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -24,15 +25,31 @@ path = f'stratax_projects/{uid}/records/{pid}'
 db, store = Db(), Store()
 db.records = {f'stratax_legal_acceptance/{uid}':dict(versions=POLICY_VERSIONS)}
 raw = segy_bytes(traces=32, samples=128)
+from ingestion_core import parse
+with tempfile.TemporaryDirectory(prefix='stratax-cloud-source-fixture-') as scratch:
+    source=Path(scratch)/'generated-section.segy';source.write_bytes(raw)
+    parsed=parse(source,Path(scratch)/'out','seismic',{})[0]
+    import_artifacts={p.name:p.read_bytes() for p in (Path(scratch)/'out').iterdir() if p.is_file()}
 original = dict(id='fixture-original', name='generated-section.segy', size=len(raw))
 ds = dict(id='survey', name='Generated analytic survey', family='seismic', active=True, sourceId=original['id'],
-          sourceSha256='fixture-source', parserVersion='fixture/v1', metadata=dict(traceCount=32, sampleCount=128),
-          manifest=f'owners/{uid}/projects/{pid}/imports/fixture/dataset.json', references={})
+          sourceSha256=parsed['metadata']['traceIndex']['sourceVersion'], parserVersion=parsed['parserVersion'], metadata=dict(traceCount=32, sampleCount=128),
+          manifest=f'owners/{uid}/projects/{pid}/imports/fixture/{parsed["id"]}.json', references={})
 db.records[path] = dict(project=dict(id=pid, name='Seismic acceptance', workflows=['petrophysics','seismic'], storage='cloud', status='Active'),
                         revision=1, workspace=dict(files=[original]))
 db.records[path+'/datasets/survey'] = ds
 store.files['fixture-raw', f'owners/{uid}/projects/{pid}/originals/{original["id"]}'] = raw
-store.files['fixture-derived', ds['manifest']] = b'{"metadata":{"endian":"big"}}'
+for name,payload in import_artifacts.items():store.files['fixture-derived',ds['manifest'].rsplit('/',1)[0]+'/'+name]=payload
+from test_seismic_brick import cube_source
+cube=cube_source(missing=True)
+with tempfile.TemporaryDirectory(prefix='stratax-cube-fixture-') as scratch:
+    source=Path(scratch)/'generated-cube.segy';source.write_bytes(cube)
+    parsed_cube=parse(source,Path(scratch)/'out','seismic',{})[0]
+    cube_artifacts={p.name:p.read_bytes() for p in (Path(scratch)/'out').iterdir() if p.is_file()}
+cube_original=dict(id='fixture-cube',name='generated-cube.segy',size=len(cube))
+cube_dataset=dict(id='cube',name='Generated 3D poststack fixture',family='seismic',active=True,sourceId=cube_original['id'],sourceSha256=parsed_cube['metadata']['traceIndex']['sourceVersion'],parserVersion=parsed_cube['parserVersion'],metadata=parsed_cube['metadata'],manifest=f'owners/{uid}/projects/{pid}/imports/cube/{parsed_cube["id"]}.json',references={})
+db.records[path]['workspace']['files'].append(cube_original);db.records[path+'/datasets/cube']=cube_dataset
+store.files['fixture-raw',f'owners/{uid}/projects/{pid}/originals/{cube_original["id"]}']=cube
+for name,payload in cube_artifacts.items():store.files['fixture-derived',cube_dataset['manifest'].rsplit('/',1)[0]+'/'+name]=payload
 os.environ.update(STRATAX_PROJECT_BUCKET='fixture-raw', STRATAX_DERIVED_BUCKET='fixture-derived',
                   STRATAX_SEISMIC_BATCH_ACCOUNT='fixture@project.iam.gserviceaccount.com',
                   STRATAX_SEISMIC_BATCH_PROFILE=json.dumps(profile()))

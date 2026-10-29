@@ -101,7 +101,7 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         ds = source(ref, graph['sourceId'])
         if fingerprint(ds) != graph['sourceVersion']:
             fail(409, 'stale_source', 'This graph uses an older input version. Your draft is retained.')
-        value = retained_section(user['uid'], pid, record, ds, first_trace=0, trace_count=1, first_sample=0, sample_count=1)
+        value = retained_section(user['uid'], pid, record, ds, first_trace=body.selection.firstTrace, trace_count=body.selection.traceCount, first_sample=0, sample_count=1)
         # Geometry-coupled previews need reviewed survey resources, not guessed gather identities.
         if any(n['operator'] in ('nmo', 'stack', 'fk-filter') for n in graph['nodes']):
             fail(400, 'geometry_review_required', 'Register reviewed gather/metric geometry before hosted NMO, stacking or FK execution. No geometry was inferred.')

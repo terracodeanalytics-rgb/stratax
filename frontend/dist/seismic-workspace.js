@@ -3,6 +3,8 @@ import * as repository from './project-repository.js';
 import {readLocalSection} from './seismic-reader.js';
 import {trackSection} from './seismic-tracking.js';
 import {openCloudCopy} from './workspace-cloud-copy.js';
+import {openGeometryReview} from './seismic-geometry-review.js';
+import {configureVolumes,volumeDefaults,volumeWindow,volumeProperties,bindVolumes} from './seismic-volume-view.js';
 import {seismicState,activeSeismicBook,freshSeismicBook,sectionPoint,addSeismicPick,removeSeismicPick,pickPolyline} from './seismic-model.js';
 
 let host,scope='',generation=0,selectedView=null,picking=false,query='',browser=true,properties=true,refreshing=0;
@@ -21,7 +23,7 @@ const storageKey=()=>`${scope}:${book().id}`;
 const scopeCurrent=g=>g===generation&&scope===`${session.user?.uid}:${host.getProject()?.id}`;
 const safe=fn=>async e=>{try{await fn(e);}catch(error){host.toast(error.message);}};
 
-export function configureSeismic(context){host=context;}
+export function configureSeismic(context){host=context;configureVolumes(context,()=>book().views,dataset,edit,id=>{selectedView=id;host.render();});}
 function normalize(){
  const next=`${session.user?.uid}:${host.getProject()?.id}`;
  if(next===scope)return;
@@ -61,7 +63,8 @@ async function refresh(){
 function addView(id){
  const ds=dataset(id);if(!ds)throw new Error('Choose an active seismic source.');
  if(book().views.length>=4)throw new Error('Use another workbook or close a section before opening more than four sections.');
- edit('Add seismic source',()=>{const v={id:crypto.randomUUID(),datasetId:id,firstTrace:0,traceCount:Math.min(128,ds.metadata?.traceCount||128),firstSample:0,sampleCount:Math.min(1000,ds.metadata?.sampleCount||1000),gain:1,clip:null,width:650,height:560};book().views.push(v);selectedView=v.id;});
+ const m=ds.metadata||{},variable=[m.sampleCountRange,m.sampleIntervalRange,m.sampleOriginRange].some(r=>Array.isArray(r)&&r[0]!==r[1]);
+ edit('Add seismic source',()=>{const v={id:crypto.randomUUID(),datasetId:id,firstTrace:0,traceCount:Math.min(variable?1:128,m.traceCount||128),firstSample:0,sampleCount:Math.min(1000,m.sampleCountRange?.[0]||m.sampleCount||1000),gain:1,clip:null,width:650,height:560};book().views.push(v);selectedView=v.id;});
 }
 async function load(v){
  const g=generation,key=viewKey(v);
@@ -107,11 +110,13 @@ export function seismicView(){
  <div class="sw-status" role="status" id="sw-cursor">${b.views.length} sections · ${b.interpretations.length} interpretation objects · ${selected?esc(selected.label)+' selected':'No active pick object'} · ${picking?'Picking enabled':'Navigate / inspect'}</div></section>`;
 }
 function windowView(v){
+ if(v.kind==='volume')return volumeWindow(v,dataset(v.datasetId));
  const data=sectionFor(v),failure=errors.get(v.id),d=dataset(v.datasetId),i=interpretation();
  const error=!d?'This retained source is no longer active. Restore it or choose another source.':failure?.key===viewKey(v)?failure.message:null;
  return `<article class="sw-window" data-sw-window="${v.id}" style="width:${Math.max(260,Math.min(v.width||650,1600))}px;height:${Math.max(250,Math.min(v.height||560,1200))}px" aria-label="${esc(d?.name||'Unavailable source')} section"><header><strong>${esc(d?.name||'Source no longer active')}</strong><button data-sw-close="${v.id}" aria-label="Close seismic section">×</button></header>${error?`<div class="sw-error" role="alert">${esc(error)}<button data-sw-retry="${v.id}">Retry section</button></div>`:!data?'<div class="sw-message" role="status">Loading retained full-resolution samples…</div>':`<div class="sw-axis"><span>Trace ${data.firstTrace}</span><span>Trace ${data.firstTrace+data.samples.length-1}</span></div><div class="sw-section"><canvas data-sw-canvas="${v.id}" role="img" aria-label="${esc(d?.name)} full-resolution seismic amplitudes"></canvas><svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">${i?.datasetId===v.datasetId?`<polyline points="${pickPolyline(i,v,data)}" fill="none" stroke="${i.kind==='fault'?'#efaa43':'#00be9d'}" stroke-width="4"/>`:''}<line data-sw-crosshair="${v.id}" x1="0" x2="1000" stroke="#d2a454" stroke-width="2" visibility="hidden"/></svg></div><div class="sw-axis"><span>${data.sampleStarts[0].toFixed(4)} s</span><span>${(data.sampleStarts[0]+(data.samples[0].length-1)*data.sampleInterval).toFixed(4)} s · time convention unconfirmed</span></div>`}<footer>${data?`${data.samples.length} × ${data.samples[0].length} retained samples · full resolution · ${esc(data.adapter)}`:'No importer preview substituted'}</footer></article>`;
 }
 function sectionProperties(v){
+ if(v.kind==='volume')return volumeProperties(v,dataset(v.datasetId));
  return `<form id="sw-section-form"><p>${esc(dataset(v.datasetId)?.name)}</p>${[['firstTrace','First source trace',v.firstTrace],['traceCount','Trace count',v.traceCount],['firstSample','First source sample',v.firstSample],['sampleCount','Samples per trace',v.sampleCount],['gain','Display gain',v.gain]].map(([key,name,value])=>`<label>${name}<input name="${key}" type="number" ${key==='gain'?'step="0.1" min="0.1" max="100"':'step="1" min="'+(key.endsWith('Count')?'1':'0')+'"'} value="${value}" required></label>`).join('')}<button class="primary">Apply section</button></form>`;
 }
 function interpretationProperties(i){
@@ -167,6 +172,12 @@ function action(name){
  if(name==='properties'){properties=!properties;host.render();return;}
  if(name==='picking'){if(!interpretation())throw new Error('Create or select a horizon/fault first.');picking=!picking;host.render();return;}
  if(name==='new-view'){if(!sources().length)return host.openImporter({family:'seismic'});return addView(view()?.datasetId||sources()[0].id);}
+ if(name==='geometry'){const id=view()?.datasetId||sources()[0]?.id;if(!id)throw new Error('Choose a retained source first.');return openGeometryReview(host,book(),id);}
+ if(name==='new-volume'){
+  const ds=dataset(view()?.datasetId)||sources()[0];if(!ds)throw new Error('Choose a retained poststack source first.');
+  if(book().views.length>=4)throw new Error('Close a view or create another workbook before opening more than four views.');
+  edit('Add 3D seismic view',()=>{const v={id:crypto.randomUUID(),kind:'volume',datasetId:ds.id,brick:volumeDefaults(ds),verticalScale:1,width:700,height:600};book().views.push(v);selectedView=v.id;});return;
+ }
  if(name==='new-book')return namedDialog('New seismic workbook','Seismic sections',name=>{const next=freshSeismicBook(name);board().books.push(next);board().activeBook=next.id;selectedView=null;});
  if(name==='rename-book')return namedDialog('Rename seismic workbook',book().name,name=>{book().name=name;});
  if(name==='new-interpretation'){
@@ -208,10 +219,11 @@ export function bindSeismic(){
   }
  };
  for(const v of book().views){
-  if(errors.get(v.id)?.key!==viewKey(v))queueMicrotask(()=>load(v));
-  draw(v);
+  if(v.kind!=='volume'){if(errors.get(v.id)?.key!==viewKey(v))queueMicrotask(()=>load(v));draw(v);}
   const panel=$(`[data-sw-window="${v.id}"]`);if(panel)panel.onpointerup=()=>{if(panel.offsetWidth>0&&panel.offsetHeight>0){v.width=panel.offsetWidth;v.height=panel.offsetHeight;host.save();}};
  }
+ bindVolumes();
+ for(const [name,label] of [['geometry','Review geometry'],['new-volume','Add 3D view']])if(!$(`[data-sw-action="${name}"]`)){const button=document.createElement('button');button.dataset.swAction=name;button.innerHTML=host.icon('layers')+`<span>${label}</span>`;$('.sw-ribbon').append(button);}
  document.querySelectorAll('[data-sw-action]').forEach(b=>b.onclick=safe(()=>action(b.dataset.swAction)));
  document.querySelectorAll('[data-sw-source]').forEach(b=>{b.onclick=safe(()=>addView(b.dataset.swSource));b.ondragstart=e=>e.dataTransfer.setData('application/x-stratax-seismic',b.dataset.swSource);});
  const drop=$('#sw-dropzone');drop.ondragover=e=>e.preventDefault();drop.ondrop=safe(e=>{e.preventDefault();const id=e.dataTransfer.getData('application/x-stratax-seismic');if(!id)throw new Error('Drop a retained seismic source from this browser.');addView(id);});

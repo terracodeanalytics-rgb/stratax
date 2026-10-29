@@ -101,6 +101,7 @@ def run():
                 try:
                     options = dict(data.get("options", {}))
                     options.update(options.get("perFile", {}).get(asset["name"], {}))
+                    options['_sourceSha256']=checksum
                     datasets = parse(path, output, data["family"], options, paths)
                     for original in datasets:
                         original.update(sourceId=asset["id"], sourceSha256=checksum, importId=iid)
@@ -112,6 +113,9 @@ def run():
                         if len(summaries) >= 100:
                             raise ImportProblem('dataset_limit', 'Select fewer logical files or frames per import; this import supports up to 100 datasets.')
                         summaries.append({"id": did, "name": original["name"], "family": data["family"], "sourceId": asset["id"], "sourceSha256": checksum, "manifest": manifest, "rowCount": original["rowCount"], "columns": original["columns"][:200], "columnCount": len(original['columns']), "status": original["status"], "issues": original["issues"][:40], "well": original["well"], "references": original["references"], "mapping": original["mapping"], "parserVersion": original["parserVersion"], "schemaVersion": 1})
+                        if data['family']=='seismic':
+                            summaries[-1]['metadata']={k:v for k,v in original.get('metadata',{}).items() if k in ('format','traceCount','sampleCount','sampleCountRange','sampleInterval','sampleIntervalRange','sampleOriginRange','endian','headerBytes','inlineRange','crosslineRange')}
+                            summaries[-1]['metadata']['traceIndexAvailable']=bool(original.get('metadata',{}).get('traceIndex'))
                         issues.extend({**note, "source": asset["name"], 'sourceId':asset['id']} for note in original["issues"])
                     derived_bytes += sum(p.stat().st_size for p in output.glob("*") if p.is_file())
                 except ImportProblem as error:

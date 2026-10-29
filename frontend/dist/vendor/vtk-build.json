@@ -1,0 +1,35 @@
+{
+  "vtkVersion": "38.0.4",
+  "esbuildVersion": "0.25.11",
+  "bytes": 940269,
+  "sha256": "e706cf1052ded5fb8f59b53ec0fc65f26cf13055c155d24ad7bab8a2b8fdcc11",
+  "entry": "scripts/seismic-vtk-entry.mjs",
+  "runtimeCDN": false,
+  "runtimePackages": [
+    {
+      "name": "@kitware/vtk.js",
+      "version": "38.0.4",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "license": "MIT"
+    },
+    {
+      "name": "gl-matrix",
+      "version": "3.4.3",
+      "license": "MIT"
+    },
+    {
+      "name": "seedrandom",
+      "version": "3.0.5",
+      "license": "MIT"
+    },
+    {
+      "name": "spark-md5",
+      "version": "3.0.2",
+      "license": "(WTFPL OR MIT)"
+    }
+  ]
+}

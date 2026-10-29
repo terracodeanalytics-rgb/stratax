@@ -78,29 +78,14 @@ def read_binary_logs(kind, path, output, options):
 
 def read_seismic(kind, path, output, options):
     import numpy as np
-    if kind in ("segy", "su"):
-        import segyio
-        opener = segyio.su.open if kind == "su" else segyio.open
-        keys = {"inline": 189, "crossline": 193, "x": 181, "y": 185, "scalar": 71, "cdp": 21}
-        keys.update({k: int(v) for k, v in options.get("headerBytes", {}).items() if v is not None and str(v) != ""})
-        if any(v < 1 or v > 237 for v in keys.values()):
-            raise ImportProblem("header_bytes", "Trace header byte positions must lie within the trace header.")
-        with opener(str(path), "r", strict=False, ignore_geometry=True, endian=options.get("endian", "big")) as source:
-            sample_count, trace_count = len(source.samples), source.tracecount
-            metadata = {"format": kind.upper(), "traceCount": trace_count, "sampleCount": sample_count, "sampleAxis": list(map(float, source.samples[:100])), "headerBytes": keys, "endian": options.get("endian", "big"), "geometry": options.get("geometry", "unclassified"), "domain": options.get("references", {}).get("domain", ""), "originalGeometryPreserved": True}
-            if kind == "segy":
-                metadata.update(sampleFormat=int(source.bin[segyio.BinField.Format]), sampleInterval=int(source.bin[segyio.BinField.Interval]), textHeader=source.text[0].decode("ascii", errors="replace")[:3200])
-            stride = max(1, trace_count // 100)
-            def rows():
-                for i in range(trace_count):
-                    h = source.header[i]
-                    scale = h[keys["scalar"]]
-                    factor = scale if scale > 0 else 1 / abs(scale) if scale < 0 else 1
-                    # Full trace samples remain accessible in the immutable original; previews are bounded.
-                    samples = source.trace[i][::max(1, sample_count // 256)] if i % stride == 0 else []
-                    yield [i, int(h[keys["inline"]]), int(h[keys["crossline"]]), int(h[keys["cdp"]]), float(h[keys["x"]]) * factor, float(h[keys["y"]]) * factor, int(scale), scalar(samples)]
-            columns = [column(n, "", i) for i, n in enumerate(["Trace", "Inline", "Crossline", "CDP", "X", "Y", "Coordinate scalar", "Sample preview"])]
-            return [output_dataset(output, Path(path).name, columns, rows(), metadata, [issue("seismic_preview", "Samples are previewed at bounded resolution. The complete immutable original is retained; no regular-cube assumption or resampling is applied.")])]
+    if kind in ('segy','su'):
+        if kind=='segy':
+            with open(path,'rb') as retained:retained.seek(3200);binary=retained.read(400)
+            order=options.get('endian','big')
+            if len(binary)==400 and (int.from_bytes(binary[300:302],order)>256 or int.from_bytes(binary[24:26],order) not in (1,2,3,5,6,8) or int.from_bytes(binary[304:306],order,signed=True)<0):
+                return read_native_segy(path,output,options)
+        from seismic_import_index import import_indexed_traces
+        return import_indexed_traces(kind,path,output,options)
     if kind == "vds":
         raise ImportProblem("licensed_reader", "This VDS variant requires a licensed compatible reader. Export SEG-Y or ZGY; the original may be retained.")
     if kind == "zgy":
@@ -118,6 +103,26 @@ def read_seismic(kind, path, output, options):
                 section = source.read_inline(i)
                 yield [ilines[i], scalar(section[::max(1, section.shape[0]//64), ::max(1, section.shape[1]//128)])]
         return [output_dataset(output, Path(path).name, [column("Inline", index=0), column("Sample preview", index=1)], rows(), metadata, [issue("bounded_preview", "Only bounded section previews are materialized. Full samples remain in the original.")])]
+
+
+def read_native_segy(path,output,options):
+    """Retain existing segyio import for dialects not certified by the indexed decoder."""
+    import segyio
+    keys={'inline':189,'crossline':193,'x':181,'y':185,'scalar':71,'cdp':21}
+    keys.update({k:int(v) for k,v in options.get('headerBytes',{}).items() if v is not None and str(v)!=''})
+    if any(v<1 or v>237 for v in keys.values()):raise ImportProblem('header_bytes','Trace header byte positions must lie within the trace header.')
+    with segyio.open(str(path),'r',strict=False,ignore_geometry=True,endian=options.get('endian','big')) as source:
+        ns,nt=len(source.samples),source.tracecount
+        metadata=dict(format='SEGY',traceCount=nt,sampleCount=ns,sampleAxis=list(map(float,source.samples[:100])),headerBytes=keys,
+                      endian=options.get('endian','big'),geometry=options.get('geometry','unclassified'),domain=options.get('references',{}).get('domain',''),
+                      originalGeometryPreserved=True,sampleFormat=int(source.bin[segyio.BinField.Format]),sampleInterval=int(source.bin[segyio.BinField.Interval]),textHeader=source.text[0].decode('ascii',errors='replace')[:3200])
+        def rows():
+            for i in range(nt):
+                h=source.header[i];scale=h[keys['scalar']];factor=scale if scale>0 else 1/abs(scale) if scale<0 else 1
+                samples=source.trace[i][::max(1,ns//256)] if i%max(1,nt//100)==0 else []
+                yield [i,int(h[keys['inline']]),int(h[keys['crossline']]),int(h[keys['cdp']]),float(h[keys['x']])*factor,float(h[keys['y']])*factor,int(scale),scalar(samples)]
+        columns=[column(n,'',i) for i,n in enumerate(['Trace','Inline','Crossline','CDP','X','Y','Coordinate scalar','Sample preview'])]
+        return [output_dataset(output,Path(path).name,columns,rows(),metadata,[issue('native_trace_index_pending','Native SEG-Y import retained. This dialect needs a qualified trace-offset adapter before exact indexed section access; display samples are previews.')])]
 
 
 def read_spatial(kind, path, output, options, companions):

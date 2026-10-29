@@ -17,6 +17,8 @@ from seismic_graph import Graph, OPERATORS, VERSION, validate_graph
 from seismic_reader import SectionError, read_section, read_preview
 from seismic_execution import execution_capabilities
 from seismic_geometry import GeometryReview,header_preview
+from seismic_indexed_reader import read_traces,aligned_section
+from seismic_brick import BrickRequest,read_brick
 
 
 class TrackingSettings(BaseModel):
@@ -94,6 +96,7 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         return dict(version=VERSION, sectionAdapters=["fixed-length-segy-rev0-1", "su-ieee", "processed-analytical-traces/v1"],
                     sectionLimits=dict(traces=512, samples=4096, cells=2_000_000),
                     geometryReview=dict(available=True,maximumPreviewHeaders=64,coordinateConversion=False,processingQualified=False),
+                    brickLimits=dict(bins=512,samples=500000,coordinateSystem='reviewed native inline/crossline bins',fieldScaleQualified=False),
                     processingOperators=OPERATORS, hostedGraphExecution=execution['available'], executionProfiles=[execution],
                     capacityQualification="Not yet field-scale qualified",
                     restrictions=["ZGY/SGZ and variable-layout sections require the indexed worker adapter.",
@@ -112,8 +115,9 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
             item["stale"] = versions.get(item["datasetId"]) != item["sourceVersion"]
         return dict(sources=sources, interpretations=interpretations)
 
-    def fetch_section(uid, pid, record, ds, **bounds):
+    def fetch_section(uid, pid, record, ds, ragged=False, **bounds):
         if ds.get('seismicRunId'):
+            if ragged:fail(400,'trace_adapter_required','This derived result has an analytical section adapter. Open a section; it is not a native trace collection.')
             prefix = f'owners/{uid}/projects/{pid}/seismic/runs/{valid(ds["seismicRunId"])}/'
             if ds.get('manifest') != prefix+'manifest.json':
                 fail(400, 'invalid_artifact', 'The calculated seismic reference is invalid.')
@@ -155,19 +159,33 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         blob.reload()
         if blob.size > 2*1024**2:
             fail(413, "manifest_budget", "The seismic manifest exceeds its metadata budget.")
-        metadata = json.loads(blob.download_as_bytes()).get("metadata", {})
+        encoded=blob.download_as_bytes();manifest=json.loads(encoded);metadata=manifest.get('metadata',{})
         allowed = {k: v for k, v in metadata.get("headerBytes", {}).items() if k in ("inline", "crossline", "cdp", "shot", "offset", "x", "y", "scalar")}
         raw = client.bucket(os.environ["STRATAX_PROJECT_BUCKET"]).blob(prefix+"originals/"+valid(original["id"]))
         raw.reload()
+        index_manifest=None
         try:
             with raw.open("rb", chunk_size=256*1024) as stream:
-                result = read_section(stream, raw.size, kind="su" if extension == "su" else "segy", endian=metadata.get("endian", "big"),
-                                      header_bytes=allowed, **bounds)
+                if metadata.get('traceIndex'):
+                    from seismic_reader import need
+                    first,count=bounds['first_trace'],bounds['trace_count']
+                    need(type(first) is int and first>=0 and type(count) is int and 1<=count<=512,'Choose a bounded trace selection.')
+                    def load(name):
+                        chunk=client.bucket(os.environ['STRATAX_DERIVED_BUCKET']).blob(path.rsplit('/',1)[0]+'/'+name)
+                        chunk.reload()
+                        need(chunk.size<=5*1024**2,'The retained trace chunk exceeds its read budget.')
+                        return chunk.download_as_bytes()
+                    result=read_traces(stream,raw.size,manifest,load,ds['sourceSha256'],range(first,first+count),first_sample=bounds['first_sample'],sample_count=bounds['sample_count'],endian=metadata.get('endian','big'))
+                    if not ragged:result=aligned_section(result,**bounds)
+                    index_manifest=dict(bucket=os.environ['STRATAX_DERIVED_BUCKET'],object=path,generation=getattr(blob,'generation',None),sha256=hashlib.sha256(encoded).hexdigest(),sourceVersion=ds['sourceSha256'])
+                else:
+                    if ragged:fail(400,'trace_index_required','Reinspect this retained source to build its exact trace-offset index.')
+                    result = read_section(stream, raw.size, kind="su" if extension == "su" else "segy", endian=metadata.get("endian", "big"),header_bytes=allowed, **bounds)
         except SectionError as error:
             fail(400, "section_input", str(error))
         return result | dict(_identity=dict(bucket=os.environ["STRATAX_PROJECT_BUCKET"], object=prefix+"originals/"+valid(original["id"]),
                                             generation=getattr(raw, "generation", None), size=raw.size, kind="su" if extension == "su" else "segy",
-                                            endian=metadata.get("endian", "big"), headerBytes=allowed))
+                                            endian=metadata.get("endian", "big"), headerBytes=allowed,indexManifest=index_manifest))
 
     def retained_section(uid, pid, record, ds, **bounds):
         try:
@@ -186,17 +204,60 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         result.pop('_identity', None)
         return result | dict(datasetId=did, sourceVersion=fingerprint(ds), references=ds.get("references", {}))
 
+    @app.get('/api/projects/{pid}/seismic/sources/{did}/traces')
+    def indexed_trace_read(pid:str,did:str,first_trace:int=0,trace_count:int=8,first_sample:int=0,sample_count:int=1000,user=Depends(owner)):
+        ref,record=project(user['uid'],pid);ds=source(ref,did)
+        result=retained_section(user['uid'],pid,record,ds,ragged=True,first_trace=first_trace,trace_count=trace_count,first_sample=first_sample,sample_count=sample_count)
+        result.pop('_identity',None);result.pop('_locators',None)
+        return result|dict(datasetId=did,sourceVersion=fingerprint(ds),references=ds.get('references',{}))
+
+    @app.post('/api/projects/{pid}/seismic/sources/{did}/brick')
+    def brick_read(pid:str,did:str,body:BrickRequest,user=Depends(owner)):
+        ref,record=project(user['uid'],pid);ds=source(ref,did)
+        review=restore_value(ref.collection('seismicGeometry').document(did).collection('revisions').document(str(body.geometryRevision)).get().to_dict())
+        if not review or review['sourceVersion']!=fingerprint(ds):
+            fail(409,'geometry_source','Review this source version and select its retained geometry revision before opening a 3D brick.')
+        identity=retained_section(user['uid'],pid,record,ds,first_trace=0,trace_count=1,first_sample=0,sample_count=1)['_identity']
+        indexed=identity.get('indexManifest')
+        if not indexed:fail(400,'trace_index_required','Reinspect a supported native poststack source before opening indexed 3D samples.')
+        try:
+            client=storage.Client();bucket=client.bucket(indexed['bucket'])
+            version={'generation':indexed['generation']} if indexed.get('generation') is not None else {}
+            encoded=bucket.blob(indexed['object'],**version).download_as_bytes()
+            if len(encoded)>2*1024**2 or hashlib.sha256(encoded).hexdigest()!=indexed['sha256']:
+                fail(409,'trace_index_changed','The retained bin-index manifest changed checksum.')
+            manifest=json.loads(encoded)
+            def load(name):
+                blob=bucket.blob(indexed['object'].rsplit('/',1)[0]+'/'+name);blob.reload()
+                if blob.size>5*1024**2:fail(413,'trace_chunk_budget','The indexed bin chunk exceeds its read budget.')
+                return blob.download_as_bytes()
+            raw_version={'generation':identity['generation']} if identity.get('generation') is not None else {}
+            raw=client.bucket(identity['bucket']).blob(identity['object'],**raw_version)
+            with raw.open('rb',chunk_size=256*1024) as stream:
+                value=read_brick(stream,identity['size'],manifest,load,ds['sourceSha256'],review,body)
+        except SectionError as error:fail(400,'brick_input',str(error))
+        except (GoogleAPICallError,OSError,json.JSONDecodeError):
+            logging.getLogger('stratax').exception('Bounded brick unavailable for project %s source %s',pid,did)
+            fail(503,'brick_unavailable','The retained 3D samples are temporarily unavailable. Keep the workbook and retry.')
+        return value|dict(datasetId=did,sourceVersion=fingerprint(ds))
+
     def preview_geometry(uid,pid,record,ds,body,first_trace=0,trace_count=8):
         if body.sourceVersion!=fingerprint(ds):
             fail(409,'stale_source','Reload the retained source before reviewing its geometry; your draft is retained.')
-        identity=retained_section(uid,pid,record,ds,first_trace=0,trace_count=1,first_sample=0,sample_count=1)['_identity']
+        initial=retained_section(uid,pid,record,ds,first_trace=0,trace_count=1,first_sample=0,sample_count=1)
+        identity=initial['_identity'];locators=None;total=None
+        if identity.get('indexManifest'):
+            if first_trace<0 or first_trace>=initial['traceCount'] or not 1<=trace_count<=64:
+                fail(400,'geometry_headers','Choose 1–64 retained headers within this source.')
+            indexed=retained_section(uid,pid,record,ds,ragged=True,first_trace=first_trace,trace_count=min(trace_count,initial['traceCount']-first_trace),first_sample=0,sample_count=1)
+            locators=indexed['_locators'];total=indexed['traceCount']
         if identity['kind'] not in ('segy','su'):
             fail(400,'geometry_native_source','Review native survey geometry before derived processing; derived previews retain their source lineage.')
         try:
             version={'generation':identity['generation']} if identity.get('generation') is not None else {}
             raw=storage.Client().bucket(identity['bucket']).blob(identity['object'],**version)
             with raw.open('rb',chunk_size=256*1024) as stream:
-                return header_preview(stream,identity['size'],body,kind=identity['kind'],endian=identity['endian'],first_trace=first_trace,trace_count=trace_count)
+                return header_preview(stream,identity['size'],body,kind=identity['kind'],endian=identity['endian'],first_trace=first_trace,trace_count=trace_count,locators=locators,total_traces=total)
         except SectionError as error:
             fail(400,'geometry_headers',str(error))
         except (GoogleAPICallError,OSError):

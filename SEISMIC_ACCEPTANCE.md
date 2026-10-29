@@ -17,7 +17,7 @@ Evidence status vocabulary: **foundation** means some code or small-fixture evid
 | M0.05 | Frozen independent scientific fixtures and tolerances | Existing operator/inversion fixtures; complete imaging/model/4D manifests pending |
 | M0.06 | Legally usable raw land 2D and 3D field references | Candidate sources below; actual files, checksums and complete geometry not yet qualified |
 | M0.07 | Legally usable raw streamer 2D and 3D references | Candidate sources below; migrated gathers cannot qualify raw marine conditioning |
-| M0.08 | Dependency/compiler/container locks and notices | Linux preview image built; current aligned rebuild, acoustic/MPI/OpenACC and model/rendering profiles pending |
+| M0.08 | Dependency/compiler/container locks and notices | Aligned import/seismic builds pass 27/39 Linux checks; vtk.js/renderer locks and notices retained; MPI/OpenACC and model profiles/distribution qualification pending |
 | M0.09 | Per-method resource/storage/pricing profiles | Bounded preview estimate contract tested; live pricing and commissioned infrastructure pending |
 
 ## M1 — survey foundation and workspaces
@@ -28,15 +28,15 @@ Evidence status vocabulary: **foundation** means some code or small-fixture evid
 | M1.02 | Mixed-project Petrophysics/Seismic modes and independent workbooks/ribbons/layouts | Local persistence tests; comprehensive account/project/revision integration pending |
 | M1.03 | Legacy configurations/deep links and explicit Local-to-Cloud copies | Source-ID/SHA rebinding and account guards; full copy/recovery integration pending |
 | M1.04 | Resumable large import, unchanged originals and source lineage | Existing resumable import foundation; target-scale indexing/restart pending |
-| M1.05 | Full header/trace indexing, irregular geometry, missing bins and duplicates | New resumable SQLite trace index; Cloud indexing/geometry query path pending |
-| M1.06 | Variable trace lengths, intervals, origins and masks | Lossless ragged sharded Zarr round-trip/restart fixtures and populated Stratton swath storage; hosted collection access pending |
-| M1.07 | Reviewed source/receiver geometry, binning, CRS and datum revisions | Owner-scoped header-role/native-unit/axis/CRS/datum declarations, bounded QC preview and immutable revisions; full survey geometry validation/binning/CRS transformation pending |
+| M1.05 | Full header/trace indexing, irregular geometry, missing bins and duplicates | SQLite/import-chunk exact locators, SHA checks and bounded bin lookup; distributed/full-survey field qualification pending |
+| M1.06 | Variable trace lengths, intervals, origins and masks | Ragged Zarr/local field storage and owner-scoped Cloud trace API foundations; variable-index geometry preview passes; actual hosted/scale acceptance pending |
+| M1.07 | Reviewed source/receiver geometry, binning, CRS and datum revisions | Explicit source-bound declarations/immutable revisions and variable-layout native-header preview; full survey validation/binning/CRS transformation pending |
 | M1.08 | Incremental sharded Zarr analytical storage and separate labelled pyramids | Local fixed/ragged stores and fixed-trace display levels; Cloud multi-partition qualification pending |
-| M1.09 | Bounded trace sections and gathers | Retained Local/Cloud fixed-layout sections and preview outputs; indexed gather path pending |
+| M1.09 | Bounded trace sections and gathers | Native indexed ragged traces, compatible sections and preview outputs; semantic shot/CDP/angle gather selection pending |
 | M1.10 | Inlines, crosslines and time/depth slices | Pending indexed multidimensional view path |
 | M1.11 | Arbitrary sections and linked map/cursor coordinates | Pending reviewed coordinate sampling and maps |
-| M1.12 | Genuine GPU-backed 3D scenes with locally bundled vtk.js | Pending |
-| M1.13 | Source browser, context properties, status, loading/error/WebGL recovery | 2D/processing foundation; complete 3D/loading/failure acceptance pending |
+| M1.12 | Genuine GPU-backed 3D scenes with locally bundled vtk.js | Bounded native poststack 3D amplitude workbooks/rendering/camera/export pass loopback browser fixture; physical coordinates/complete hosted field acceptance pending |
+| M1.13 | Source browser, context properties, status, loading/error/WebGL recovery | 2D/processing/3D foundations; forced WebGL loss/reload passes; complete programme acceptance pending |
 | M1.14 | Graph data-type/domain/geometry validation and immutable versions | Seven-operator graph foundation; complete programme operator contracts pending |
 | M1.15 | Version-bound estimates and explicit approval before Batch creation | Preview API/worker loopback acceptance; actual provider/IAM/pricing qualification pending |
 | M1.16 | Deterministic distributed partitions, filter halos and deterministic reductions | Pending actual distributed engine |
@@ -172,7 +172,7 @@ Evidence status vocabulary: **foundation** means some code or small-fixture evid
 | M9.05 | Cross-workspace accepted-source handoff and stale-result handling | Preview Processing → Seismic loopback foundation; all resource types pending |
 | M9.06 | Supported SEG-Y seismic products and independent export round trips | Pending processed-product export workflow |
 | M9.07 | Complete review, export, reload and conflict recovery | Existing small-object foundations; all workflows pending |
-| M9.08 | Keyboard/table editing, labels/focus, responsive/WebGL recovery | Existing 2D UI foundations; full programme acceptance pending |
+| M9.08 | Keyboard/table editing, labels/focus, responsive/WebGL recovery | 2D UI foundations and 3D graphics recovery fixture; full keyboard/accessibility/programme acceptance pending |
 | M9.09 | Six-LAS petrophysics regressions after shared changes | Previous checkpoint passed; rerun required for current shared changes |
 | M9.10 | Populated 1 TiB volume indexing/viewing | Pending concrete estimate/approval and actual populated data |
 | M9.11 | Populated 10 TiB aggregate prestack indexing/viewing | Pending concrete estimate/approval and actual populated data |

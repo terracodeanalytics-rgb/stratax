@@ -6,7 +6,8 @@ COPY SEISMIC_NOTICES.md /usr/share/stratax/notices/SEISMIC_NOTICES.md
 COPY licenses/ /usr/share/stratax/notices/
 RUN pip download --no-deps --no-binary=pylops --dest /usr/share/stratax/sources pylops==2.8.0
 COPY scientific_api.py scientific_catalog.py seismic_*.py ./
-COPY tests/test_seismic_processing.py tests/test_seismic_store.py tests/test_seismic_inversion.py tests/test_seismic_execution.py tests/test_seismic_trace_index.py ./tests/
+COPY ingestion_core.py ingestion_native.py ./
+COPY tests/test_seismic_processing.py tests/test_seismic_store.py tests/test_seismic_inversion.py tests/test_seismic_execution.py tests/test_seismic_trace_index.py tests/test_seismic_brick.py ./tests/
 RUN pip install --no-cache-dir pytest==9.0.2 && python -m pytest tests -q --disable-warnings
 ENV PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
 CMD ["python", "seismic_batch_worker.py"]

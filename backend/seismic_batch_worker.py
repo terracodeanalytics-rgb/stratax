@@ -19,6 +19,7 @@ from scientific_api import firestore_value, restore_value, now
 from seismic_graph import execute_graph
 from seismic_processing import TraceBlock, require, SeismicError
 from seismic_reader import read_section, read_preview, SectionError
+from seismic_indexed_reader import read_traces,aligned_section
 from seismic_runs_api import settle
 from seismic_store import create_store, write_block, build_display_levels
 
@@ -126,7 +127,23 @@ def main():
         else:
             require(raw_source, 'Invalid original source identity.')
             with blob.open('rb', chunk_size=256*1024) as stream:
-                data = read_section(stream, original['size'], kind=original['kind'], endian=original['endian'], header_bytes=original['headerBytes'], **bounds)
+                indexed=original.get('indexManifest')
+                if indexed:
+                    require(indexed['bucket']==run['input']['outputBucket'] and indexed.get('generation') is not None and re.fullmatch(re.escape(f'owners/{uid}/projects/{pid}/imports/')+r'[A-Za-z0-9_/-]+/dataset-[a-f0-9]{20}\.json',indexed['object']), 'Invalid retained trace-index scope or generation.')
+                    source_bucket=cloud.bucket(indexed['bucket'])
+                    metadata=source_bucket.blob(indexed['object'],generation=indexed['generation']);metadata.reload()
+                    require(metadata.size<=2*1024**2,'The retained trace-index manifest exceeds its read budget.')
+                    encoded=metadata.download_as_bytes()
+                    require(hashlib.sha256(encoded).hexdigest()==indexed['sha256'],'The retained trace index changed checksum.')
+                    manifest=json.loads(encoded)
+                    def load_index(name):
+                        chunk=source_bucket.blob(indexed['object'].rsplit('/',1)[0]+'/'+name);chunk.reload()
+                        require(chunk.size<=5*1024**2,'The retained trace chunk exceeds its read budget.')
+                        return chunk.download_as_bytes()
+                    rows=read_traces(stream,original['size'],manifest,load_index,indexed['sourceVersion'],range(s['firstTrace'],s['firstTrace']+s['traceCount']),first_sample=s['firstSample'],sample_count=s['sampleCount'],endian=original['endian'])
+                    data=aligned_section(rows,**bounds)
+                else:
+                    data = read_section(stream, original['size'], kind=original['kind'], endian=original['endian'], header_bytes=original['headerBytes'], **bounds)
         require(all(abs(t-data['sampleStart']) < data['sampleInterval']*1e-9 for t in data['sampleStarts']), 'Explicitly align differing trace time origins before this preview.')
         block = TraceBlock(data['samples'], data['sampleInterval'], data['sampleStart'], run['input']['graph']['domain'], history=data.get('history', []))
         resumed = None
