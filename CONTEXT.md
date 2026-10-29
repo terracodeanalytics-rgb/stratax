@@ -1,8 +1,18 @@
 # StrataX context
 
+## Current frontend — 2026-10-29 UI-only redesign
+
+Private Site https://stratax-seismic-workbench.neonwhale8.chatgpt.site now serves source b2902f2f2113fc8a398dd2a27234e5e926674c20, successful deployment appgdep_6ae397e67ae88191bc8838c1dcdd3f8f. Keep Site project appgprj_6ae37700e488819196b149dee2c6053f and its audience; source checkout .release/sites-seismic-v2 remains separate from root GitHub origin. Root frontend/dist is the maintained source.
+
+Seismic engines is a Processing tab, not a sidebar page. #processing / #seismic-qi both highlight Processing; #interpretation / #seismic retain the single Interpretation entry and independent log/seismic state. Shared new UI modules are seismic-ui.js, seismic-ui-availability.js, seismic-engine-controls.js and seismic-studio.css. Processing and seismic interpretation retain separate workbook/layout/source state.
+
+seismic-ui-availability.js deliberately follows SEISMIC_BACKEND_CHECKLIST.md: incomplete tools are visible but disabled with explanation; saved configurations/results remain inspectable. Computational handlers also reject unfinished tools/graphs. Only Slices is enabled in Seismic engines. Its volume binding requires an existing reviewed geometry revision and explicit inline/crossline indices; no geometry or sample data is fabricated. Primitive controls supplement advanced JSON; they do not complete the remaining scientific/model workbooks.
+
+The user still excludes testing. Only source parsing/diff checks and packaging/publication were performed; no browser/data test, worker execution or new acceptance claim. Backend API/worker images, quotas and auth remain unchanged.
+
 ## Current backend — 2026-10-29 source-bound engine additions
 
-API production is **`stratax-api-00028-wew` at100%**, image `sha256:dbff3328d9d1f7580fdf16667f34fcaf54a9192580571875939d96b5c33089ce`; revision24 remains tagged `seismic-backend-previous`. The existing private Site and frontend source version are unchanged. Final job images and receipts are in SEISMIC_BACKEND_IMPLEMENTATION_2026-10-29.md. All older deployment sections below are historical.
+API production is **`stratax-api-00028-wew` at100%**, image `sha256:dbff3328d9d1f7580fdf16667f34fcaf54a9192580571875939d96b5c33089ce`; revision24 remains tagged `seismic-backend-previous`. The API deployment below is unchanged by the subsequent UI-only Site publication described above. Final job images and receipts are in SEISMIC_BACKEND_IMPLEMENTATION_2026-10-29.md. All older deployment sections below are historical.
 
 Tool jobs identify `stratax-seismic/2.1` while graph contracts remain v2.0. Estimates accept source bindings through `inputs` or existing advanced JSON `$inputs`: retained section, reviewed brick, accepted result field, accepted analytical indexed section, native index source. Workers resolve only admitted scoped/generation-pinned references. Actual Cloud analytical indexing now builds private sharded ragged Zarr partitions/pyramids, checkpoints between partitions, and provides bounded reads. This is sequential partition execution, not a distributed field scheduler. Full programme implementation remains false in capabilities.
 

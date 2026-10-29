@@ -1,5 +1,14 @@
 # StrataX status
 
+## 2026-10-29 — Processing / Interpretation UI redesigned and published
+
+- UI-only request: Seismic engines now lives inside Processing as a second tab beside Processing graphs. Sidebar order is Overview → Data → Map → Processing → Interpretation → Reports for seismic projects. Existing #seismic-qi bookmarks resolve inside Processing; petrophysics modes and state remain independent.
+- Reworked compact SVG command groups, searchable source browsers, workbook tabs, processing-step canvas, contextual parameter/properties panels, genuine empty states and responsive layouts. Engine inputs now expose operation/parameter controls plus retained advanced JSON; Slices can bind an existing reviewed 3D source using explicit bounded geometry coordinates. No example data is generated automatically.
+- Unfinished items are grey/disabled according to SEISMIC_BACKEND_CHECKLIST.md, with explanatory tooltips and execution guards. Existing drafts, legacy operations, sources and results are preserved for inspection. Only Slices is enabled in the engine tab; the partial engines are not represented as complete. Display/picking/history controls are separate from engine availability.
+- Published SAME owner-private Site https://stratax-seismic-workbench.neonwhale8.chatgpt.site. Source b2902f2f2113fc8a398dd2a27234e5e926674c20; version `appgprj_6ae37700e488819196b149dee2c6053f~appgver_30e93b83c4e8819182fa09b99614c139`; deployment appgdep_6ae397e67ae88191bc8838c1dcdd3f8f succeeded. API revision28, workers, account settings, quotas and data unchanged.
+- JavaScript syntax parsing and git diff whitespace checks passed. No browser, application, data, scientific test or benchmark was run under the standing user deferral. Successful Sites publication is deployment evidence only; UI interaction/visual correctness remains unverified.
+- Required cleanup: freshly reviewed58 StrataX images, all58 tagged/protected; zero untagged images/deletions. No disposable local junk identified; retained source checkout, release archive, originals, data, dependencies, operational tools and recovery assets. Documentation and related checklist included in the UI GitHub checkpoint.
+
 ## 2026-10-29 — source-bound backend additions live; full programme still incomplete
 
 - Implemented private source/resource bindings, actual resumable Cloud ragged Zarr indexing and bounded downstream reads, conditional retained-geometry NMO/stack/FK admission, 3D FK/CMP tools, wavelet operations, volume velocity/inversion/4D paths, physical horizon meshes/flattening/OBJ export and RTM completed-shot restart. Accepted results now retain tool-specific resource kinds, field schemas and provenance. Full inventory and limits: SEISMIC_BACKEND_IMPLEMENTATION_2026-10-29.md.

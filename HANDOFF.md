@@ -1,5 +1,14 @@
 # StrataX handoff
 
+## Latest — 2026-10-29 UI redesign published, unfinished tools disabled
+
+- Completed current UI request: moved Seismic engines under Processing, redesigned Processing and seismic Interpretation with shared compact ribbon/source browser/workbook/canvas/properties patterns, and greyed out unfinished commands. Petrophysics, saved configurations, results, data and deep links preserved.
+- Site source b2902f2f2113fc8a398dd2a27234e5e926674c20; version appgprj_6ae37700e488819196b149dee2c6053f~appgver_30e93b83c4e8819182fa09b99614c139; deployment appgdep_6ae397e67ae88191bc8838c1dcdd3f8f succeeded at the existing private Site. No API deployment; revision28 remains current. Site opening was queued as user handoff, not browser QA.
+- Availability map seismic-ui-availability.js matches saved SEISMIC_BACKEND_CHECKLIST.md. Unfinished engine/processing/interpretation buttons and run actions are blocked; old drafts remain inspectable. Engine Slices source binding uses reviewed brick metadata and bounded indices. No automatic example data or scientific jobs.
+- Checks: node --check on changed/new JavaScript modules, git diff --check, source/package review. User still forbids testing: do not start browser, fixture, application or scientific tests without new authorisation. No visual/interaction acceptance claim. M0–M9 programme remains incomplete as documented previously.
+- Cleanup: current repository registry inventory58 images/all tagged/protected/zero eligible deletions; no disposable local junk removed. Preserve ignored .release/sites-seismic-v2, matching release archive, registry receipt, old Site source, data and recovery/tooling assets. No tokens persisted. Root remains original StrataX GitHub repo and codex/interpretation-canvas-science; related checklist and UI/docs form this checkpoint.
+- Next work depends on user direction: later UI/data validation when authorised, or remaining backend programme implementation. Do not enable disabled tools merely because a partial numerical function exists.
+
 ## Latest — 2026-10-29 backend additions deployed, no data tests
 
 - User requested remaining backend completion and live deployment, excluding tests. Source additions and explicit remaining implementation are in SEISMIC_BACKEND_IMPLEMENTATION_2026-10-29.md. **Do not claim all M0–M9 engines complete.** Field/distributed/MPI/OpenACC, complex geological conversion and full graphical/3D editing remain unfinished; these are implementation gaps, not merely unrun tests.
