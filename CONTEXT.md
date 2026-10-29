@@ -1,5 +1,21 @@
 # StrataX context
 
+## Seismic implementation checkpoint — 2026-10-29, undeployed
+
+The approved programme is recorded in SEISMIC_PROGRAMME.md. No complete milestone or field-scale acceptance is claimed. Keep the single-complete-production-release policy; do not publish the current foundation as completion. Existing project/file/small-worker quotas are unchanged; large runs need explicit version-bound estimates and approval.
+
+`frontend/dist/seismic-workspace.js` owns independent `workspace.seismicWorkspace` state at `#seismic`; petrophysics state remains under `workspace.interpretation`. New modules implement bounded direct local SEG-Y/SU reading, exact trace/sample picks, ordered fault sticks and reviewed seed/correlation tracking. Four retained sections and 500 UI picks per object are current bounds. Source arrays are transient, never saved in project JSON. Different time origins are rejected for this aligned section display/tracker rather than silently resampled; single-trace access remains possible. Unconfirmed datums/time conventions are not assigned.
+
+`backend/seismic_api.py` reuses existing verified owner/legal/project boundaries, Firestore revision transactions and private originals. Its graph endpoint validates structure/parameters and explicitly reports no hosted execution. `seismic_reader.py` is stdlib-only so these API imports stay lightweight. `seismic_store.py` provides local worker-side sharded Zarr v3/SQLite indexing with separate display levels; it is not the field-scale Cloud index service. `seismic_processing.py` and `seismic_inversion.py` contain tested numerical foundations, not complete end-to-end specialist workflows. The separate `backend/requirements-seismic.txt` and SEISMIC_NOTICES.md record tested dependencies/notices; no seismic container has been built.
+
+Local verification: 141 full backend tests, then 9 focused API/inversion checks after further guards; 5 JS tests; 7 seismic browser groups; 17 existing six-LAS browser groups / 57 method configurations. No content uploads/page errors in the local suites; LAS hashes preserved. Production metadata still shows API revision 17 at 100%. No new-workspace hosted acceptance, RTM/FWI, field marine/land, faulted-grid export or 1 TiB/10 TiB benchmark has occurred.
+
+## Real-user frontend QA — 2026-10-29
+
+TEST 1 contains the existing six LAS imports and the separate `QA · six LAS frontend tests` workbook. Seven frontend-submitted QC runs are completed; full smoothing/despiking comparisons remain proposed and no QA result was accepted. See FRONTEND_QA_2026-10-29.md for exact evidence and coverage limits. Raw numeric QC uses `raw source values (unit unresolved)`; normalization endpoints and shift/splice boundaries are arbitrary software-test settings, never geological calibration. Six-LAS QC completion does not validate absent NMR/seismic/core/model workflows.
+
+The supported in-app browser connection worked in the fresh chat despite the previous chat's disabled-browser errors. No permission/audience changes or alternate API test scripts were used. Full reload restored all 24 tracks and seven completed runs. No application code or deployment changed in this pass.
+
 ## Current interpretation release — 2026-10-28
 
 Sites version 15 is live, source `f75d8450cb28a413b17a0d286ce9abb1f06092b0`, deployment `appgdep_6ae272eb44448191af2fd56b34a50527`. API `stratax-api-00017-saf` is at 100%; API build `6c1074de-1a62-458c-a923-632b0c1e21dc`, scientific worker build `b2fcd1f5-e87b-4180-b075-a1a38e35a18d`. Same Site audience and project-9afac/us-central1. Previous versions/images are retained.

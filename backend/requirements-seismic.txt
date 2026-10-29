@@ -1,0 +1,5 @@
+# Separate worker dependencies: never increase the lightweight API image to include engines.
+-r requirements-science.txt
+zarr==3.1.3
+numcodecs==0.17.1
+pylops==2.8.0

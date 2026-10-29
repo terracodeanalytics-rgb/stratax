@@ -206,3 +206,5 @@ from imports_api import install_imports
 install_imports(app, database, current_user, fail, acceptance_current)
 from scientific_api import install_science
 install_science(app, database, current_user, fail, acceptance_current)
+from seismic_api import install_seismic
+install_seismic(app, database, current_user, fail, acceptance_current)
