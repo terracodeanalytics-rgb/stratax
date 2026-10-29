@@ -5,7 +5,7 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field
 
-VERSION = "stratax-seismic/1.0"
+VERSION = "stratax-seismic/2.0"
 
 # These are implemented numerical operators. Hosted execution is a separate capability.
 OPERATORS = {
@@ -21,17 +21,24 @@ OPERATORS = {
     "spike-decon": {"parameters": {"operatorLength": 32, "noiseFloor": 0.001}, "required": []},
     "sweep-correlate": {"parameters": {"sweep": None}, "required": ["sweep"]},
     "residual-statics": {"parameters": {"maxLagSamples": 16}, "required": []},
-    "dmo": {"parameters": {"offsets": None, "midpointSpacing": None, "velocity": None}, "required": ["offsets", "midpointSpacing", "velocity"]},
+    "dmo": {"parameters": {"offsets": None, "midpointSpacing": None, "velocity": None, "nmoConfirmed": False}, "required": ["offsets", "midpointSpacing", "velocity"]},
     "phase-shift-migration": {"parameters": {"velocity": None, "traceSpacing": None}, "required": ["velocity", "traceSpacing"]},
     "designature": {"parameters": {"signature": None, "noiseFloor": 0.01}, "required": ["signature"]},
     "deghost": {"parameters": {"ghostDelaySeconds": None, "reflectionCoeff": -1.0}, "required": ["ghostDelaySeconds"]},
+    "receiver-deghost": {"parameters": {"ghostDelaySeconds": None, "reflectionCoeff": -1.0}, "required": ["ghostDelaySeconds"]},
+    "debubble": {"parameters": {"bubblePeriodSeconds": None, "damp": 0.6}, "required": ["bubblePeriodSeconds"]},
     "swell-noise": {"parameters": {"timeHighpassHz": None, "spaceHighpass": None}, "required": ["timeHighpassHz", "spaceHighpass"]},
     "parabolic-radon": {
         "parameters": {"offsets": None, "pMin": None, "pMax": None, "pCount": 64, "multiplePCut": None, "mutePrimary": True},
         "required": ["offsets", "pMin", "pMax", "multiplePCut"],
     },
-    "kirchhoff-pstm": {"parameters": {"offsets": None, "midpointSpacing": None, "velocity": None}, "required": ["offsets", "midpointSpacing", "velocity"]},
+    "srme-subtract": {"parameters": {"multiples": None, "scale": 1.0}, "required": ["multiples"]},
+    "kirchhoff-pstm": {
+        "parameters": {"offsets": None, "midpointSpacing": None, "velocity": None, "velocityTimes": None, "velocityValues": None},
+        "required": ["offsets", "midpointSpacing"],
+    },
     "kirchhoff-psdm": {"parameters": {"offsets": None, "midpointSpacing": None, "velocity": None}, "required": ["offsets", "midpointSpacing", "velocity"]},
+    "rmo-scan": {"parameters": {"offsets": None, "velocities": None, "window": 11, "maxStretch": 0.3}, "required": ["offsets", "velocities"]},
 }
 
 
@@ -119,17 +126,24 @@ def validate_parameters(node):
         vector(p["offsets"], "DMO offsets")
         number(p["midpointSpacing"], "midpoint spacing", 1e-12)
         number(p["velocity"], "DMO velocity", 1e-12)
+        if type(p["nmoConfirmed"]) is not bool:
+            raise ValueError("Confirm NMO-corrected input with a boolean value.")
     if node.operator == "phase-shift-migration":
         number(p["velocity"], "migration velocity", 1e-12)
         number(p["traceSpacing"], "trace spacing", 1e-12)
     if node.operator == "designature":
         vector(p["signature"], "source signature")
         number(p["noiseFloor"], "designature noise floor", 1e-12)
-    if node.operator == "deghost":
+    if node.operator in ("deghost", "receiver-deghost"):
         number(p["ghostDelaySeconds"], "ghost delay", 1e-12)
         number(p["reflectionCoeff"], "reflection coefficient", -1.0)
         if p["reflectionCoeff"] > 1.0:
             raise ValueError("Reflection coefficient must be within -1 to 1.")
+    if node.operator == "debubble":
+        number(p["bubblePeriodSeconds"], "bubble period", 1e-12)
+        number(p["damp"], "bubble damp", 0.0)
+        if p["damp"] > 1.0:
+            raise ValueError("Bubble damp must be within 0–1.")
     if node.operator == "swell-noise":
         number(p["timeHighpassHz"], "time high-pass", 1e-12)
         number(p["spaceHighpass"], "space high-pass", 0)
@@ -144,10 +158,34 @@ def validate_parameters(node):
         number(p["multiplePCut"], "multiple curvature cut")
         if type(p["mutePrimary"]) is not bool:
             raise ValueError("mutePrimary must be boolean.")
-    if node.operator in ("kirchhoff-pstm", "kirchhoff-psdm"):
+    if node.operator == "srme-subtract":
+        if not isinstance(p["multiples"], list) or not p["multiples"]:
+            raise ValueError("Provide a supplied multiples model array for SRME subtract.")
+        number(p["scale"], "multiples scale")
+    if node.operator == "kirchhoff-pstm":
+        vector(p["offsets"], "migration offsets")
+        number(p["midpointSpacing"], "midpoint spacing", 1e-12)
+        has_const = p.get("velocity") is not None
+        has_field = p.get("velocityTimes") is not None and p.get("velocityValues") is not None
+        if has_const == has_field:
+            raise ValueError("Provide either constant velocity or velocityTimes/velocityValues for PSTM.")
+        if has_const:
+            number(p["velocity"], "migration velocity", 1e-12)
+        else:
+            vector(p["velocityTimes"], "velocity times", 0)
+            vector(p["velocityValues"], "velocity values", 1e-12)
+    if node.operator == "kirchhoff-psdm":
         vector(p["offsets"], "migration offsets")
         number(p["midpointSpacing"], "midpoint spacing", 1e-12)
         number(p["velocity"], "migration velocity", 1e-12)
+    if node.operator == "rmo-scan":
+        vector(p["offsets"], "RMO offsets")
+        vector(p["velocities"], "RMO velocities", 1e-12)
+        if type(p["window"]) is not int or not 3 <= p["window"] <= 101 or p["window"] % 2 == 0:
+            raise ValueError("RMO window must be an odd integer from 3–101.")
+        number(p["maxStretch"], "maximum stretch", 0)
+        if p["maxStretch"] > 10:
+            raise ValueError("Maximum stretch must be within 0–10.")
 
 
 def validate_graph(graph):
@@ -164,6 +202,7 @@ def validate_graph(graph):
     if graph.output not in by_id:
         raise ValueError("Select an existing output step.")
     ordered, visiting, done = [], set(), set()
+    domains = {"source": graph.domain}
 
     def visit(key):
         if key == "source" or key in done:
@@ -184,11 +223,15 @@ def validate_graph(graph):
         validate_parameters(node)
         twt_only = (
             "bandpass", "nmo", "fk-filter", "dmo", "phase-shift-migration",
-            "swell-noise", "parabolic-radon", "kirchhoff-pstm", "kirchhoff-psdm", "deghost",
+            "swell-noise", "parabolic-radon", "srme-subtract", "kirchhoff-pstm", "kirchhoff-psdm",
+            "deghost", "receiver-deghost", "debubble", "rmo-scan",
         )
         if node.operator in twt_only and graph.domain != "TWT":
             raise ValueError(f"{node.operator} requires TWT seconds.")
         visit(node.input)
+        if node.operator in twt_only and domains[node.input] != "TWT":
+            raise ValueError(f"{node.operator} requires TWT input; the previous step produces depth.")
+        domains[node.id] = "depth" if node.operator == "kirchhoff-psdm" else domains[node.input]
         visiting.remove(key)
         done.add(key)
         ordered.append(node)
@@ -197,7 +240,8 @@ def validate_graph(graph):
     if len(done) != len(by_id):
         raise ValueError("Remove disconnected steps or connect them to the output.")
     # Reject non-finite JSON and bind the hash to exact parameters and source revision.
-    encoded = json.dumps(graph.model_dump(exclude={"revision"}), sort_keys=True, separators=(",", ":"), allow_nan=False)
+    encoded = json.dumps(dict(engineVersion=VERSION, graph=graph.model_dump(exclude={"revision"})),
+                         sort_keys=True, separators=(",", ":"), allow_nan=False)
     if len(encoded.encode()) > 128*1024:
         raise ValueError("The graph exceeds its metadata budget. Store large models/arrays as referenced resources.")
     return ordered, hashlib.sha256(encoded.encode()).hexdigest()
@@ -208,7 +252,7 @@ def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value:
     from seismic_land import (
         amplitude_balance,
         apply_residual_statics,
-        dmo_approximate,
+        elliptic_dmo,
         mute,
         poststack_phase_shift_migration,
         residual_statics_shifts,
@@ -216,11 +260,16 @@ def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value:
         supplied_sweep_correlation,
     )
     from seismic_marine import (
+        debubble,
         kirchhoff_psdm_constant_velocity,
         kirchhoff_pstm_constant_velocity,
+        kirchhoff_pstm_velocity_field,
         parabolic_radon_demultiple,
+        receiver_side_deghost,
+        residual_moveout_scan,
         simple_deghost,
         source_signature_designature,
+        srme_subtract,
         swell_noise_attenuation,
     )
     from seismic_processing import bandpass, detrend, fk_filter, nmo, resample, stack, static_shift
@@ -274,23 +323,36 @@ def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value:
             shifts, _ = residual_statics_shifts(b, p["maxLagSamples"])
             result = apply_residual_statics(b, shifts)
         elif operation == "dmo":
-            result = dmo_approximate(b, p["offsets"], p["midpointSpacing"], p["velocity"])
+            result = elliptic_dmo(b, p["offsets"], p["midpointSpacing"], p["velocity"], nmo_confirmed=p["nmoConfirmed"])
         elif operation == "phase-shift-migration":
             result = poststack_phase_shift_migration(b, p["velocity"], p["traceSpacing"])
         elif operation == "designature":
             result = source_signature_designature(b, p["signature"], p["noiseFloor"])
         elif operation == "deghost":
             result = simple_deghost(b, p["ghostDelaySeconds"], p["reflectionCoeff"])
+        elif operation == "receiver-deghost":
+            result = receiver_side_deghost(b, p["ghostDelaySeconds"], p["reflectionCoeff"])
+        elif operation == "debubble":
+            result = debubble(b, p["bubblePeriodSeconds"], p["damp"])
         elif operation == "swell-noise":
             result = swell_noise_attenuation(b, p["timeHighpassHz"], p["spaceHighpass"])
         elif operation == "parabolic-radon":
             result = parabolic_radon_demultiple(
                 b, p["offsets"], p["pMin"], p["pMax"], p["pCount"], p["multiplePCut"], p["mutePrimary"],
             )
+        elif operation == "srme-subtract":
+            result = srme_subtract(b, p["multiples"], p["scale"])
         elif operation == "kirchhoff-pstm":
-            result = kirchhoff_pstm_constant_velocity(b, p["offsets"], p["midpointSpacing"], p["velocity"])
+            if p.get("velocityTimes") is not None:
+                result = kirchhoff_pstm_velocity_field(
+                    b, p["offsets"], p["midpointSpacing"], p["velocityTimes"], p["velocityValues"],
+                )
+            else:
+                result = kirchhoff_pstm_constant_velocity(b, p["offsets"], p["midpointSpacing"], p["velocity"])
         elif operation == "kirchhoff-psdm":
             result = kirchhoff_psdm_constant_velocity(b, p["offsets"], p["midpointSpacing"], p["velocity"])
+        elif operation == "rmo-scan":
+            result = residual_moveout_scan(b, p["offsets"], p["velocities"], p["window"], p["maxStretch"])
         else:
             raise ValueError(f"The {operation} operator is not executable in this graph version.")
         values[node.id] = result

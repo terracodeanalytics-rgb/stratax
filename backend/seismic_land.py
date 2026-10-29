@@ -49,7 +49,9 @@ def amplitude_balance(block, window=None):
     rms = np.sqrt(np.mean(segment ** 2, axis=1))
     require(np.all(rms > 0), "Zero-RMS traces cannot be balanced in the selected window.")
     scale = float(np.median(rms)) / rms
-    return block.derive(block.samples * scale[:, None], "amplitude-balance", dict(window=[start, stop], scales=scale.tolist()))
+    result = block.derive(block.samples * scale[:, None], "amplitude-balance", dict(window=[start, stop], scales=scale.tolist()))
+    result.history[-1]["amplitudePreserving"] = False
+    return result
 
 
 def spiking_deconvolution(block, operator_length=32, noise_floor=0.001):
@@ -152,25 +154,54 @@ def dmo_approximate(block, offsets, midpoint_spacing, velocity):
 
 
 def poststack_phase_shift_migration(block, velocity, trace_spacing):
-    """Stolt/Gazdag-style constant-velocity poststack phase-shift migration foundation."""
+    """Compatibility entry: homogeneous zero-offset Kirchhoff diffraction sum."""
     complete(block)
     require(block.domain == "TWT" and len(block.samples) >= 4, "Phase-shift migration needs a regularly sampled TWT section.")
     velocity = finite_number(velocity, "migration velocity", np.finfo(float).eps)
     dx = finite_number(trace_spacing, "trace spacing", np.finfo(float).eps)
-    nt = block.samples.shape[1]
-    freq = np.fft.rfftfreq(nt, block.dt)[None, :]
-    kx = np.fft.fftfreq(len(block.samples), dx)[:, None]
-    spectrum = np.fft.fft(np.fft.rfft(block.samples, axis=1), axis=0)
-    # Map temporal frequency to vertical wavenumber for constant velocity (Stolt mapping).
-    inside = (2 * freq / velocity) ** 2 - kx ** 2
-    kz = np.sqrt(np.where(inside > 0, inside, 0.0))
-    # Phase-shift each (kx,f) component to imaging time using kz.
-    phase = np.exp(-1j * kz * block.start)
-    migrated = spectrum * phase * (inside > 0)
-    image = np.fft.irfft(np.fft.ifft(migrated, axis=0), n=nt, axis=1).real
-    return block.derive(image, "phase-shift-migration", dict(velocity=velocity, traceSpacing=dx,
-                                                            limitations=["Constant-velocity phase-shift foundation; field qualification still required."]))
+    from seismic_marine import kirchhoff_pstm_constant_velocity
+    return kirchhoff_pstm_constant_velocity(block, np.zeros(len(block.samples)), dx, velocity)
 
 
 def apply_residual_statics(block, shifts):
     return static_shift(block, shifts)
+
+
+def elliptic_dmo(block, offsets, midpoint_spacing, velocity, *, nmo_confirmed=False):
+    """Dip-limited elliptic DMO scatter after explicit NMO, with linear time bins."""
+    require(block.domain == "TWT" and block.start >= 0, "DMO requires nonnegative TWT.")
+    require(nmo_confirmed is True or any(h.get("method") == "nmo" for h in block.history),
+            "Apply NMO first or explicitly confirm already NMO-corrected input.")
+    offsets = np.asarray(offsets, float)
+    require(offsets.shape == (len(block.samples),) and np.all(np.isfinite(offsets)), "One reviewed offset per midpoint trace is required.")
+    dx = finite_number(midpoint_spacing, "midpoint spacing", np.finfo(float).eps)
+    velocity = finite_number(velocity, "DMO dip-limit velocity", np.finfo(float).eps)
+    output = np.zeros_like(block.samples); fold = np.zeros_like(output)
+    nt = block.samples.shape[1]; axis = block.axis
+    for trace, offset in enumerate(offsets):
+        half = abs(offset) / 2
+        neighbours = range(max(0, trace-int(half/dx)), min(len(output), trace+int(half/dx)+1))
+        for target in neighbours:
+            distance = (target-trace)*dx
+            if half == 0:
+                factor = 1.
+            else:
+                if abs(distance) >= half: continue
+                factor = np.sqrt(1-(distance/half)**2)
+            coordinate = (axis*factor-block.start)/block.dt
+            low = np.floor(coordinate).astype(int); fraction = coordinate-low
+            valid = block.mask[trace] & (coordinate >= 0) & (coordinate <= nt-1)
+            if half > 0:
+                limit = 2*half**2 / np.sqrt((velocity*axis)**2 + 4*half**2)
+                valid &= abs(distance) <= limit
+            indices = np.flatnonzero(valid); bins = low[indices]
+            values = block.samples[trace, indices]
+            np.add.at(output[target], bins, values*(1-fraction[indices]))
+            np.add.at(output[target], np.minimum(bins+1, nt-1), values*fraction[indices])
+            np.add.at(fold[target], bins, 1-fraction[indices])
+            np.add.at(fold[target], np.minimum(bins+1, nt-1), fraction[indices])
+    values = np.divide(output, fold, out=np.full_like(output, np.nan), where=fold > 0)
+    result = block.derive(values, "dip-limited-elliptic-dmo", dict(offsets=offsets.tolist(), midpointSpacing=dx,
+        velocity=velocity, amplitudeModel="fold-normalised kinematic scatter; calibrated amplitude qualification pending"))
+    result.history[-1]["amplitudePreserving"] = False
+    return result

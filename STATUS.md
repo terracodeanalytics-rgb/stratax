@@ -1,5 +1,23 @@
 # StrataX status
 
+## 2026-10-29 — engine v2 implementation; frontend validation deferred
+
+- Added actual 2D/3D Kirchhoff forward/adjoint and homogeneous migration, first-order common-grid SRME, regularised Radon, elliptic DMO, fast marching, physical 3D structure attributes, source/receiver statics inversion, acquisition-coordinate regularisation, calibrated synthetic/prestack API paths, cube depth conversion, fault-block surfaces/layers/closures, seeded SGS/SIS/variograms, well-held-out prediction, GemPy structural modelling and real regular/split-pillar RESQML EPC/HDF5 exchange. Added bounded 3D horizon proposals, multishot acoustic dispatch and private atomic-artifact manifest runner. See SEISMIC_ENGINES_V2.md for limitations.
+- Repaired SEG-Y fields/counts/start, amplitude-normalisation inversion guard, squared-slowness-to-velocity FWI descent, actual band filtering/backtracking, saved-wavefield RTM correlation and wavelet zero-lag centring. Engine v2 fingerprints invalidate old graph approvals/checkpoints; estimates account for RMO/depth output sampling.
+- User explicitly stopped data tests and deferred them to the frontend. No new data tests started afterward. Python compilation/JS parsing/diff checks pass. Earlier-source backend 196 passed/four skipped; later code is unverified. Prior browser loopback Cloud-run submission failed 503 and remains unresolved; local views/picks/navigation passed before the stop instruction. No green final frontend claim.
+- Internal acoustic/model candidates and packaging-only images succeeded; exact IDs/digests and source boundaries in SEISMIC_ENGINES_V2.md. Final packaging builds: seismic `7f10bdfb-eaa3-4a3a-8883-eb438cac649c`, models `92136b3e-693e-4bf6-afd0-9cbd797a2e42`, acoustic `4834d4b1-f1f0-4b02-902b-26f40b2659d1`; statuses tracked in handoff. Data tests default off in engine Dockerfiles.
+- Production unchanged: API `stratax-api-00022-yes`; frontend publication still pending per prior handoff. No real field job, large benchmark, profile commissioning or traffic change. M0–M9 is not complete: distributed execution/storage, MPI/OpenACC, hosted engine admission/review, full workbooks and field/capacity acceptance remain open.
+- Cleanup inventory reviewed 33 scoped images at the first final-build snapshot: all tagged/protected, zero eligible image deletions. Required originals/reference data, isolated model dependencies, evidence and operational tools retained; zero verified session-junk files deleted. Later final-build tagged images are also protected.
+- Final packaging builds above all succeeded; exact immutable digests in SEISMIC_ENGINES_V2.md. Final cleanup inventory: **36 images / 36 tagged / zero untagged**, zero deletions. No service/job profile was changed.
+
+## Earlier 2026-10-29 — API redeploy (engine-completion claim superseded by audit)
+
+- Closed remaining engine gaps: marine receiver-deghost/debubble/SRME-subtract/velocity-field PSTM/RMO; SEG-Y/SU export; processing handoff/stale; 4D QC bundle (NRMS/corr/shift); model corner-point + GRDECL/RESQML helpers; multi-scale FWI plan + RTM illumination weight. Graph + tools API + processing UI menus wired.
+- Focused gates: `test_seismic_programme_ops` + `test_seismic_processing` **18 passed**.
+- API promoted to 100%: revision `stratax-api-00022-yes`, image digest `sha256:72249c5d790e00c31111e7c4b7c30bb36408fc8f2fbf2c1b08378105a2fd4c43` (build `0659cd10-…`). Candidate + prod `/api/health` ok. Rollback tags retained (`board-candidate` = `00017-saf`).
+- Sites: `.sites-source` commit `dcb2036` ready; push still **404** without ChatGPT Sites token — live Site remains v15 until credentials supplied.
+- Programme acceptance ledger (SEISMIC_ACCEPTANCE.md) still open; no field/1 TiB claim.
+
 ## 2026-10-29 — seismic engines/UI promoted (API live)
 
 - Built M0–M9 engines + UI (no field acceptance ledger close). Land/marine operators wired into processing graphs/UI; analytical tools API for ties/velocity/attributes/surfaces/models/4D/slices/QI; `#seismic-qi` workspace.

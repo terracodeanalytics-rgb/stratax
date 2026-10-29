@@ -4,7 +4,8 @@ ENV CC=gcc-14 CXX=g++-14 DEVITO_ARCH=gcc-14 DEVITO_LANGUAGE=C DEVITO_LOGGING=ERR
 COPY requirements-acoustic.txt ./
 RUN pip install --no-cache-dir -r requirements-acoustic.txt
 RUN pip download --no-deps --no-binary=devito,pyrevolve --dest /usr/share/stratax/sources devito==4.8.23 pyrevolve==2.2.8
-COPY seismic_acoustic.py ./
+COPY seismic_*.py ./
 COPY tests/test_seismic_acoustic.py ./tests/
 COPY tests/fixtures/acoustic-reference-v1.json ./tests/fixtures/
-RUN gcc-14 --version && python -m pytest tests/test_seismic_acoustic.py -q -s
+ARG RUN_ENGINE_TESTS=0
+RUN gcc-14 --version && if [ "$RUN_ENGINE_TESTS" = "1" ]; then python -m pytest tests/test_seismic_acoustic.py -q -s; fi

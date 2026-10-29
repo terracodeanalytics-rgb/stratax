@@ -1,5 +1,22 @@
 # Seismic dependency notices
 
+## Engine repair/model candidates — 2026-10-29
+
+The model profile pins GemPy 2026.0.3 (EUPL-1.2), gempy-engine 2026.0.3.post1,
+resqpy 5.2.1, h5py 3.16.0, pyproj 3.8.0, python-dotenv 1.2.1 and pandas 2.3.3.
+Use `requirements-models.txt` / `Dockerfile.models`; these are not API dependencies.
+The model image retains upstream installed licence directories, existing PyLops
+licence texts, and exact GemPy/gempy-engine/resqpy/PyLops source archives. No upstream
+library source is modified. Preserve EUPL notices and applicable source obligations
+when distributing the combined model image. This container is an internal candidate;
+it does not establish distribution/legal or field qualification.
+
+Application operators now include source/image/receiver Kirchhoff interpolation and
+its discrete adjoint, first-order complete-grid surface multiple prediction, 3D
+structure tensors, local SGS/SIS, stable-region FIR matching, assessed velocity
+line search, and actual RESQML EPC/HDF5 regular/split-pillar writers. Full programme
+and distributed/MPI/OpenACC qualification remain separate open gates.
+
 These adapters call unmodified upstream libraries. No library source was copied into the new application modules. The seismic dependency file is separate from the lightweight API requirements; importing the API does not import NumPy, Zarr or PyLops through these routes.
 
 | Dependency | Pinned version | Licence / source |

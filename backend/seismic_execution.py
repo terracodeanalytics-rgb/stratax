@@ -84,6 +84,10 @@ def estimate(graph, selection, dimensions, profile):
             up, down = p.get('up', 1), p.get('down', 1)
             samples = math.ceil(samples*up/down)
             dt *= down/up
+        if node.operator == 'rmo-scan':
+            traces = len(p['velocities'])
+        if node.operator == 'kirchhoff-psdm':
+            dt *= p['velocity'] / 2
         if samples*traces > 2_000_000:
             raise ValueError("An intermediate step exceeds the analytical preview cell budget. Use the field-scale execution profile.")
         shapes[node.id] = (traces, samples, dt)

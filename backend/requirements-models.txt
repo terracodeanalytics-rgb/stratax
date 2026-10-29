@@ -1,0 +1,8 @@
+-r requirements-seismic.txt
+resqpy==5.2.1
+h5py==3.16.0
+pyproj==3.8.0
+gempy==2026.0.3
+gempy-engine==2026.0.3.post1
+python-dotenv==1.2.1
+pandas==2.3.3

@@ -17,7 +17,13 @@ const tools={
  models:{label:'Models',path:'models',hint:'Property grids, well blocking, export checks'},
  '4d':{label:'4D',path:'4d',hint:'Associate vintages, match and difference'},
  slice:{label:'Slices',path:'slice',hint:'Inline / crossline / time / linked triad'},
- 'index-manifest':{label:'Cloud index',path:'index-manifest',hint:'Partition manifest for GCS analytical shards'}
+ 'index-manifest':{label:'Cloud index',path:'index-manifest',hint:'Partition manifest for GCS analytical shards'},
+ imaging:{label:'Kirchhoff',path:'imaging',hint:'2D/3D kinematic modelling and migration with reviewed geometry/aperture'},
+ marine:{label:'SRME prediction',path:'marine',hint:'First-order surface prediction on a reviewed collocated grid'},
+ geostatistics:{label:'Geostatistics',path:'geostatistics',hint:'Variograms, local kriging, Gaussian/indicator simulations'},
+ 'travel-times':{label:'Travel times',path:'travel-times',hint:'2D/3D interval-velocity fast marching on declared grid nodes'},
+ regularise:{label:'Regularisation',path:'regularise',hint:'Reviewed acquisition coordinates, scales and target support'},
+ statics:{label:'Surface statics',path:'statics',hint:'Source/receiver timing residual inversion and bounded correction proposals'}
 };
 
 const examples={
@@ -45,7 +51,7 @@ export function bindSeismicQi(){
  if($('#sq-cloud-copy'))$('#sq-cloud-copy').onclick=()=>openCloudCopy(host,'seismic-qi');
  $('#sq-refresh').onclick=()=>{result=null;notice='';host.render();};
  document.querySelectorAll('[data-sq-tool]').forEach(e=>e.onclick=()=>{s.tool=e.dataset.sqTool;s.payload=examples[s.tool]||s.payload;result=null;notice='';host.save();host.render();});
- $('#sq-example').onclick=()=>{s.payload=examples[s.tool];host.save();host.render();};
+ $('#sq-example').onclick=()=>{s.payload=examples[s.tool]||'{}';host.save();host.render();};
  $('#sq-payload').oninput=()=>{s.payload=$('#sq-payload').value;host.save();};
  $('#sq-run').onclick=safe(async()=>{
   if(host.getProject().storage!=='cloud')throw new Error('Create an explicit Cloud copy before running seismic engines. Local contents have not been uploaded.');

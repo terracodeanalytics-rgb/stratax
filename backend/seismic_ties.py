@@ -16,12 +16,14 @@ def wavelet_extract_wiener(seismic_trace, reflectivity, noise_floor=1e-3):
     S = np.fft.rfft(seismic)
     R = np.fft.rfft(refl)
     power = np.abs(R) ** 2
+    require(power.max() > 0, "Reflectivity has no energy for wavelet extraction.")
     wavelet = np.fft.irfft(S * np.conj(R) / (power + noise_floor * power.max()), n=len(seismic))
-    # Centre on the peak for an odd-length display wavelet when possible.
-    peak = int(np.argmax(np.abs(wavelet)))
-    half = min(peak, len(wavelet) - 1 - peak, 64)
-    extracted = wavelet[peak - half: peak + half + 1]
-    return extracted, dict(peakSample=peak, noiseFloor=noise_floor, length=len(extracted))
+    centred = np.fft.fftshift(wavelet)
+    zero = len(centred) // 2
+    half = min(zero, len(centred) - 1 - zero, 64)
+    extracted = centred[zero - half: zero + half + 1]
+    return extracted, dict(peakSample=int(np.argmax(np.abs(extracted))), zeroLagSample=half,
+                          noiseFloor=noise_floor, length=len(extracted))
 
 
 def tie_bulk_shift(seismic, synthetic, max_lag_samples=50):
@@ -78,3 +80,29 @@ def mistie_table(line_ties):
         residuals={k: v - mean for k, v in lags.items()},
         limitations=["Misties are software residuals on supplied ties; no automatic datum correction was applied."],
     )
+
+
+def calibrated_synthetic(depth, sonic, density, checkshot_depth, checkshot_twt,
+                         sample_times, wavelet, wavelet_dt, *, references_confirmed=False):
+    """Calibrate independent checkshots then resample logs onto an explicit seismic axis."""
+    from seismic_processing import time_depth, synthetic
+    require(references_confirmed is True, "Confirm TVD/depth datum, TWT and SI log units before tying.")
+    depth, sonic, density, axis, wavelet = (np.asarray(a, float) for a in (depth, sonic, density, sample_times, wavelet))
+    require(depth.shape == sonic.shape == density.shape and depth.ndim == 1 and len(depth) <= 250000,
+            "Sonic seconds/metre and density kg/m³ must share reviewed depth metres.")
+    require(np.all(np.isfinite(density)) and np.all(density > 0), "Density must be finite positive kg/m³.")
+    require(axis.ndim == 1 and 3 <= len(axis) <= 250000 and np.all(np.isfinite(axis)) and np.all(np.diff(axis) > 0),
+            "Supply a bounded increasing uniform seismic TWT axis.")
+    dt = finite_number(wavelet_dt, "wavelet sample interval", np.finfo(float).eps)
+    require(np.allclose(np.diff(axis), dt, atol=1e-12, rtol=1e-10), "Wavelet and seismic axes require identical sampling.")
+    calibrated = time_depth(depth, sonic, checkshot_depth, checkshot_twt)
+    valid = np.isfinite(calibrated)
+    require(valid.sum() >= 2, "Checkshots leave insufficient calibrated sonic coverage.")
+    require(axis[0] >= calibrated[valid][0] and axis[-1] <= calibrated[valid][-1],
+            "Restrict the synthetic axis to calibrated log/checkshot support; no extrapolation is performed.")
+    slowness = np.interp(axis, calibrated[valid], sonic[valid])
+    rho = np.interp(axis, calibrated[valid], density[valid])
+    reflectivity, calculated = synthetic(1/slowness, rho, wavelet)
+    return dict(logTwt=calibrated, sampleTwt=axis, velocity=1/slowness, density=rho,
+                reflectivity=reflectivity, synthetic=calculated, wavelet=wavelet,
+                calibration="sonic integration with reviewed monotonic checkshot drift", extrapolated=False)

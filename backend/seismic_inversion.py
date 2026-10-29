@@ -9,7 +9,7 @@ def calibrated(block, wavelet, wavelet_dt, amplitude_review):
     complete(block)
     require(block.domain == "TWT", "Deterministic inversion requires a reviewed TWT axis in seconds.")
     require(amplitude_review is True, "Review the amplitude history before quantitative inversion.")
-    forbidden = ("agc", "normalis", "normaliz", "display", "automaticgaincontrol")
+    forbidden = ("agc", "normalis", "normaliz", "display", "automaticgaincontrol", "amplitudebalance")
     require(not any(any(name in str(h.get("method", "")).lower().replace(" ", "").replace("_", "").replace("-", "") for name in forbidden) or h.get("displayOnly") is True or h.get("amplitudePreserving") is False for h in block.history),
             "AGC, display products and trace-normalised amplitudes are not calibrated inversion observations.")
     wav = np.asarray(wavelet, dtype=float)

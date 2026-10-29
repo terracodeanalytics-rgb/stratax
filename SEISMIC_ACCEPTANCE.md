@@ -1,5 +1,11 @@
 # Seismic acceptance ledger
 
+Engine-v2 source update (2026-10-29): see SEISMIC_ENGINES_V2.md for newly implemented
+operators replacing earlier foundation/missing descriptions. **No acceptance rows
+are closed by this source update.** User explicitly deferred data testing to the
+frontend; latest source has compile/parse/build evidence only. Earlier test receipts
+do not qualify later code. The loopback graph-submission503 remains unresolved.
+
 This is the exhaustive operation ledger for the approved M0–M9 programme. `SEISMIC_PROGRAMME.md` provides explanatory progress; this file controls acceptance. Every case below remains **open** until its complete evidence is recorded. Existing source code, a small numerical fixture, an installed library or a registry entry does not close a case.
 
 Each applicable operation needs separate 2D and 3D evidence and the complete source → configuration → API → computation → persistence → comparison/review → downstream selection → export → reload path. Record source and geometry versions, fixed fixture tolerances, software/container digests, command/report, dimensions, precision, hardware, runtime, peak memory, ownership checks and limitations against its case ID. Record benchmark estimate/approval IDs before paid large runs. Preserve scientific fixtures outside normal application workspaces.

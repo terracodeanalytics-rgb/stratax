@@ -1,11 +1,19 @@
 # StrataX context
 
+## Engine v2 source — 2026-10-29
+
+Read SEISMIC_ENGINES_V2.md before resuming. Numerical source has substantial new processing/imaging/model/4D/acoustic paths; all-programme completion is not claimed. User now requests engine implementation only and explicitly defers data testing to a later frontend pass. Do not restart pytest/browser/fixture calculations unless authorised again. Parsing/compilation/packaging are permitted; Docker engine tests default off.
+
+Engine graph fingerprints include `stratax-seismic/2.0`. New tool capability discovery reports actual missing runtime dependencies and uncommissioned acoustic dispatch. Private `seismic_engine_runner.py` creates atomic NPZ outputs/checkpoints without uploads; it is not a hosted admission bypass. Model requirements are separate: headless GemPy 2026.0.3 / engine 2026.0.3.post1 / resqpy 5.2.1. Hosted API does not automatically contain these engines. Preserve explicit owner/source/geometry/estimate boundaries.
+
+Production remains revision22. No new source was deployed. Last attempted loopback browser processing submission returned503; unresolved and not accepted. Actual full UI/source/result/artifact integration, distributed field-scale storage/execution and MPI/OpenACC remain missing. Earlier lower sections describe historical revisions and should not override this source/runtime distinction.
+
 ## Live seismic API promote — 2026-10-29
 
-- API service `stratax-api` in `project-9afac` / `us-central1` now runs revision `stratax-api-00020-pez` at 100% (image digest `sha256:ba3f0ad9…a4b3`, build `bd55a03b-…`). Rollback: `stratax-api-00017-saf` tagged `board-candidate`.
-- Public API: https://stratax-api-227436363119.us-central1.run.app . Candidate tag URL retained: https://seismic-candidate---stratax-api-fwy32oha6q-uc.a.run.app
-- API runtime now installs `numpy`/`scipy` for bounded `/api/projects/{pid}/seismic/tools/*` endpoints. Heavy PyLops inversion remains on the seismic worker image.
-- Site: https://stratax-workbench.cometcrab258.chatgpt.site still needs a credentialed Sites push for the seismic frontend (local `.sites-source` commit `d813942` prepared; push 404 without token). Owner-only audience unchanged.
+- API service `stratax-api` in `project-9afac` / `us-central1` now runs revision `stratax-api-00022-yes` at 100% (image digest `sha256:72249c5d…4c43`, build `0659cd10-…`). Rollback: `stratax-api-00017-saf` tagged `board-candidate`; prior `00020-pez` superseded.
+- Public API: https://stratax-api-227436363119.us-central1.run.app . Tagged URL: https://seismic-candidate---stratax-api-fwy32oha6q-uc.a.run.app
+- Tools API adds export/handoff/4D-qc/model GRDECL·RESQML/FWI-plan; graph operators include receiver-deghost, debubble, srme-subtract, velocity-field PSTM, rmo-scan. `numpy`/`scipy` on API; PyLops stays worker-only.
+- Site: https://stratax-workbench.cometcrab258.chatgpt.site — `.sites-source` commit `dcb2036` prepared; push 404 without Sites token (live still v15). Owner-only audience unchanged.
 - Compute path remains Cloud Run Jobs + GCS only (`minInstances=0`).
 
 ## Seismic implementation checkpoint — 2026-10-29, undeployed

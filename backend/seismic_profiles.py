@@ -99,7 +99,7 @@ def profile_catalog():
             id=FIELD_PROFILE_ID,
             kind="cloud-run-jobs",
             maximumCells=None,
-            fieldScaleQualified=True,
+            fieldScaleQualified=False,
             minInstances=0,
             description="Field-scale Cloud Run Job profile; separately commissioned image/pricing required.",
             commissioned=False,

@@ -58,7 +58,7 @@ const server=http.createServer((req,res)=>{const p=new URL(req.url,'http://local
   });
   await test('Processing navigation, editable graph and independent persisted workbooks',async()=>{
    await page.setViewportSize({width:1600,height:1100});
-   assert.deepEqual(await page.locator('.nav [data-go]').allTextContents(),['All projects','Overview','Data1','Map','Processing','Interpretation','Reports']);
+   assert.deepEqual(await page.locator('.nav [data-go]').allTextContents(),['All projects','Overview','Data1','Map','Processing','Seismic engines','Interpretation','Reports']);
    await page.locator('.nav [data-go="processing"]').click();await page.getByRole('region',{name:'Seismic processing workspace',exact:true}).waitFor();
    await page.locator('[data-sp-source="survey"]').click();await page.locator('.sp-menu summary').filter({hasText:'Trace editing'}).click();await page.locator('[data-sp-add="detrend"]').click();
    await page.locator('#sp-source [name="amplitudeUnit"]').fill('recorded source amplitude');await page.locator('#sp-source [name="domainConfirmed"]').check();await page.getByRole('button',{name:'Apply source settings',exact:true}).click();

@@ -1,0 +1,14 @@
+FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159
+WORKDIR /app
+COPY requirements-science.txt requirements-seismic.txt requirements-models.txt ./
+RUN pip install --no-cache-dir -r requirements-models.txt pytest==9.0.2
+COPY SEISMIC_NOTICES.md /usr/share/stratax/notices/SEISMIC_NOTICES.md
+COPY licenses/ /usr/share/stratax/notices/
+RUN pip download --no-deps --no-binary=pylops,gempy,gempy-engine,resqpy --dest /usr/share/stratax/sources pylops==2.8.0 gempy==2026.0.3 gempy-engine==2026.0.3.post1 resqpy==5.2.1
+COPY seismic_*.py ./
+COPY scientific_api.py scientific_catalog.py ./
+COPY tests/test_seismic_engine_repairs.py tests/test_seismic_implicit.py ./tests/
+ARG RUN_ENGINE_TESTS=0
+RUN if [ "$RUN_ENGINE_TESTS" = "1" ]; then python -m pytest tests -q --disable-warnings; fi
+ENV PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+CMD ["python", "seismic_batch_worker.py"]

@@ -100,3 +100,24 @@ class AcousticSession:
         residual=predicted-np.asarray(observations.data.T,dtype=float)
         gradient=self.mass_adjoint(residual,wavefield)
         return .5*float(np.sum(residual**2)),gradient,predicted
+
+    def correlation_image(self, observed, wavefield):
+        from devito import TimeFunction, Operator
+        from examples.seismic.acoustic.operators import iso_stencil
+        require(2 * self.saved_bytes <= self.maximum_saved_bytes,
+                'Forward and adjoint saved wavefields exceed the approved memory budget.')
+        back=TimeFunction(name='rtm_backprop',grid=self.model.grid,save=self.nt,
+                          time_order=2,space_order=self.solver.space_order)
+        back.data[:]=0
+        receiver = self._receiver(observed)
+        step = self.model.grid.stepping_dim.spacing
+        equations = iso_stencil(back, self.model, 'OT2', forward=False)
+        injection = receiver.inject(field=back.backward, expr=receiver * step**2 / self.model.m)
+        operator = Operator(equations + injection, subs=self.model.spacing_map, name='StrataXRTMBackprop')
+        operator.apply(dt=self.dt*1000, time_m=1, time_M=self.nt-2, **self.model.physical_params())
+        image=np.zeros(self.shape);illumination=np.zeros(self.shape)
+        for time in range(self.nt):
+            forward=np.asarray(wavefield.data[(time,)+self.crop])
+            image+=forward*np.asarray(back.data[(time,)+self.crop])*self.dt
+            illumination+=forward**2*self.dt
+        return image,illumination

@@ -58,3 +58,22 @@ def test_objective_gradient_has_second_order_taylor_remainder(dim):
     print(json.dumps(dict(case='taylor',dimension=dim,remainders=remainders,slopes=slopes.tolist())),flush=True)
     lo,hi=REFERENCE['taylorSlopeRange']
     assert np.all((slopes>=lo)&(slopes<=hi))
+
+
+@pytest.mark.parametrize('dim', REFERENCE['dimensions'])
+def test_rtm_correlation_and_velocity_update_descent(dim):
+    from seismic_rtm_work import rtm_image, fwi_gradient_step
+    s = session(dim)
+    initial = np.full(s.shape, REFERENCE['velocityMetresPerSecond'], dtype=float)
+    target = initial.copy(); target[(slice(5, 12),)*dim] += 100
+    s.set_velocity(target); observed, _ = s.forward()
+    s.set_velocity(initial)
+    image = rtm_image(s, observed)
+    assert image['image'].shape == s.shape
+    assert np.all(np.isfinite(image['image'])) and np.max(np.abs(image['image'])) > 0
+    assert np.max(image['illumination']) > 0
+    step = fwi_gradient_step(s, observed, max_update_fraction=.01)
+    assert step['accepted'] and step['objectiveAfter'] < step['objective']
+    np.testing.assert_allclose(s.model.vp.data[s.crop] * 1000, initial)
+    print(json.dumps(dict(case='rtm-fwi-descent', dimension=dim, before=step['objective'],
+                          after=step['objectiveAfter'], lineSearch=step['lineSearch'])), flush=True)

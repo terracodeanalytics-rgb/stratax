@@ -15,16 +15,20 @@ const operators={
  'sweep-correlate':{name:'Supplied-sweep correlation',group:'Land corrections',parameters:{sweep:[]}},
  'static-shift':{name:'Apply reviewed statics',group:'Land corrections',parameters:{shifts:[]}},
  'residual-statics':{name:'Residual statics (cross-correlate)',group:'Land corrections',parameters:{maxLagSamples:16}},
- dmo:{name:'Approximate DMO',group:'Land imaging',parameters:{offsets:[],midpointSpacing:25,velocity:2000}},
- 'phase-shift-migration':{name:'Phase-shift migration',group:'Land imaging',parameters:{velocity:2000,traceSpacing:25}},
+ dmo:{name:'Elliptic DMO after NMO',group:'Land imaging',parameters:{offsets:[],midpointSpacing:25,velocity:2000,nmoConfirmed:false}},
+ 'phase-shift-migration':{name:'Poststack Kirchhoff (constant velocity)',group:'Land imaging',parameters:{velocity:2000,traceSpacing:25}},
  nmo:{name:'NMO & stretch mute',group:'Velocity & stacking',parameters:{offsets:[],velocity:2000,maxStretch:.3}},
  stack:{name:'Weighted stack',group:'Velocity & stacking',parameters:{weights:null}},
  designature:{name:'Source-signature designature',group:'Marine conditioning',parameters:{signature:[],noiseFloor:0.01}},
  deghost:{name:'Simple deghost',group:'Marine conditioning',parameters:{ghostDelaySeconds:0.04,reflectionCoeff:-1}},
+ 'receiver-deghost':{name:'Receiver-side deghost',group:'Marine conditioning',parameters:{ghostDelaySeconds:0.04,reflectionCoeff:-1}},
+ debubble:{name:'Debubble',group:'Marine conditioning',parameters:{bubblePeriodSeconds:0.08,damp:0.6}},
  'swell-noise':{name:'Swell-noise attenuation',group:'Marine conditioning',parameters:{timeHighpassHz:2,spaceHighpass:0.05}},
  'parabolic-radon':{name:'Parabolic Radon demultiple',group:'Marine conditioning',parameters:{offsets:[],pMin:0,pMax:2e-7,pCount:64,multiplePCut:5e-8,mutePrimary:true}},
- 'kirchhoff-pstm':{name:'Kirchhoff PSTM (constant v)',group:'Marine imaging',parameters:{offsets:[],midpointSpacing:25,velocity:1500}},
- 'kirchhoff-psdm':{name:'Kirchhoff PSDM proxy (constant v)',group:'Marine imaging',parameters:{offsets:[],midpointSpacing:25,velocity:1500}}
+ 'srme-subtract':{name:'SRME subtract (supplied model)',group:'Marine conditioning',parameters:{multiples:[],scale:1}},
+ 'kirchhoff-pstm':{name:'Kirchhoff PSTM',group:'Marine imaging',parameters:{offsets:[],midpointSpacing:25,velocity:1500,velocityTimes:null,velocityValues:null}},
+ 'kirchhoff-psdm':{name:'Kirchhoff depth migration (constant velocity)',group:'Marine imaging',parameters:{offsets:[],midpointSpacing:25,velocity:1500}},
+ 'rmo-scan':{name:'Residual moveout scan',group:'Marine imaging',parameters:{offsets:[],velocities:[1500,1600,1700,1800],window:11,maxStretch:0.3}}
 };
 const sources=()=>host.getState().ingestion?.datasets?.filter(d=>d.family==='seismic'&&d.active!==false)||[];
 const state=()=>{const w=host.getState();w.seismicProcessing||={schemaVersion:1,books:[],activeBook:null};const s=w.seismicProcessing;if(s.books.length&&!s.books.some(b=>b.id===s.activeBook))s.activeBook=s.books[0].id;return s;};

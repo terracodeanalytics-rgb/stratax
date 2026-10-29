@@ -1,11 +1,30 @@
 # StrataX handoff
 
-## Latest — 2026-10-29 seismic engines/UI API promote
+## Latest — 2026-10-29 engine v2 build-only continuation
+
+- User: build remaining engines quickly; **no more data testing**, frontend testing later. Honour that override. No tests/fixtures/browser runs were initiated after it; compile/parse/diff checks only. See SEISMIC_ENGINES_V2.md for exact code, constraints, test chronology and remaining gaps.
+- New modules cover Kirchhoff, SRME prediction, regularised Radon, fast marching, physical 3D attributes, geostatistics/SGS/SIS, prediction, GemPy implicit models, EPC/HDF5 regular/split grids, horizon tracking, cube conversion/structures, source-consistent statics, regularisation, physical 4D registration, private artifact runner and multishot acoustic dispatch. Existing export/FWI/RTM/calibration/amplitude guards repaired. Engine v2 invalidates old graph approvals/checkpoints.
+- Prior to test deferral, full earlier-source backend196/four skipped; new numerical/model/acoustic checks passed in focused/internal candidates. The first acoustic build failed saved-adjoint buffer sizing; corrected compiled candidate `097a32d0-4fc6-4ef0-9b18-0824d3c6e078` succeeded. Do not count that as testing the later multishot/checkpoint/runner changes.
+- Browser begun before user steering: local view/pick/undo/navigation passed; loopback graph submission503 remains unresolved. Navigation assertion was updated to preserve the user's existing Seismic engines sidebar entry. **Do not report a passing end-to-end result.**
+- Final packaging-only builds submitted (tests off): seismic `7f10bdfb-eaa3-4a3a-8883-eb438cac649c`, model `92136b3e-693e-4bf6-afd0-9cbd797a2e42`, acoustic `4834d4b1-f1f0-4b02-902b-26f40b2659d1`. These are internal registry candidates, not production profiles. Current production API22/front-endv15 remain unchanged.
+- All three final packaging builds are **SUCCESS**; immutable digests in SEISMIC_ENGINES_V2.md. Final cleanup:36 scoped images, all tagged/protected, zero deletions. No pending build/owned test process remains. Package source is newer than the prior tested candidates; defer data validation per user instruction.
+- Next implementation: finish hosted owner/estimate-bound admission and durable artifact/review paths for new manifest engines; actual distributed field indexing/processing/domain decomposition and MPI/OpenACC; complete source-driven petrophysics-style workbooks. Field/capacity validation remains deferred and will require exact estimates/approvals. M0–M9 is **not complete**.
+- Existing user changes in STATUS/CONTEXT/HANDOFF and marine/graph/models/4D/RTM/tools/processing/export/handoff were preserved and extended, not reset. Cleanup reviewed scoped tagged images, zero deletion; retain originals, isolated dependencies, reference receipts and recovery assets. Git target remains original branch/remote, no force push.
+
+## Earlier — 2026-10-29 engines/API deploy (completion wording superseded)
+
+- User: build engines m0→m9 then deploy. Finished remaining engines and promoted API.
+- **API live:** `stratax-api-00022-yes` @ 100% (digest `sha256:72249c5d…4c43`, build `0659cd10-…`). Health ok on prod + seismic-candidate tag. Rollback: `board-candidate` → `00017-saf`.
+- Engines/API: export, handoff, 4D qc, model GRDECL/RESQML/corner-point, marine receiver-deghost/debubble/SRME-subtract/velocity PSTM/RMO, FWI plan + illumination weight; graph OPERATORS + `/seismic/tools/*` + processing UI menus.
+- Focused tests: programme_ops + processing **18 passed**.
+- **Sites still blocked:** `.sites-source` `dcb2036` — push 404 without ChatGPT Sites token. Supply token via hidden stdin → `git -C .sites-source push origin HEAD:main` → confirm new Sites version.
+- Acceptance ledger still open. No field/1 TiB/hosted seismic acceptance claim. Keep Cloud Run Jobs `minInstances=0`.
+
+## Prior — 2026-10-29 seismic engines/UI API promote
 
 - User asked: build engines+UI (skip acceptance tests), then necessary regressions, promote live, push git.
-- **API live:** `stratax-api-00020-pez` @ 100% (digest `sha256:ba3f0ad9…a4b3`). Health ok. Rollback `stratax-api-00017-saf` via `board-candidate`.
-- **Sites not yet live:** `.sites-source` commit `d813942` has seismic UI; push to `git.chatgpt-team.site/.../appgprj_6adc66e963588191a4154ab09c724471` returned 404 without Sites token. Next session: supply Sites credentials via hidden stdin and `git -C .sites-source push origin HEAD:main`, then confirm new Sites version/deployment ID.
-- Gates run: backend 181/4; focused seismic 43; JS 12; candidate 00019 failed (no numpy) then 00020 succeeded.
+- API was `stratax-api-00020-pez` (superseded by `00022-yes`). Rollback `stratax-api-00017-saf` via `board-candidate`.
+- Sites push needs ChatGPT Sites credentials.
 - Acceptance ledger still open (by design this pass). Do not claim field/1 TiB/10 TiB/hosted seismic acceptance closed.
 - Wire `STRATAX_SEISMIC_*` worker profile onto API when commissioning hosted graph runs; keep `minInstances=0`.
 
