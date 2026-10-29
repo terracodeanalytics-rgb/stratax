@@ -1,6 +1,7 @@
 import {api,session} from './auth.js';
 import {jobsView,bindJobs} from './seismic-processing-jobs.js';
 import {openCloudCopy} from './workspace-cloud-copy.js';
+import {openGeometryReview} from './seismic-geometry-review.js';
 let host,scope='',generation=0,remoteVersion=new Map(),busy=false,notice='';
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const operators={detrend:{name:'Remove mean / trend',group:'Trace editing',parameters:{mode:'linear'}},bandpass:{name:'Bandpass filter',group:'Signal processing',parameters:{low:5,high:60,order:4}},resample:{name:'Anti-aliased resampling',group:'Signal processing',parameters:{up:1,down:2}},'static-shift':{name:'Apply reviewed statics',group:'Corrections',parameters:{shifts:[]}},nmo:{name:'NMO & stretch mute',group:'Velocity & stacking',parameters:{offsets:[],velocity:2000,maxStretch:.3}},stack:{name:'Weighted stack',group:'Velocity & stacking',parameters:{weights:null}},'fk-filter':{name:'FK velocity filter',group:'Signal processing',parameters:{spacing:25,minimumVelocity:1500}}};
@@ -42,6 +43,7 @@ export function processingView(){
 export function bindProcessing(){
  if(!$('.sp'))return;const b=current();
  bindJobs(host,b,changed);
+ let geometryButton=$('#sp-geometry');if(!geometryButton){geometryButton=document.createElement('button');geometryButton.type='button';geometryButton.id='sp-geometry';geometryButton.textContent='Review header geometry';$('.sp .sw-ribbon').insertBefore(geometryButton,$('#sp-sources').nextSibling);}geometryButton.onclick=safe(()=>openGeometryReview(host,b));
  if($('#sp-cloud-copy'))$('#sp-cloud-copy').onclick=()=>openCloudCopy(host,'processing');
  $('#sp-refresh').onclick=refresh;$('#sp-sources').onclick=()=>host.openImporter({family:'seismic'});if($('#sp-import'))$('#sp-import').onclick=$('#sp-sources').onclick;
  document.querySelectorAll('[data-sp-source]').forEach(e=>e.onclick=safe(()=>newBook(e.dataset.spSource)));

@@ -30,7 +30,7 @@ Evidence status vocabulary: **foundation** means some code or small-fixture evid
 | M1.04 | Resumable large import, unchanged originals and source lineage | Existing resumable import foundation; target-scale indexing/restart pending |
 | M1.05 | Full header/trace indexing, irregular geometry, missing bins and duplicates | New resumable SQLite trace index; Cloud indexing/geometry query path pending |
 | M1.06 | Variable trace lengths, intervals, origins and masks | Lossless ragged sharded Zarr round-trip/restart fixtures and populated Stratton swath storage; hosted collection access pending |
-| M1.07 | Reviewed source/receiver geometry, binning, CRS and datum revisions | Header/scalar preservation foundation; reviewed survey workspace pending |
+| M1.07 | Reviewed source/receiver geometry, binning, CRS and datum revisions | Owner-scoped header-role/native-unit/axis/CRS/datum declarations, bounded QC preview and immutable revisions; full survey geometry validation/binning/CRS transformation pending |
 | M1.08 | Incremental sharded Zarr analytical storage and separate labelled pyramids | Local fixed/ragged stores and fixed-trace display levels; Cloud multi-partition qualification pending |
 | M1.09 | Bounded trace sections and gathers | Retained Local/Cloud fixed-layout sections and preview outputs; indexed gather path pending |
 | M1.10 | Inlines, crosslines and time/depth slices | Pending indexed multidimensional view path |

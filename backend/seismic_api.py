@@ -16,6 +16,7 @@ from scientific_api import fingerprint, firestore_value, now, restore_value
 from seismic_graph import Graph, OPERATORS, VERSION, validate_graph
 from seismic_reader import SectionError, read_section, read_preview
 from seismic_execution import execution_capabilities
+from seismic_geometry import GeometryReview,header_preview
 
 
 class TrackingSettings(BaseModel):
@@ -92,6 +93,7 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         execution = execution_capabilities()
         return dict(version=VERSION, sectionAdapters=["fixed-length-segy-rev0-1", "su-ieee", "processed-analytical-traces/v1"],
                     sectionLimits=dict(traces=512, samples=4096, cells=2_000_000),
+                    geometryReview=dict(available=True,maximumPreviewHeaders=64,coordinateConversion=False,processingQualified=False),
                     processingOperators=OPERATORS, hostedGraphExecution=execution['available'], executionProfiles=[execution],
                     capacityQualification="Not yet field-scale qualified",
                     restrictions=["ZGY/SGZ and variable-layout sections require the indexed worker adapter.",
@@ -183,6 +185,58 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
                                   trace_count=trace_count, first_sample=first_sample, sample_count=sample_count)
         result.pop('_identity', None)
         return result | dict(datasetId=did, sourceVersion=fingerprint(ds), references=ds.get("references", {}))
+
+    def preview_geometry(uid,pid,record,ds,body,first_trace=0,trace_count=8):
+        if body.sourceVersion!=fingerprint(ds):
+            fail(409,'stale_source','Reload the retained source before reviewing its geometry; your draft is retained.')
+        identity=retained_section(uid,pid,record,ds,first_trace=0,trace_count=1,first_sample=0,sample_count=1)['_identity']
+        if identity['kind'] not in ('segy','su'):
+            fail(400,'geometry_native_source','Review native survey geometry before derived processing; derived previews retain their source lineage.')
+        try:
+            version={'generation':identity['generation']} if identity.get('generation') is not None else {}
+            raw=storage.Client().bucket(identity['bucket']).blob(identity['object'],**version)
+            with raw.open('rb',chunk_size=256*1024) as stream:
+                return header_preview(stream,identity['size'],body,kind=identity['kind'],endian=identity['endian'],first_trace=first_trace,trace_count=trace_count)
+        except SectionError as error:
+            fail(400,'geometry_headers',str(error))
+        except (GoogleAPICallError,OSError):
+            logging.getLogger('stratax').exception('Geometry preview unavailable for project %s dataset %s',pid,ds['id'])
+            fail(503,'geometry_source_unavailable','The retained headers are temporarily unavailable. Your geometry draft is retained.')
+
+    @app.post('/api/projects/{pid}/seismic/sources/{did}/geometry/preview')
+    def geometry_preview(pid:str,did:str,body:GeometryReview,first_trace:int=0,trace_count:int=8,user=Depends(owner)):
+        ref,record=project(user['uid'],pid)
+        return preview_geometry(user['uid'],pid,record,source(ref,did),body,first_trace,trace_count)
+
+    @app.get('/api/projects/{pid}/seismic/sources/{did}/geometry')
+    def geometry_read(pid:str,did:str,revision:int|None=None,user=Depends(owner)):
+        ref,_=project(user['uid'],pid);ds=source(ref,did)
+        if revision is not None and revision<1:fail(400,'geometry_revision','Choose a retained positive geometry revision.')
+        item=ref.collection('seismicGeometry').document(valid(did))
+        if revision is not None:item=item.collection('revisions').document(str(revision))
+        value=restore_value(item.get().to_dict())
+        if revision is not None and not value:fail(404,'geometry_missing','This geometry revision could not be found.')
+        return dict(review=value,sourceVersion=fingerprint(ds),stale=bool(value and value['sourceVersion']!=fingerprint(ds)))
+
+    @app.put('/api/projects/{pid}/seismic/sources/{did}/geometry')
+    def geometry_save(pid:str,did:str,body:GeometryReview,user=Depends(owner)):
+        ref,record=project(user['uid'],pid);ds=source(ref,did)
+        preview_geometry(user['uid'],pid,record,ds,body)
+        item=ref.collection('seismicGeometry').document(valid(did))
+        @firestore.transactional
+        def write(tx):
+            current_source=ref.collection('datasets').document(did).get(transaction=tx).to_dict()
+            old=item.get(transaction=tx).to_dict() or {}
+            if not current_source or not current_source.get('active') or fingerprint(current_source)!=body.sourceVersion:
+                fail(409,'stale_source','The source changed before geometry review was saved.')
+            if old.get('revision',0)!=body.revision:
+                fail(409,'geometry_conflict','Geometry changed elsewhere. Keep this draft and reload before merging.')
+            value=body.model_dump()|dict(datasetId=did,revision=body.revision+1,updatedAt=now(),
+                                        geometryQualifiedForProcessing=False,scientificApproval=False)
+            tx.set(item.collection('revisions').document(str(value['revision'])),firestore_value(value))
+            tx.set(item,firestore_value(value))
+            return value
+        return dict(review=write(database().transaction()))
 
     @app.put("/api/projects/{pid}/seismic/interpretations/{iid}")
     def save_interpretation(pid: str, iid: str, body: Interpretation, user=Depends(owner)):
