@@ -77,3 +77,31 @@ def thickness_map(top, base):
     thickness[~(np.isfinite(top) & np.isfinite(base))] = np.nan
     require(bool(np.isnan(thickness).all()) or np.nanmin(thickness) >= 0 or True, "Thickness computed; negative values indicate crossing surfaces.")
     return thickness
+
+
+def convert_velocity_volume(times,values,from_type,to_type,*,time_origin_confirmed=False):
+    """Convert layered velocity functions independently at each physical survey bin."""
+    require(time_origin_confirmed is True,'Confirm that velocity times are measured from the same zero-time datum.')
+    times,values=np.asarray(times,float),np.asarray(values,float)
+    require(times.ndim==1 and len(times)>=2 and values.ndim in (1,2,3) and values.shape[-1]==len(times)
+            and values.size<=2_000_000,'Velocity functions/cubes require a shared final time axis.')
+    require(np.all(np.isfinite(times)) and times[0]>=0 and np.all(np.diff(times)>0)
+            and np.all(np.isfinite(values)) and np.all(values>0),'Times must increase and SI velocities must be finite positive.')
+    require(from_type in ('interval','rms','average') and to_type in ('interval','rms','average'),'Declare interval, RMS or average velocity types.')
+    dt=np.diff(np.r_[0.,times]);positive=dt>0
+    if from_type=='interval':interval=values.copy()
+    else:
+        integral=values**2*times if from_type=='rms' else values*times
+        differential=np.diff(np.concatenate((np.zeros(values.shape[:-1]+(1,)),integral),axis=-1),axis=-1)
+        interval=np.divide(differential,dt,out=values.copy()**2 if from_type=='rms' else values.copy(),where=positive)
+        require(np.all(interval[...,positive]>0),'The velocity function implies nonpositive interval layers.')
+        if from_type=='rms':interval=np.sqrt(interval)
+    if times[0]==0:interval[...,0]=interval[...,1]
+    if to_type=='interval':output=interval
+    else:
+        power=2 if to_type=='rms' else 1
+        integrated=np.cumsum(interval**power*dt,axis=-1)
+        output=np.divide(integrated,times,out=interval.copy()**power,where=times>0)
+        if power==2:output=np.sqrt(output)
+    return dict(values=output,times=times,velocityType=to_type,unit='m/s',timeUnit='s',
+                layerConvention='sample i describes the interval ending at time i; zero-time entry repeats first layer')

@@ -1,5 +1,11 @@
 # Seismic acceptance ledger
 
+Latest implementation source: SEISMIC_BACKEND_IMPLEMENTATION_2026-10-29.md records
+the deployed revision28 backend additions and remaining implementation separately
+from testing. No acceptance rows are closed. The historical evidence columns below
+must not be treated as an up-to-date inventory of missing source code. User testing
+deferral remains in force.
+
 Engine-v2 source update (2026-10-29): see SEISMIC_ENGINES_V2.md for newly implemented
 operators replacing earlier foundation/missing descriptions. **No acceptance rows
 are closed by this source update.** User explicitly deferred data testing to the

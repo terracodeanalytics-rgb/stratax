@@ -50,10 +50,10 @@ def extract_arbitrary_section(volume, ij_path, mask=None):
     for t, (i, j) in enumerate(path):
         if not (np.isfinite(i) and np.isfinite(j)):
             continue
-        i0, j0 = int(np.floor(i)), int(np.floor(j))
-        i1, j1 = i0 + 1, j0 + 1
-        if i0 < 0 or j0 < 0 or i1 >= ni or j1 >= nj:
+        if i<0 or j<0 or i>ni-1 or j>nj-1:
             continue
+        i0,j0=int(np.floor(i)),int(np.floor(j))
+        i1,j1=min(i0+1,ni-1),min(j0+1,nj-1)
         wi, wj = i - i0, j - j0
         weights = ((1 - wi) * (1 - wj), wi * (1 - wj), (1 - wi) * wj, wi * wj)
         corners = ((i0, j0), (i1, j0), (i0, j1), (i1, j1))
@@ -63,7 +63,7 @@ def extract_arbitrary_section(volume, ij_path, mask=None):
             m = mask[ii, jj]
             acc = acc + w * np.where(m, vol[ii, jj], 0.0)
             wsum = wsum + w * m
-        valid = wsum > 0
+        valid = np.isclose(wsum,1.,rtol=0,atol=1e-12)
         out[t] = np.divide(acc, wsum, out=np.full(ns, np.nan), where=valid)
         out_mask[t] = valid
     return dict(samples=out, mask=out_mask, path=path)

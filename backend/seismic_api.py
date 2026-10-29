@@ -121,6 +121,7 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
     def resources(pid: str, user=Depends(owner)):
         ref, _ = project(user["uid"], pid)
         sources = [s.to_dict() for s in ref.collection("datasets").limit(1000).stream()]
+        dataset_versions={d['id']:fingerprint(d) for d in sources if d.get('active') is True}
         sources = [dict(id=d["id"], name=d["name"], sourceId=d.get("sourceId"), references=d.get("references", {}),
                         sourceVersion=fingerprint(d), sourceSha256=d.get('sourceSha256'), status=d.get("status", "Imported"))
                    for d in sources if d.get("active") is True and d.get("family") == "seismic"]
@@ -128,7 +129,10 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         versions = {s["id"]: s["sourceVersion"] for s in sources}
         for item in interpretations:
             item["stale"] = versions.get(item["datasetId"]) != item["sourceVersion"]
-        return dict(sources=sources, interpretations=interpretations)
+        results=[restore_value(s.to_dict()) for s in ref.collection('seismicResources').limit(200).stream()]
+        for result in results:
+            result['stale']=any(dataset_versions.get(key)!=value for key,value in result.get('sources',{}).items())
+        return dict(sources=sources, interpretations=interpretations,results=results)
 
     def fetch_section(uid, pid, record, ds, ragged=False, **bounds):
         if ds.get('seismicRunId'):
@@ -400,10 +404,10 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
 
     from seismic_runs_api import install_seismic_runs
     from seismic_tools_api import install_seismic_tools
-    install_seismic_runs(app, database, owner, project, source, retained_section, valid, fail)
+    install_seismic_runs(app, database, owner, project, source, retained_section, valid, fail, preview_geometry)
     install_seismic_tools(app, owner, project, fail)
     from seismic_tool_jobs import install_tool_jobs
-    install_tool_jobs(app, database, owner, project, source, fail)
+    install_tool_jobs(app, database, owner, project, source, fail, retained_section)
 
     @app.post("/api/projects/{pid}/seismic/graphs/validate")
     def graph_validation(pid: str, body: Graph, user=Depends(owner)):

@@ -1,5 +1,17 @@
 # StrataX context
 
+## Current backend — 2026-10-29 source-bound engine additions
+
+API production is **`stratax-api-00028-wew` at100%**, image `sha256:dbff3328d9d1f7580fdf16667f34fcaf54a9192580571875939d96b5c33089ce`; revision24 remains tagged `seismic-backend-previous`. The existing private Site and frontend source version are unchanged. Final job images and receipts are in SEISMIC_BACKEND_IMPLEMENTATION_2026-10-29.md. All older deployment sections below are historical.
+
+Tool jobs identify `stratax-seismic/2.1` while graph contracts remain v2.0. Estimates accept source bindings through `inputs` or existing advanced JSON `$inputs`: retained section, reviewed brick, accepted result field, accepted analytical indexed section, native index source. Workers resolve only admitted scoped/generation-pinned references. Actual Cloud analytical indexing now builds private sharded ragged Zarr partitions/pyramids, checkpoints between partitions, and provides bounded reads. This is sequential partition execution, not a distributed field scheduler. Full programme implementation remains false in capabilities.
+
+New source files: seismic_source_io.py, seismic_cloud_index_worker.py, seismic_cloud_index_reader.py, seismic_field_ops.py, seismic_run_geometry.py, seismic_volume_workflows.py, seismic_wavelets.py and seismic_interpretation_ops.py. Geometry-coupled graph previews validate actual selected headers/common midpoints/metric spacing rather than unconditionally rejecting NMO/stack/FK. Accepted tool resources expose field schemas and remain source/version scoped.
+
+API now pins pyproj/Zarr/numcodecs for bounded coordinate/index reads. Heavy GemPy/resqpy/Devito/PyLops execution stays worker-side. Seismic job remains2CPU/4GiB/600s; models/acoustic4CPU/16GiB/1800s; one task, zero retries, no idle workers. Minimum/maximum API instances0/2; existing quotas and petrophysics limits unchanged. Do not submit test jobs or resume browser/scientific tests without a new user instruction: the user explicitly excluded them from this implementation/deployment.
+
+Full distributed/MPI/OpenACC, field imaging/marine processing, general geological conversion and graphical/3D interpretation work remain implementation tasks. Missing testing is a separate status, not the explanation for these missing capabilities. Startup readiness and zero ERROR logs do not establish accepted workflows.
+
 ## Active deployment — 2026-10-29 bounded tool jobs
 
 New private frontend is https://stratax-seismic-workbench.neonwhale8.chatgpt.site, Site `appgprj_6ae37700e488819196b149dee2c6053f`; old Site remains intact. The connected Sites account cannot access the old project; user explicitly authorised creating this replacement. New source checkout is ignored `.release/sites-seismic-v2`, while `.sites-source` retains the inaccessible old identity. Never substitute their IDs/remotes. Cloud Firebase/project data is shared; origin-local data/handles were not migrated.

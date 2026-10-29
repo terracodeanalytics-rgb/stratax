@@ -29,8 +29,7 @@ def execute_acoustic(configuration, observed=None, *, cancelled=lambda:False,
         return dict(records=records, provenance=[s.provenance for s in sessions])
     require(isinstance(observed, list) and len(observed) == len(sessions), "Provide actual shot observations in geometry order.")
     if operation == "rtm":
-        require(resumed is None, "RTM shot checkpoint restoration must be admitted by the worker before dispatch.")
-        return rtm_survey(sessions, observed, cancelled=cancelled, checkpoint=checkpoint)
+        return rtm_survey(sessions, observed, cancelled=cancelled, checkpoint=checkpoint, resumed=resumed)
     if operation == "fwi":
         survey = AcousticSurvey(sessions)
         return run_multiscale_fwi(survey, np.concatenate([np.asarray(a,float) for a in observed]), configuration["plan"],

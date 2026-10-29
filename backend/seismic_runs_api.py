@@ -57,7 +57,19 @@ def public_run(value):
     return {k:v for k,v in value.items() if k not in ('input', 'outputManifest', 'reservation', 'batchRequest', 'checkpoint', 'restartCheckpoint', 'workerClaim', 'ownerUid', 'runtimeReserved')} | dict(hasCheckpoint=bool(value.get('checkpoint')), graphSnapshot=value.get('input',{}).get('graph'))
 
 
-def install_seismic_runs(app, database, owner, project, source, retained_section, valid, fail):
+def discover_execution(run,run_path):
+    job=run.get('jobName') or run.get('batchRequest',{}).get('job')
+    if not job or not re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/jobs/[\w-]+',job):return None
+    response=provider().get('https://run.googleapis.com/v2/'+job+'/executions',params=dict(pageSize=100),timeout=20)
+    if response.status_code!=200:return None
+    for execution in response.json().get('executions',[]):
+        for container in execution.get('template',{}).get('containers',[]):
+            if any(e.get('name')=='STRATAX_SEISMIC_RUN' and e.get('value')==run_path for e in container.get('env',[])):
+                return execution
+    return None
+
+
+def install_seismic_runs(app, database, owner, project, source, retained_section, valid, fail, preview_geometry=None):
     def profile():
         try:
             value = json.loads(os.environ.get('STRATAX_SEISMIC_BATCH_PROFILE', '{}'))
@@ -104,9 +116,21 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         if fingerprint(ds) != graph['sourceVersion']:
             fail(409, 'stale_source', 'This graph uses an older input version. Your draft is retained.')
         value = retained_section(user['uid'], pid, record, ds, first_trace=body.selection.firstTrace, trace_count=body.selection.traceCount, first_sample=0, sample_count=1)
-        # Geometry-coupled previews need reviewed survey resources, not guessed gather identities.
+        geometry=None
         if any(n['operator'] in ('nmo', 'stack', 'fk-filter') for n in graph['nodes']):
-            fail(400, 'geometry_review_required', 'Register reviewed gather/metric geometry before hosted NMO, stacking or FK execution. No geometry was inferred.')
+            item=ref.collection('seismicGeometry').document(ds['id'])
+            review=restore_value((item.collection('revisions').document(str(body.geometryRevision)) if body.geometryRevision else item).get().to_dict())
+            if not review or review.get('sourceVersion')!=graph['sourceVersion'] or preview_geometry is None:
+                fail(400,'geometry_review_required','Save reviewed geometry for this source before NMO, stacking or FK execution.')
+            from seismic_geometry import GeometryReview
+            from seismic_run_geometry import qualify_selection
+            declaration=GeometryReview(**{key:review[key] for key in GeometryReview.model_fields})
+            rows=[]
+            for start in range(body.selection.firstTrace,body.selection.firstTrace+body.selection.traceCount,64):
+                preview=preview_geometry(user['uid'],pid,record,ds,declaration,start,min(64,body.selection.firstTrace+body.selection.traceCount-start))
+                rows.extend(preview['rows'])
+            try:geometry=qualify_selection(review,rows,graph['nodes'],body.geometryToleranceMetres)
+            except ValueError as error:fail(400,'geometry_selection',str(error))
         dimensions = {k:value[k] for k in ('traceCount', 'samplesPerTrace', 'sampleInterval')}
         dimensions['historyBytes'] = len(json.dumps(value.get('history', [])).encode())
         try:
@@ -115,7 +139,7 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
             fail(400, 'estimate_input', str(error))
         eid = uuid.uuid4().hex
         result = quotation | dict(id=eid, graphId=body.graphId, graphRevision=body.revision,
-                                 graphSnapshot=graph, createdAt=now(), expiresAtEpoch=int(time.time())+3600)
+                                 graphSnapshot=graph, geometry=geometry, createdAt=now(), expiresAtEpoch=int(time.time())+3600)
         result['fingerprint'] = digest(result)
         stored = result | dict(input=dict(datasetId=ds['id'], datasetVersion=fingerprint(ds), original=value['_identity'], graph=graph,
                                          outputBucket=os.environ['STRATAX_DERIVED_BUCKET']))
@@ -238,6 +262,21 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         item, run = load_run(ref, rid)
         if not run.get('settled'):
             try:
+                if not run.get('execution') and time.time()-run.get('lastReconcileEpoch',0)>30:
+                    item.update(dict(lastReconcileEpoch=int(time.time())))
+                    discovered=discover_execution(run,f'stratax_projects/{user["uid"]}/records/{pid}/seismicRuns/{rid}')
+                    if discovered:
+                        run.update(execution=discovered['name'],dispatchState='submitted')
+                        item.update(dict(execution=discovered['name'],dispatchState='submitted'))
+                execution=run.get('execution','')
+                if re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/jobs/[\w-]+/executions/[\w-]+',execution):
+                    status=provider().get('https://run.googleapis.com/v2/'+execution,timeout=20)
+                    if status.status_code==200 and status.json().get('completionTime'):
+                        prefix=f'owners/{user["uid"]}/projects/{pid}/seismic/runs/{rid}/'
+                        actual=sum(blob.size or 0 for blob in storage.Client().list_blobs(run['input']['outputBucket'],prefix=prefix))
+                        current=restore_value(item.get().to_dict())
+                        if current and not current.get('settled'):
+                            return public_run(settle(database(),ref,item,'failed',actual,dict(error='The worker execution ended without committing a complete result.')))
                 op = run.get('operation', '')
                 if re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/operations/[\w-]+', op or ''):
                     response = provider().get('https://run.googleapis.com/v2/'+op, timeout=20)
@@ -257,7 +296,7 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
                         current = restore_value(item.get().to_dict())
                         if current and not current.get('settled'):
                             run = settle(database(), ref, item, 'failed', actual, dict(error='The Cloud Run execution ended without a complete scientific result.'))
-                elif run.get('cancelRequested'):
+                elif run.get('cancelRequested') and run.get('dispatchState')=='pending' and not run.get('workerClaim'):
                     prefix = f'owners/{user["uid"]}/projects/{pid}/seismic/runs/{rid}/'
                     actual = sum(blob.size or 0 for blob in storage.Client().list_blobs(run['input']['outputBucket'], prefix=prefix))
                     run = settle(database(), ref, item, 'cancelled', actual)
@@ -283,6 +322,10 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
             return public_run(run)
         execution = run.get('execution', '')
         try:
+            if not execution and run.get('dispatchState')!='pending':
+                discovered=discover_execution(run,f'stratax_projects/{user["uid"]}/records/{pid}/seismicRuns/{rid}')
+                if discovered:
+                    execution=discovered['name'];item.update(dict(execution=execution))
             if re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/jobs/[\w-]+/executions/[\w-]+', execution or ''):
                 response = provider().post('https://run.googleapis.com/v2/'+execution+':cancel', json={}, timeout=30)
             else:
@@ -291,7 +334,7 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
             fail(503, 'cancellation_pending', 'Cancellation is recorded; provider shutdown is not yet confirmed.')
         if response.status_code not in (200, 202, 404):
             fail(503, 'cancellation_pending', 'Cancellation is recorded; provider shutdown is not yet confirmed.')
-        if response.status_code == 404:
+        if response.status_code == 404 and run.get('dispatchState')=='pending' and not run.get('workerClaim'):
             prefix = f'owners/{user["uid"]}/projects/{pid}/seismic/runs/{rid}/'
             actual = sum(blob.size or 0 for blob in storage.Client().list_blobs(run['input']['outputBucket'], prefix=prefix))
             return public_run(settle(database(), ref, item, 'cancelled', actual))

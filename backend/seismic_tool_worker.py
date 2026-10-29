@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
@@ -30,9 +31,20 @@ def main():
     if run is None:return
     client=storage.Client();bucket=client.bucket(run['input']['bucket']);actual=0
     prefix=f'owners/{uid}/projects/{pid}/seismic/runs/{rid}/'
+    last_progress=0.;last_cancel_check=0.;cancel_state=False
+    def progress(value):
+        nonlocal last_progress
+        moment=time.monotonic()
+        completed=value.get('completed',value.get('completedTraces'));total=value.get('total',value.get('totalTraces'))
+        if moment-last_progress>=2 or completed is not None and completed==total:
+            item.update(dict(progress=value));last_progress=moment
     def cancelled():
+        nonlocal last_cancel_check,cancel_state
+        moment=time.monotonic()
+        if moment-last_cancel_check<1:return cancel_state
         current=restore_value(item.get().to_dict())
-        return not current or current.get('cancelRequested') or current.get('settled')
+        cancel_state=not current or current.get('cancelRequested') or current.get('settled')
+        last_cancel_check=moment;return cancel_state
     def put(name,raw):
         nonlocal actual
         require(not cancelled(),'Engine calculation cancelled.')
@@ -46,39 +58,61 @@ def main():
         raw=blob.download_as_bytes();require(hashlib.sha256(raw).hexdigest()==source['sha256'],'Input checksum changed.')
         payload=json.loads(raw);parameters=payload['parameters'];tool=payload['tool']
         require(not cancelled(),'Engine run cancelled before computation.')
-        if tool=='acoustic':
-            from seismic_acoustic_engine import execute_acoustic
-            resumed=None
-            if run.get('restartCheckpoint'):
+        resumed=None
+        if run.get('restartCheckpoint'):
                 from seismic_engine_runner import unpack_result
                 previous=run['restartCheckpoint']
                 require(re.fullmatch(re.escape(f'owners/{uid}/projects/{pid}/seismic/runs/')+r'sx-[a-f0-9]{32}/checkpoints/[0-9]+\.npz',previous['path']), 'Checkpoint scope mismatch.')
                 blob=bucket.blob(previous['path']);blob.reload();require(blob.size<=run['reservation'],'Checkpoint exceeds approved limit.')
                 saved=blob.download_as_bytes();require(hashlib.sha256(saved).hexdigest()==previous['sha256'],'Checkpoint checksum changed.')
                 resumed=unpack_result(saved)
-            def checkpoint(value):
+        def checkpoint(value):
                 with tempfile.TemporaryDirectory() as directory:
                     file=Path(directory)/'checkpoint.npz';_atomic_npz(file,pack_result(value))
-                    reference=put(f'checkpoints/{value.get("completedShots",len(value.get("history",[])))}.npz',file.read_bytes())
+                    reference=put(f'checkpoints/{value.get("completedPartitions",value.get("completedShots",len(value.get("history",[]))))}.npz',file.read_bytes())
                     item.update(dict(checkpoint=reference))
+        if tool=='index-manifest':
+            from seismic_cloud_index_worker import build_cloud_index
+            binding=next((v for v in payload.get('bindings',{}).values() if v['kind']=='index-source'),None)
+            require(binding is not None,'Select a source-bound analytical indexing job.')
+            result=build_cloud_index(client,binding,parameters,put,cancelled=cancelled,checkpoint=checkpoint,resumed=resumed,
+                progress=progress)
+        elif tool=='acoustic':
+            from seismic_source_io import resolve_inputs
+            parameters=resolve_inputs(parameters,payload.get('bindings',{}),client,cancelled=cancelled)
+            from seismic_acoustic_engine import execute_acoustic
             result=execute_acoustic(parameters['configuration'],parameters.get('observed'),cancelled=cancelled,checkpoint=checkpoint,resumed=resumed)
         else:
+            from seismic_source_io import resolve_inputs
+            parameters=resolve_inputs(parameters,payload.get('bindings',{}),client,cancelled=cancelled)
             from seismic_tools_api import install_seismic_tools
             app=FastAPI()
             def owner():return dict(uid=uid)
             def project(user,project_id):require(user==uid and project_id==pid,'Tool project scope mismatch.')
             def fail(status,code,message):raise HTTPException(status,dict(code=code,message=message))
-            install_seismic_tools(app,owner,project,fail)
+            install_seismic_tools(app,owner,project,fail,cancelled=cancelled,progress=progress)
             route=next((r for r in app.routes if r.path==f'/api/projects/{{pid}}/seismic/tools/{tool}' and 'POST' in r.methods),None)
             require(route is not None,'Engine handler is unavailable in this pinned worker.')
             result=route.endpoint(pid=pid,body=parameters,user=dict(uid=uid))
         require(not cancelled(),'Engine run cancelled before artifact commit.')
         with tempfile.TemporaryDirectory() as directory:
             output=Path(directory)/'result.npz';_atomic_npz(output,pack_result(dict(result=result,
-                sources=payload['sources'],engineVersion='stratax-seismic/2.0',estimateFingerprint=run['estimateFingerprint'])))
+                sources=payload['sources'],engineVersion=run['estimate']['engineVersion'],estimateFingerprint=run['estimateFingerprint'])))
             reference=put('result.npz',output.read_bytes())
-        settle(db,ref,item,'completed',actual,dict(outputManifest=reference))
+        schema={}
+        def describe(value,path='result'):
+            if len(schema)>=128:return
+            if isinstance(value,np.ndarray):schema[path]=dict(shape=list(value.shape),dtype=str(value.dtype))
+            elif isinstance(value,dict):
+                if 'shape' in value and 'values' in value:schema[path]=dict(shape=value['shape'],dtype='float64')
+                else:
+                    for key,part in value.items():
+                        if re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*',str(key)):describe(part,path+'.'+key)
+        describe(result)
+        settle(db,ref,item,'completed',actual,dict(outputManifest=reference,outputSchema=schema))
     except Exception:
         logging.exception('Engine job %s stopped',rid)
+        try:actual=sum(blob.size or 0 for blob in client.list_blobs(bucket.name,prefix=prefix))
+        except Exception:logging.exception('Artifact accounting requires reconciliation for run %s',rid)
         settle(db,ref,item,'failed',actual,dict(error='The engine stopped; review input, resource and worker diagnostics. No parameters were changed.'))
         raise

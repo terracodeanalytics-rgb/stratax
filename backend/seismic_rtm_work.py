@@ -213,12 +213,21 @@ class AcousticSurvey:
         return (value, total, np.concatenate(predicted, axis=0)) if gradient else value
 
 
-def rtm_survey(sessions, observations, *, cancelled=lambda: False, checkpoint=lambda value: None):
+def rtm_survey(sessions, observations, *, cancelled=lambda: False, checkpoint=lambda value: None, resumed=None):
     require(isinstance(sessions, list) and len(sessions) == len(observations) and sessions,
             "Provide observed receiver records for every reviewed shot.")
     AcousticSurvey(sessions)
     image = np.zeros(sessions[0].shape); illumination = np.zeros_like(image)
-    for index, (session, observed) in enumerate(zip(sessions, observations)):
+    first=0
+    if resumed is not None:
+        first=resumed.get('completedShots')
+        require(type(first) is int and 0<=first<=len(sessions), 'RTM checkpoint shot boundary is invalid.')
+        image=np.asarray(resumed['image'],float).copy();illumination=np.asarray(resumed['illumination'],float).copy()
+        require(image.shape==sessions[0].shape and illumination.shape==image.shape and
+                np.all(np.isfinite(image)) and np.all(np.isfinite(illumination)) and np.all(illumination>=0),
+                'RTM checkpoint does not match the admitted model.')
+    for index in range(first,len(sessions)):
+        session,observed=sessions[index],observations[index]
         require(not cancelled(), "RTM cancelled at a completed shot boundary.")
         output = rtm_image(session, observed)
         image += output["image"]; illumination += output["illumination"]

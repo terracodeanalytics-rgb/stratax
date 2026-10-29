@@ -5,6 +5,7 @@ COPY requirements-acoustic.txt ./
 RUN pip install --no-cache-dir -r requirements-acoustic.txt
 RUN pip download --no-deps --no-binary=devito,pyrevolve --dest /usr/share/stratax/sources devito==4.8.23 pyrevolve==2.2.8
 COPY seismic_*.py ./
+COPY scientific_api.py scientific_catalog.py ./
 COPY tests/test_seismic_acoustic.py ./tests/
 COPY tests/fixtures/acoustic-reference-v1.json ./tests/fixtures/
 ARG RUN_ENGINE_TESTS=0

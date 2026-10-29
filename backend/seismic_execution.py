@@ -36,6 +36,8 @@ class EstimateRequest(BaseModel):
     graphId: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
     revision: int = Field(ge=1)
     selection: Selection
+    geometryRevision: int | None = Field(default=None,ge=1)
+    geometryToleranceMetres: float = Field(default=.25,gt=0,le=100)
 
 
 class RunRequest(BaseModel):

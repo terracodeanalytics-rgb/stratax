@@ -85,6 +85,24 @@ def estimate_ceiling_usd(profile: dict) -> float:
     return math.ceil(compute * 10000) / 10000
 
 
+def matches_job_resources(template, profile):
+    """Dispatch must match the resources approved, not merely the container digest."""
+    containers=template.get('containers',[])
+    if len(containers)!=1 or containers[0].get('image')!=profile['image']:
+        return False
+    limits=containers[0].get('resources',{}).get('limits',{})
+    def quantity(value):
+        value=str(value)
+        for suffix,factor in (('Gi',1024**3),('Mi',1024**2),('Ki',1024),('G',10**9),('M',10**6),('m',.001)):
+            if value.endswith(suffix):return float(value[:-len(suffix)])*factor
+        return float(value)
+    try:
+        return (quantity(limits['cpu'])==profile['cpu'] and quantity(limits['memory'])==profile['memoryMib']*1024**2
+                and int(template.get('maxRetries',0))==0)
+    except (KeyError,TypeError,ValueError):
+        return False
+
+
 def profile_catalog():
     return [
         dict(

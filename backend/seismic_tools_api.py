@@ -33,13 +33,13 @@ from seismic_ties import mistie_table, stretch_squeeze_piecewise, tie_bulk_shift
 from seismic_velocity_work import apply_time_depth_volume, convert_velocity, thickness_map
 
 
-def _finite_matrix(values, name, ndim=None, max_cells=2_000_000):
+def _finite_matrix(values, name, ndim=None, max_cells=2_000_000, allow_missing=False):
     arr = np.asarray(values, dtype=np.float64)
     if ndim is not None and arr.ndim != ndim:
         raise ValueError(f"{name} must have {ndim} dimensions.")
     if arr.size == 0 or arr.size > max_cells:
         raise ValueError(f"{name} must be nonempty and within the two-million-cell analytical budget.")
-    if not np.all(np.isfinite(arr)):
+    if np.any(np.isinf(arr)) or not allow_missing and not np.all(np.isfinite(arr)):
         raise ValueError(f"{name} contains non-finite values.")
     return arr
 
@@ -49,7 +49,37 @@ def _pack_array(arr):
     return dict(shape=list(value.shape), values=np.where(np.isfinite(value), value, None).reshape(-1).tolist())
 
 
-def install_seismic_tools(app, owner, project, fail):
+def install_seismic_tools(app, owner, project, fail, *, cancelled=lambda:False, progress=lambda value:None):
+    def pack(value):
+        if isinstance(value,np.ndarray):return _pack_array(value)
+        if isinstance(value,dict):return {key:pack(item) for key,item in value.items()}
+        if isinstance(value,list):return [pack(item) for item in value]
+        if isinstance(value,np.generic):return value.item()
+        return value
+
+    @app.post('/api/projects/{pid}/seismic/tools/geometry')
+    def tool_geometry(pid:str,body:dict[str,Any],user=Depends(owner)):
+        project(user['uid'],pid)
+        try:
+            from seismic_survey_qc import compute_midpoints,bin_traces,validate_bin_grid
+            from seismic_crs import transform_xy
+            operation=body['operation']
+            if operation=='transform':return dict(coordinates=transform_xy(body['coordinates'],body['sourceFrame'],body['targetFrame'],engine='pyproj'),frame=body['targetFrame'])
+            if operation=='bin':
+                midpoint=compute_midpoints(body['sources'],body['receivers'])
+                return pack(bin_traces(midpoint,body['origin'],body['increment'],body.get('azimuthRadians',0)))
+            if operation=='bin-qc':return validate_bin_grid(body['inlines'],body['crosslines'])
+            raise ValueError('Choose transform, bin or bin-qc.')
+        except (ValueError,TypeError,KeyError) as error:fail(400,'geometry_input',str(error))
+
+    @app.post('/api/projects/{pid}/seismic/tools/land')
+    def tool_land(pid:str,body:dict[str,Any],user=Depends(owner)):
+        project(user['uid'],pid)
+        try:
+            from seismic_field_ops import land_operation
+            return pack(land_operation(body,cancelled=cancelled))
+        except (ValueError,TypeError,KeyError) as error:fail(400,'land_input',str(error))
+
     @app.get("/api/projects/{pid}/seismic/tools/capabilities")
     def tools_capabilities(pid: str, user=Depends(owner)):
         project(user["uid"], pid)
@@ -61,7 +91,7 @@ def install_seismic_tools(app, owner, project, fail):
         project(user["uid"], pid)
         try:
             kind = body.get("kind")
-            volume = _finite_matrix(body.get("volume"), "volume", ndim=3)
+            volume = _finite_matrix(body.get("volume"), "volume", ndim=3,allow_missing=True)
             mask = body.get("mask")
             if kind == "inline":
                 out = extract_inline(volume, int(body["index"]), mask=mask)
@@ -99,6 +129,9 @@ def install_seismic_tools(app, owner, project, fail):
         project(user["uid"], pid)
         try:
             op = body.get("operation")
+            if op in ('wavelet-import','wavelet-create','wavelet-phase'):
+                from seismic_wavelets import wavelet_operation
+                return pack(wavelet_operation(body))
             if op == "wavelet":
                 wavelet, meta = wavelet_extract_wiener(body["seismic"], body["reflectivity"], body.get("noiseFloor", 1e-3))
                 return dict(wavelet=np.asarray(wavelet, float).tolist(), **meta)
@@ -124,6 +157,9 @@ def install_seismic_tools(app, owner, project, fail):
         project(user["uid"], pid)
         try:
             op = body.get("operation")
+            if op=='convert-volume-functions':
+                from seismic_velocity_work import convert_velocity_volume
+                return pack(convert_velocity_volume(body['times'],body['values'],body['fromType'],body['toType'],time_origin_confirmed=body.get('timeOriginConfirmed') is True))
             if op == "convert":
                 out = convert_velocity(body["times"], body["values"], body["fromType"], body["toType"])
                 return dict(values=np.asarray(out, float).tolist())
@@ -146,6 +182,9 @@ def install_seismic_tools(app, owner, project, fail):
     def tool_attributes(pid: str, body: dict[str, Any], user=Depends(owner)):
         project(user["uid"], pid)
         try:
+            if body.get('kind')=='basic-3d':
+                from seismic_volume_workflows import volume_attributes
+                return pack(volume_attributes(body['volume'],body['dt'],body.get('window',11)))
             if body.get("kind") == "structure-3d":
                 from seismic_volume_attributes import structure_attributes
                 out = structure_attributes(_finite_matrix(body["volume"], "volume", ndim=3), body["spacing"],
@@ -172,6 +211,11 @@ def install_seismic_tools(app, owner, project, fail):
         project(user["uid"], pid)
         try:
             kind = body.get("kind")
+            if kind in ('horizon-mesh','flatten','mesh-export'):
+                from seismic_interpretation_ops import horizon_mesh,flatten_volume,mesh_export
+                if kind=='horizon-mesh':return pack(horizon_mesh(body['surface'],body['xy'],body['blocks'],domain=body['domain'],unit=body['unit']))
+                if kind=='flatten':return pack(flatten_volume(body['volume'],body['horizon'],body['referenceSample']))
+                return pack(mesh_export(body['vertices'],body['faces'],body['format']))
             if kind == "track-3d":
                 from seismic_horizon_tracking import track_volume
                 return track_volume(body["volume"], body["seeds"], event=body["event"],
@@ -255,6 +299,9 @@ def install_seismic_tools(app, owner, project, fail):
         project(user["uid"], pid)
         try:
             op = body.get("operation")
+            if op in ('difference-volume','match-volume','cross-equalise-volume','qc-volume'):
+                from seismic_volume_workflows import four_d_volume
+                return pack(four_d_volume(body))
             if op == "register-3d":
                 from seismic_4d_registration import register_vintages
                 out = register_vintages(body["baseline"], body["monitor"], body["baselineAxes"], body["monitorAxes"],
@@ -465,6 +512,12 @@ def install_seismic_tools(app, owner, project, fail):
         project(user["uid"], pid)
         try:
             op = body.get("operation")
+            if op in ('poststack-volume','prestack-volume'):
+                from seismic_volume_workflows import invert_volume
+                return pack(invert_volume(body,cancelled=cancelled,progress=progress))
+            if op=='reflectivity-model':
+                from seismic_volume_workflows import reflectivity_model
+                return pack(reflectivity_model(body['vp'],body['vs'],body['density'],body['angles'],body.get('method','aki-richards')))
             if op == "avo":
                 fit = avo_fit(body["amplitudes"], body["angles"], body.get("model", "shuey2"))
                 return dict(coefficients=_pack_array(fit["coefficients"]), predicted=_pack_array(fit["predicted"]), residual=_pack_array(fit["residual"]), condition=fit["condition"])
@@ -507,10 +560,6 @@ def install_seismic_tools(app, owner, project, fail):
                 out = calibrated_prediction(body["features"], body["targets"], body["wellIds"], body["predictionFeatures"],
                     blind_wells=body["blindWells"], feature_names=body["featureNames"], target_unit=body["targetUnit"],
                     task=body["task"], seed=body.get("seed", 42), trees=body.get("trees", 100))
-                def pack(value):
-                    if isinstance(value, np.ndarray): return _pack_array(value)
-                    if isinstance(value, dict): return {key: pack(item) for key, item in value.items()}
-                    return value
                 return pack(out)
             if op == "fwi-plan":
                 return multi_scale_fwi_plan(body["frequencyBandsHz"], int(body.get("maxStepsPerBand", 5)))
