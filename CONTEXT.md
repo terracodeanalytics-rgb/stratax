@@ -1,8 +1,16 @@
 # StrataX context
 
+## Live seismic API promote — 2026-10-29
+
+- API service `stratax-api` in `project-9afac` / `us-central1` now runs revision `stratax-api-00020-pez` at 100% (image digest `sha256:ba3f0ad9…a4b3`, build `bd55a03b-…`). Rollback: `stratax-api-00017-saf` tagged `board-candidate`.
+- Public API: https://stratax-api-227436363119.us-central1.run.app . Candidate tag URL retained: https://seismic-candidate---stratax-api-fwy32oha6q-uc.a.run.app
+- API runtime now installs `numpy`/`scipy` for bounded `/api/projects/{pid}/seismic/tools/*` endpoints. Heavy PyLops inversion remains on the seismic worker image.
+- Site: https://stratax-workbench.cometcrab258.chatgpt.site still needs a credentialed Sites push for the seismic frontend (local `.sites-source` commit `d813942` prepared; push 404 without token). Owner-only audience unchanged.
+- Compute path remains Cloud Run Jobs + GCS only (`minInstances=0`).
+
 ## Seismic implementation checkpoint — 2026-10-29, undeployed
 
-The approved programme is recorded in SEISMIC_PROGRAMME.md. No complete milestone or field-scale acceptance is claimed. Keep the single-complete-production-release policy; do not publish the current foundation as completion. Existing project/file/small-worker quotas are unchanged; large runs need explicit version-bound estimates and approval.
+The approved programme is recorded in SEISMIC_PROGRAMME.md and SEISMIC_ACCEPTANCE.md. Evidence bundles use SEISMIC_EVIDENCE.md. No complete milestone or field-scale acceptance is claimed. Keep the single-complete-production-release policy; do not publish the current foundation as completion. Existing project/file/small-worker quotas are unchanged; large runs need explicit version-bound estimates and approval. Batch commissioning uses `scripts/configure-seismic.py` (dry-run by default). Capacity estimates use `scripts/estimate-seismic-capacity.py`.
 
 `frontend/dist/seismic-workspace.js` owns independent `workspace.seismicWorkspace` state at `#seismic`; petrophysics state remains under `workspace.interpretation`. Modules implement bounded local/native indexed sections, 3D amplitude views, exact trace/sample picks, ordered fault sticks and reviewed section tracking. Four retained views and 500 UI picks per object are current bounds. Source arrays are transient, never saved in project JSON. Different time origins are rejected by aligned views rather than silently resampled; single-trace/ragged access remains possible. Unconfirmed datums/time conventions are not assigned.
 

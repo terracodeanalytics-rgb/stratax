@@ -30,7 +30,7 @@ test('canvas picks resolve to retained trace/sample identity',async()=>{
 const trackingFixture=()=>({analytical:true,firstTrace:100,firstSample:200,sourceVersion:'truth-v1',samples:Array.from({length:20},(_,t)=>Array.from({length:80},(_,s)=>{const x=s-25-t;return (1-x*x/2)*Math.exp(-x*x/4);}))});
 test('workflow navigation keeps one Interpretation entry and independent modes',async()=>{
  const m=await moduleFrom('frontend/dist/workspace-navigation.js'),mixed={workflows:['petrophysics','seismic']};
- assert.deepEqual(m.workspaceNavigation(mixed,{}).map(x=>x[1]),['Overview','Data','Map','Processing','Interpretation','Reports']);
+ assert.deepEqual(m.workspaceNavigation(mixed,{}).map(x=>x[1]),['Overview','Data','Map','Processing','Seismic engines','Interpretation','Reports']);
  assert.equal(m.interpretationTarget(mixed,{lastInterpretationMode:'seismic'}),'seismic');
  assert.equal(m.interpretationTarget({workflows:['petrophysics']},{lastInterpretationMode:'seismic'}),'interpretation');
  assert.ok(!m.workspaceNavigation({workflows:['petrophysics']},{}).some(x=>x[0]==='processing'));

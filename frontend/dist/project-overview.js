@@ -1,11 +1,11 @@
-export const seismicStages=[['collection','Source collection','Retain original survey and supporting files'],['map','Map','Review survey locations'],['processing','Processing','Configure and review seismic processing'],['seismic','Interpretation','Review surveys, horizons and faults'],['reports','Reports','Assemble reviewed evidence']];
+export const seismicStages=[['collection','Source collection','Retain original survey and supporting files'],['map','Map','Review survey locations'],['processing','Processing','Configure and review seismic processing'],['seismic-qi','Seismic engines','Ties, velocity, attributes, surfaces, models and 4D'],['seismic','Interpretation','Review surveys, horizons and faults'],['reports','Reports','Assemble reviewed evidence']];
 export function workflows(project){return project?.workflows||['petrophysics'];}
 export function allowedTool(id,project,modules){
   const selected=workflows(project),petro=selected.includes('petrophysics'),seismic=selected.includes('seismic');
   if(['home','projects','overview','data','collection','files','documents','map','reports','reviews','settings','catalog'].includes(id))return true;
   if(id==='rockphysics')return petro&&seismic;
   if(['structure','properties','simulation','volumes','opportunities','uncertainty'].includes(id))return petro||seismic;
-  if(['seismic','processing'].includes(id))return seismic;
+  if(['seismic','processing','seismic-qi'].includes(id))return seismic;
   if(['interpretation','models','decisions'].includes(id))return petro||seismic;
   return petro;
 }

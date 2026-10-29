@@ -1,5 +1,21 @@
 # StrataX status
 
+## 2026-10-29 — seismic engines/UI promoted (API live)
+
+- Built M0–M9 engines + UI (no field acceptance ledger close). Land/marine operators wired into processing graphs/UI; analytical tools API for ties/velocity/attributes/surfaces/models/4D/slices/QI; `#seismic-qi` workspace.
+- API promoted to 100%: revision `stratax-api-00020-pez`, image `us-central1-docker.pkg.dev/project-9afac/stratax/stratax-api@sha256:ba3f0ad95b5613815ba71decfc5fd3a2fe32e0729199ee52a08ea46d20f8a4b3` (build `bd55a03b-…`). Prior `stratax-api-00017-saf` retained as `board-candidate`. `/api/health` ok on production URL.
+- API image now includes `numpy`/`scipy` for bounded seismic tool endpoints; PyLops poststack inversion stays worker-only (503 from API if called). Cloud Run Jobs + GCS remain scale-to-zero (no standby).
+- Necessary gates: full backend **181 passed / 4 skipped**; focused seismic **43**; JS model/account **12**; syntax checks green. First candidate `00019` failed startup (missing numpy) — rebuilt and replaced.
+- Sites: frontend synced into `.sites-source/dist` (includes `seismic-workspace.css` + QI). Sites publish needs ChatGPT Sites credentials (remote has no standing token in this session) — live Site may still be v15 until Sites push succeeds.
+
+## 2026-10-29 — full-programme foundations (undeployed; gates open)
+
+- Continued the approved M0–M9 programme on `codex/interpretation-canvas-science` without a production promote. Added programme control ([SEISMIC_EVIDENCE.md](SEISMIC_EVIDENCE.md), [scripts/configure-seismic.py](scripts/configure-seismic.py) dry-run Batch profile against seismic digest `cfe45af5…bdd4`, [scripts/estimate-seismic-capacity.py](scripts/estimate-seismic-capacity.py), [scripts/qualify-seismic-reference.py](scripts/qualify-seismic-reference.py)). Stratton swath SHA re-verified.
+- New backend modules: resource contracts/profiles; survey QC + `/geometry/qualify`; slices; Cloud index manifests; well ties; horizon/fault surfaces; land + marine operators; velocity conversions; model/export refusal; RTM/FWI step wrappers; 4D difference/match. Graph operators: mute, amplitude-balance, spike-decon, sweep-correlate. Attributes: coherence, dip, spectral decomposition. Frontend mesh JSON export added.
+- Seismic compute is **on-demand Cloud Run Jobs + GCS only** (no Google Batch VMs, no min instances, no standby disks). `configure-seismic.py` provisions `stratax-seismic-worker` Cloud Run Job; runs API dispatches `:run` overrides. Profile/estimate use vCPU/GiB-second rates.
+- Capacity sketch (`.release/seismic-capacity-estimate.json`): **750 job-hours** @ 4 vCPU/16 GiB → ~**USD 367** compute + ~**USD 225**/mo GCS — **approval required**. Mobil Line 12 downloaded; Stratton SHA re-verified.
+- Verification: focused seismic suites green after Cloud Run switch; prior full backend **181/4**. No paid job execution, no Sites/API traffic change, **no production promote**. Production remains Sites v15 / API `stratax-api-00017-saf`.
+
 ## 2026-10-29 — indexed Cloud traces and bounded 3D source checkpoint
 
 - Continued from `867fd7d`. Exact trace locators/checksums and conservative bin bounds now use the existing import chunks. Variable lengths, intervals, origins, masks and duplicate identities remain explicit. Owner-scoped indexed trace/section reads and Batch source reads verify original headers, source versions/generations and chunk checksums. Native newer-header SEG-Y and existing ZGY/SGZ imports are retained. Windows scratch cleanup now closes SQLite explicitly.

@@ -5,7 +5,7 @@ export function interpretationTarget(project,workspace){
 }
 export function workspaceNavigation(project,workspace){
  return [['overview','Overview','overview'],['data','Data','data'],['map','Map','map'],
-  ...(project?.workflows?.includes('seismic')?[['processing','Processing','settings']]:[]),
+  ...(project?.workflows?.includes('seismic')?[['processing','Processing','settings'],['seismic-qi','Seismic engines','models']]:[]),
   [interpretationTarget(project,workspace),'Interpretation','logs'],['reports','Reports','reports']];
 }
 export function interpretationModes(project,route){

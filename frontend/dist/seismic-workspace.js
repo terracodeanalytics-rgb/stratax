@@ -201,11 +201,14 @@ function action(name){
   document.querySelectorAll('[data-sw-restore]').forEach(b=>b.onclick=()=>{const version=board().versions.find(v=>v.id===b.dataset.swRestore);$('#dialog').close();edit('Restore workbook version',()=>{board().books[board().books.findIndex(b=>b.id===book().id)]=structuredClone(version.state);});});return;
  }
  if(name==='export'){
-  host.modal('Export seismic evidence','<button id="sw-export-picks">Interpretation picks CSV</button><button id="sw-export-section">Retained section CSV</button><button id="sw-export-view">Workbook metadata JSON</button>');
+  host.modal('Export seismic evidence','<button id="sw-export-picks">Interpretation picks CSV</button><button id="sw-export-section">Retained section CSV</button><button id="sw-export-mesh">Horizon/fault mesh JSON</button><button id="sw-export-view">Workbook metadata JSON</button>');
   $('#sw-export-view').onclick=()=>host.download('seismic-workbook.json',new Blob([JSON.stringify(book(),null,2)],{type:'application/json'}));
   const csv=v=>'"'+String(v??'').replaceAll('"','""')+'"';
   $('#sw-export-picks').onclick=safe(()=>{const i=interpretation();if(!i)throw new Error('Select a horizon or fault to export.');const rows=[['label','kind','datasetId','sourceVersion','trace','sample','locked'],...i.points.map(p=>[i.label,i.kind,i.datasetId,i.sourceVersion,p.trace,p.sample,p.locked])];host.download('seismic-picks.csv',new Blob([rows.map(r=>r.map(csv).join(',')).join('\n')],{type:'text/csv'}));});
-  $('#sw-export-section').onclick=safe(()=>{const d=cache.get(view()?.id)?.section;if(!d)throw new Error('Open a retained section first.');const rows=['trace,sample,axis_seconds_time_convention_unconfirmed,amplitude'];d.samples.forEach((row,t)=>row.forEach((a,s)=>rows.push([d.firstTrace+t,d.firstSample+s,d.sampleStarts[t]+s*d.sampleInterval,a??''].join(','))));host.download('seismic-section.csv',new Blob([rows.join('\n')],{type:'text/csv'}));});return;
+  $('#sw-export-section').onclick=safe(()=>{const d=cache.get(view()?.id)?.section;if(!d)throw new Error('Open a retained section first.');const rows=['trace,sample,axis_seconds_time_convention_unconfirmed,amplitude'];d.samples.forEach((row,t)=>row.forEach((a,s)=>rows.push([d.firstTrace+t,d.firstSample+s,d.sampleStarts[t]+s*d.sampleInterval,a??''].join(','))));host.download('seismic-section.csv',new Blob([rows.join('\n')],{type:'text/csv'}));});
+  $('#sw-export-mesh').onclick=safe(()=>{const i=interpretation();if(!i||!i.points.length)throw new Error('Select a horizon or fault with picks first.');
+   const payload={label:i.label,kind:i.kind,datasetId:i.datasetId,sourceVersion:i.sourceVersion,points:i.points,limitations:['Trace/sample indices only; physical CRS and fault-surface topology require reviewed survey geometry and compatible sticks.']};
+   host.download('seismic-interpretation-mesh.json',new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));});return;
  }
 }
 

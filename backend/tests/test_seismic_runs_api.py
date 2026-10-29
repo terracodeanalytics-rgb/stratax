@@ -65,9 +65,11 @@ def test_graph_preview_admission_worker_review_and_downstream_source():
     store.files['derived',ds['manifest']]=b'{"metadata":{"endian":"big"}}'
     client=TestClient(main.app)
     main.app.dependency_overrides[main.current_user]=lambda:dict(uid='owner')
-    provider=Mock();provider.post.return_value.status_code=201
+    provider=Mock()
+    provider.post.return_value.status_code=201
+    provider.post.return_value.json.return_value=dict(name='projects/p/locations/us-central1/operations/op', metadata=dict(name='projects/p/locations/us-central1/jobs/stratax-seismic-worker/executions/ex'))
     try:
-        with patch.object(main,'_db',db), patch.object(seismic_api.firestore,'transactional',lambda f:f), patch.object(seismic_api.storage,'Client',return_value=store), patch.object(runs,'provider',return_value=provider), patch.object(worker.firestore,'Client',return_value=db), patch.dict(os.environ,STRATAX_PROJECT_BUCKET='raw',STRATAX_DERIVED_BUCKET='derived',STRATAX_SEISMIC_BATCH_ACCOUNT='worker@project.iam.gserviceaccount.com',STRATAX_SEISMIC_BATCH_PROFILE=json.dumps(profile())):
+        with patch.object(main,'_db',db), patch.object(seismic_api.firestore,'transactional',lambda f:f), patch.object(seismic_api.storage,'Client',return_value=store), patch.object(runs,'provider',return_value=provider), patch.object(worker.firestore,'Client',return_value=db), patch.dict(os.environ,STRATAX_PROJECT_BUCKET='raw',STRATAX_DERIVED_BUCKET='derived',STRATAX_SEISMIC_BATCH_ACCOUNT='worker@project.iam.gserviceaccount.com',STRATAX_SEISMIC_JOB='stratax-seismic-worker',STRATAX_SEISMIC_BATCH_PROFILE=json.dumps(profile())):
             body=graph()|dict(sourceVersion=fingerprint(ds))
             assert client.put('/api/projects/project/seismic/graphs/g',json=body).status_code==200
             request=dict(graphId='g',revision=1,selection=dict(firstTrace=0,traceCount=3,firstSample=0,sampleCount=128))

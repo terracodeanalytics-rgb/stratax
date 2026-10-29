@@ -4,7 +4,28 @@ import {openCloudCopy} from './workspace-cloud-copy.js';
 import {openGeometryReview} from './seismic-geometry-review.js';
 let host,scope='',generation=0,remoteVersion=new Map(),busy=false,notice='';
 const $=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const operators={detrend:{name:'Remove mean / trend',group:'Trace editing',parameters:{mode:'linear'}},bandpass:{name:'Bandpass filter',group:'Signal processing',parameters:{low:5,high:60,order:4}},resample:{name:'Anti-aliased resampling',group:'Signal processing',parameters:{up:1,down:2}},'static-shift':{name:'Apply reviewed statics',group:'Corrections',parameters:{shifts:[]}},nmo:{name:'NMO & stretch mute',group:'Velocity & stacking',parameters:{offsets:[],velocity:2000,maxStretch:.3}},stack:{name:'Weighted stack',group:'Velocity & stacking',parameters:{weights:null}},'fk-filter':{name:'FK velocity filter',group:'Signal processing',parameters:{spacing:25,minimumVelocity:1500}}};
+const operators={
+ detrend:{name:'Remove mean / trend',group:'Trace editing',parameters:{mode:'linear'}},
+ mute:{name:'Top / bottom mute',group:'Trace editing',parameters:{top:0.1,bottom:null,taper:0.02}},
+ 'amplitude-balance':{name:'Amplitude balance',group:'Trace editing',parameters:{window:null}},
+ 'spike-decon':{name:'Spiking deconvolution',group:'Signal processing',parameters:{operatorLength:32,noiseFloor:0.001}},
+ bandpass:{name:'Bandpass filter',group:'Signal processing',parameters:{low:5,high:60,order:4}},
+ resample:{name:'Anti-aliased resampling',group:'Signal processing',parameters:{up:1,down:2}},
+ 'fk-filter':{name:'FK velocity filter',group:'Signal processing',parameters:{spacing:25,minimumVelocity:1500}},
+ 'sweep-correlate':{name:'Supplied-sweep correlation',group:'Land corrections',parameters:{sweep:[]}},
+ 'static-shift':{name:'Apply reviewed statics',group:'Land corrections',parameters:{shifts:[]}},
+ 'residual-statics':{name:'Residual statics (cross-correlate)',group:'Land corrections',parameters:{maxLagSamples:16}},
+ dmo:{name:'Approximate DMO',group:'Land imaging',parameters:{offsets:[],midpointSpacing:25,velocity:2000}},
+ 'phase-shift-migration':{name:'Phase-shift migration',group:'Land imaging',parameters:{velocity:2000,traceSpacing:25}},
+ nmo:{name:'NMO & stretch mute',group:'Velocity & stacking',parameters:{offsets:[],velocity:2000,maxStretch:.3}},
+ stack:{name:'Weighted stack',group:'Velocity & stacking',parameters:{weights:null}},
+ designature:{name:'Source-signature designature',group:'Marine conditioning',parameters:{signature:[],noiseFloor:0.01}},
+ deghost:{name:'Simple deghost',group:'Marine conditioning',parameters:{ghostDelaySeconds:0.04,reflectionCoeff:-1}},
+ 'swell-noise':{name:'Swell-noise attenuation',group:'Marine conditioning',parameters:{timeHighpassHz:2,spaceHighpass:0.05}},
+ 'parabolic-radon':{name:'Parabolic Radon demultiple',group:'Marine conditioning',parameters:{offsets:[],pMin:0,pMax:2e-7,pCount:64,multiplePCut:5e-8,mutePrimary:true}},
+ 'kirchhoff-pstm':{name:'Kirchhoff PSTM (constant v)',group:'Marine imaging',parameters:{offsets:[],midpointSpacing:25,velocity:1500}},
+ 'kirchhoff-psdm':{name:'Kirchhoff PSDM proxy (constant v)',group:'Marine imaging',parameters:{offsets:[],midpointSpacing:25,velocity:1500}}
+};
 const sources=()=>host.getState().ingestion?.datasets?.filter(d=>d.family==='seismic'&&d.active!==false)||[];
 const state=()=>{const w=host.getState();w.seismicProcessing||={schemaVersion:1,books:[],activeBook:null};const s=w.seismicProcessing;if(s.books.length&&!s.books.some(b=>b.id===s.activeBook))s.activeBook=s.books[0].id;return s;};
 const current=()=>state().books.find(b=>b.id===state().activeBook)||state().books[0];

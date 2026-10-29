@@ -1,4 +1,4 @@
-"""Bound estimates and Batch requests. The provider never receives client-authored commands."""
+"""Bound estimates and on-demand Cloud Run Job dispatch. No standby VMs or disks."""
 import hashlib
 import json
 import math
@@ -7,18 +7,20 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from seismic_graph import Graph, validate_graph
+from seismic_graph import OPERATORS, Graph, validate_graph
+from seismic_profiles import PREVIEW_PROFILE_ID, batch_available, estimate_ceiling_usd, profile_catalog, validate_batch_profile
 
 
 def execution_capabilities():
-    try:
-        profile = json.loads(os.environ.get('STRATAX_SEISMIC_BATCH_PROFILE', '{}'))
-        available = bool(isinstance(profile, dict) and re.search(r'@sha256:[a-f0-9]{64}$', profile.get('image', '')) and
-                         all(k in profile for k in ('vmHourlyUsd', 'diskGibHourUsd', 'priceAsOf', 'priceSource', 'machineType', 'cpuMilli', 'memoryMib', 'maxSeconds', 'bootDiskGib')) and os.environ.get('STRATAX_SEISMIC_BATCH_ACCOUNT'))
-    except (ValueError, TypeError):
-        available = False
-    return dict(id='analytical-preview', available=available, maximumCells=2_000_000,
-                operators=['detrend', 'bandpass', 'resample', 'static-shift'], fieldScaleQualified=False)
+    available = batch_available()
+    return dict(
+        id=PREVIEW_PROFILE_ID,
+        available=available,
+        maximumCells=2_000_000,
+        operators=sorted(OPERATORS),
+        fieldScaleQualified=False,
+        profiles=profile_catalog(),
+    )
 
 
 class Selection(BaseModel):
@@ -57,17 +59,11 @@ def estimate(graph, selection, dimensions, profile):
     ordered, graph_hash = validate_graph(graph)
     if selection.traceCount*selection.sampleCount > 2_000_000 or selection.firstTrace+selection.traceCount > dimensions['traceCount'] or selection.firstSample+selection.sampleCount > dimensions['samplesPerTrace']:
         raise ValueError("Choose an analytical preview inside the retained source and the two-million-cell budget.")
-    if not profile or not re.search(r'@sha256:[a-f0-9]{64}$', profile.get('image', '')):
-        raise ValueError("The seismic Batch worker requires a commissioned immutable image before estimates can be approved.")
-    required = ('machineType', 'cpuMilli', 'memoryMib', 'maxSeconds', 'bootDiskGib', 'vmHourlyUsd', 'diskGibHourUsd', 'priceAsOf', 'priceSource')
-    if any(k not in profile for k in required):
-        raise ValueError("The worker resource and pricing profile is incomplete; no paid job was submitted.")
-    for name in ('cpuMilli', 'memoryMib', 'maxSeconds', 'bootDiskGib'):
-        if type(profile[name]) is not int or profile[name] <= 0:
-            raise ValueError("Worker resource limits must be positive reviewed integers.")
-    for name in ('vmHourlyUsd', 'diskGibHourUsd'):
-        if type(profile[name]) not in (int, float) or not math.isfinite(profile[name]) or profile[name] < 0:
-            raise ValueError("Worker rates must be finite, nonnegative and reviewed.")
+    try:
+        profile = validate_batch_profile(profile or {}, require_account=False)
+    except ValueError as error:
+        raise ValueError("The seismic Cloud Run worker requires a commissioned immutable image and complete pricing before estimates can be approved.") from error
+    required = ('cpu', 'memoryMib', 'maxSeconds', 'vcpuSecondUsd', 'memoryGibSecondUsd', 'priceAsOf', 'priceSource')
     shapes = {'source': (selection.traceCount, selection.sampleCount, dimensions['sampleInterval'])}
     for node in ordered:
         traces, samples, dt = shapes[node.input]
@@ -110,8 +106,8 @@ def estimate(graph, selection, dimensions, profile):
         if not consumers[n.input]:
             live.discard(n.input)
         checkpoint_bytes += sum(shapes[k][0]*shapes[k][1]*9 for k in live)+len(live)*(history_bytes+2*len(json.dumps(graph.model_dump()).encode())+65536)
-    quote = {k: profile[k] for k in required} | dict(image=profile['image'])
-    quote['estimatedComputeAndBootDiskUsd'] = math.ceil((profile['vmHourlyUsd']+profile['bootDiskGib']*profile['diskGibHourUsd'])*profile['maxSeconds']/3600*10000)/10000
+    quote = {k: profile[k] for k in required} | dict(image=profile['image'], provider='cloud-run-jobs', minInstances=0, standby=False)
+    quote['estimatedComputeUsd'] = estimate_ceiling_usd(profile)
     value = dict(kind='analytical-preview', graphFingerprint=graph_hash, sourceVersion=graph.sourceVersion,
                  selection=selection.model_dump(), sourceDimensions=dimensions, outputShape=list(output[:2]),
                  outputSampleInterval=output[2], estimatedPeakMemoryBytes=memory_bytes,
@@ -119,19 +115,22 @@ def estimate(graph, selection, dimensions, profile):
                  scratchBytes=memory_bytes+output_bytes*2,
                  resources=quote, taskCount=1, maximumRetries=0,
                  limitations=['Preview only; no field-scale capacity qualification.',
-                              'Compute estimate excludes persistent artifact storage, transfer and provider shutdown/billing delays; project storage admission remains separate.'])
+                              'On-demand Cloud Run Jobs only (min instances 0); artifacts stay on GCS.',
+                              'Compute estimate excludes persistent GCS storage, transfer and provider shutdown/billing delays; project storage admission remains separate.'])
     return value | dict(fingerprint=digest(value))
 
 
-def batch_request(project, region, service_account, run_path, run_id, estimate_value):
+def batch_request(project, region, service_account, run_path, run_id, estimate_value, job_name='stratax-seismic-worker'):
+    """Build the Cloud Run Jobs :run override payload (compatibility name retained)."""
     r = estimate_value['resources']
-    return dict(taskGroups=[dict(taskCount=1, parallelism=1, taskSpec=dict(
-        runnables=[dict(container=dict(imageUri=r['image'], commands=['python', 'seismic_batch_worker.py']),
-                        environment=dict(variables=dict(STRATAX_SEISMIC_RUN=run_path, GOOGLE_CLOUD_PROJECT=project)))],
-        computeResource=dict(cpuMilli=r['cpuMilli'], memoryMib=r['memoryMib']),
-        maxRunDuration=str(r['maxSeconds'])+'s', maxRetryCount=0))],
-        allocationPolicy=dict(instances=[dict(policy=dict(machineType=r['machineType'], provisioningModel='STANDARD',
-                                                         bootDisk=dict(sizeGb=r['bootDiskGib'], type='pd-balanced')))],
-                              location=dict(allowedLocations=['regions/'+region]),
-                              serviceAccount=dict(email=service_account, scopes=['https://www.googleapis.com/auth/cloud-platform'])),
-        logsPolicy=dict(destination='CLOUD_LOGGING'), labels=dict(application='stratax', workload='seismic-preview', run=run_id))
+    return dict(
+        provider='cloud-run-jobs',
+        job=f'projects/{project}/locations/{region}/jobs/{job_name}',
+        overrides=dict(containerOverrides=[dict(env=[
+            dict(name='STRATAX_SEISMIC_RUN', value=run_path),
+            dict(name='GOOGLE_CLOUD_PROJECT', value=project),
+            dict(name='STRATAX_SEISMIC_RUN_ID', value=run_id),
+        ])]),
+        resources=dict(cpu=r['cpu'], memoryMib=r['memoryMib'], maxSeconds=r['maxSeconds'], image=r['image'],
+                       minInstances=0, standby=False, serviceAccount=service_account),
+    )

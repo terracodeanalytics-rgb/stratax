@@ -19,6 +19,11 @@ from seismic_execution import execution_capabilities
 from seismic_geometry import GeometryReview,header_preview
 from seismic_indexed_reader import read_traces,aligned_section
 from seismic_brick import BrickRequest,read_brick
+from seismic_crs import crs_capabilities
+from seismic_formats import format_catalog
+from seismic_profiles import profile_catalog
+from seismic_resources import si_labels
+from seismic_survey_qc import qualify_geometry_for_processing, validate_bin_grid
 
 
 class TrackingSettings(BaseModel):
@@ -93,14 +98,24 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
     def capabilities(pid: str, user=Depends(owner)):
         project(user["uid"], pid)
         execution = execution_capabilities()
+        crs = crs_capabilities()
+        formats = format_catalog()
         return dict(version=VERSION, sectionAdapters=["fixed-length-segy-rev0-1", "su-ieee", "processed-analytical-traces/v1"],
+                    formatContracts=formats,
                     sectionLimits=dict(traces=512, samples=4096, cells=2_000_000),
-                    geometryReview=dict(available=True,maximumPreviewHeaders=64,coordinateConversion=False,processingQualified=False),
+                    geometryReview=dict(available=True,maximumPreviewHeaders=64,coordinateConversion=crs["transformAvailable"],processingQualified=False,
+                                        surveyQcAvailable=True,crsTransformAvailable=crs["transformAvailable"],crs=crs),
                     brickLimits=dict(bins=512,samples=500000,coordinateSystem='reviewed native inline/crossline bins',fieldScaleQualified=False),
+                    views=dict(inlineCrosslineTimeSlice=True,arbitrarySection=True,physicalCoordinateMaps=False),
                     processingOperators=OPERATORS, hostedGraphExecution=execution['available'], executionProfiles=[execution],
+                    resourceContracts=si_labels(), resourceProfiles=profile_catalog(),
+                    programmeModules=["survey-qc","slices","ties","surfaces","land","marine","velocity","models","rtm-fwi","4d"],
                     capacityQualification="Not yet field-scale qualified",
                     restrictions=["ZGY/SGZ and variable-layout sections require the indexed worker adapter.",
-                                  "RTM/FWI, inversion and geological-grid execution are not connected to this API version."])
+                                  "CRS transforms require confirmed frames and an explicit engine (pyproj when installed).",
+                                  "Field RTM/FWI and 1 TiB/10 TiB gates remain open until evidence closes them.",
+                                  "Large Cloud Run Job runs require a version-bound estimate and explicit approval.",
+                                  "No standby compute: Cloud Run min instances stay zero; artifacts remain on GCS."])
 
     @app.get("/api/projects/{pid}/seismic")
     def resources(pid: str, user=Depends(owner)):
@@ -279,6 +294,13 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         if revision is not None and not value:fail(404,'geometry_missing','This geometry revision could not be found.')
         return dict(review=value,sourceVersion=fingerprint(ds),stale=bool(value and value['sourceVersion']!=fingerprint(ds)))
 
+    class GeometryQualify(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+        revision: int = Field(ge=1)
+        inlines: list[int] = Field(min_length=1, max_length=200000)
+        crosslines: list[int] = Field(min_length=1, max_length=200000)
+        allowIncomplete: bool = False
+
     @app.put('/api/projects/{pid}/seismic/sources/{did}/geometry')
     def geometry_save(pid:str,did:str,body:GeometryReview,user=Depends(owner)):
         ref,record=project(user['uid'],pid);ds=source(ref,did)
@@ -298,6 +320,36 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
             tx.set(item,firestore_value(value))
             return value
         return dict(review=write(database().transaction()))
+
+    @app.post('/api/projects/{pid}/seismic/sources/{did}/geometry/qualify')
+    def geometry_qualify(pid:str,did:str,body:GeometryQualify,user=Depends(owner)):
+        ref,_=project(user['uid'],pid);ds=source(ref,did)
+        review=restore_value(ref.collection('seismicGeometry').document(did).collection('revisions').document(str(body.revision)).get().to_dict())
+        if not review:
+            fail(404,'geometry_missing','This geometry revision could not be found.')
+        if review.get('sourceVersion')!=fingerprint(ds):
+            fail(409,'stale_source','Reload geometry against the current source version before qualification.')
+        if len(body.inlines)!=len(body.crosslines):
+            fail(400,'geometry_bins','Inline and crossline identity vectors must match.')
+        try:
+            qc=validate_bin_grid(body.inlines,body.crosslines)
+        except ValueError as error:
+            fail(400,'geometry_bins',str(error))
+        if body.allowIncomplete:
+            qc=dict(qc)|dict(allowIncomplete=True)
+        decision=qualify_geometry_for_processing(review,qc)
+        item=ref.collection('seismicGeometry').document(valid(did))
+        @firestore.transactional
+        def write(tx):
+            current=item.get(transaction=tx).to_dict() or {}
+            if current.get('revision')!=body.revision:
+                fail(409,'geometry_conflict','Geometry changed elsewhere before qualification.')
+            value=restore_value(current)|dict(geometryQualifiedForProcessing=decision['geometryQualifiedForProcessing'],
+                                             surveyQc=qc,qualificationReasons=decision['reasons'],qualifiedAt=now())
+            tx.set(item.collection('revisions').document(str(body.revision)),firestore_value(value))
+            tx.set(item,firestore_value(value))
+            return value
+        return dict(review=write(database().transaction()),qc=qc,decision=decision)
 
     @app.put("/api/projects/{pid}/seismic/interpretations/{iid}")
     def save_interpretation(pid: str, iid: str, body: Interpretation, user=Depends(owner)):
@@ -347,7 +399,9 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         return write(database().transaction())
 
     from seismic_runs_api import install_seismic_runs
+    from seismic_tools_api import install_seismic_tools
     install_seismic_runs(app, database, owner, project, source, retained_section, valid, fail)
+    install_seismic_tools(app, owner, project, fail)
 
     @app.post("/api/projects/{pid}/seismic/graphs/validate")
     def graph_validation(pid: str, body: Graph, user=Depends(owner)):

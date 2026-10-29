@@ -1,6 +1,15 @@
 # StrataX handoff
 
-## Latest publication handoff — 2026-10-29
+## Latest — 2026-10-29 seismic engines/UI API promote
+
+- User asked: build engines+UI (skip acceptance tests), then necessary regressions, promote live, push git.
+- **API live:** `stratax-api-00020-pez` @ 100% (digest `sha256:ba3f0ad9…a4b3`). Health ok. Rollback `stratax-api-00017-saf` via `board-candidate`.
+- **Sites not yet live:** `.sites-source` commit `d813942` has seismic UI; push to `git.chatgpt-team.site/.../appgprj_6adc66e963588191a4154ab09c724471` returned 404 without Sites token. Next session: supply Sites credentials via hidden stdin and `git -C .sites-source push origin HEAD:main`, then confirm new Sites version/deployment ID.
+- Gates run: backend 181/4; focused seismic 43; JS 12; candidate 00019 failed (no numpy) then 00020 succeeded.
+- Acceptance ledger still open (by design this pass). Do not claim field/1 TiB/10 TiB/hosted seismic acceptance closed.
+- Wire `STRATAX_SEISMIC_*` worker profile onto API when commissioning hosted graph runs; keep `minInstances=0`.
+
+## Earlier publication handoff — 2026-10-29
 
 - User interrupted implementation to request docs and GitHub updates. Publish the reviewed changes alongside these records to the existing `codex/interpretation-canvas-science` branch. Previous pushed HEAD is `867fd7d`; do not confuse this source checkpoint with deployment. No complete M0–M9 gate is accepted.
 - Read SEISMIC_INDEXED_3D.md first for exact new contracts/limits. Imports now retain exact locators and SHA-bound compressed chunks/bin bounds; owner-scoped `/traces` and compatible `/section` read actual source bytes. Geometry preview supports indexed variable records. Batch reads pin both original and index manifests. Preserve native newer-header SEG-Y fallback and existing ZGY/SGZ support; no automatic resampling/stacking.

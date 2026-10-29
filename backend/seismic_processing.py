@@ -173,6 +173,52 @@ def attributes(block, window=11):
                 rms=np.sqrt(ndimage.uniform_filter1d(block.samples ** 2, window, axis=1, mode="nearest")))
 
 
+def semblance_coherence(block, window=5):
+    """Local multi-trace semblance as a bounded coherence attribute."""
+    complete(block)
+    require(type(window) is int and window >= 1 and window % 2 == 1, "Use a positive odd coherence window.")
+    require(len(block.samples) >= 2, "Coherence needs at least two traces.")
+    x = block.samples
+    numerator = ndimage.uniform_filter1d(x.sum(axis=0) ** 2, window, mode="nearest")
+    denominator = ndimage.uniform_filter1d(len(x) * (x * x).sum(axis=0), window, mode="nearest")
+    return np.clip(np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator > 0), 0, 1)
+
+
+def dip_azimuth(block, trace_spacing):
+    """Local event dip (s/trace and s/m) from phase gradient; azimuth is 2D line sense ±1."""
+    complete(block)
+    spacing = finite_number(trace_spacing, "trace spacing", np.finfo(float).eps)
+    analytic = signal.hilbert(block.samples, axis=1)
+    phase = np.unwrap(np.angle(analytic), axis=1)
+    d_dt = np.gradient(phase, block.dt, axis=1)
+    d_dx = np.gradient(phase, spacing, axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dip = np.divide(-d_dx, d_dt, out=np.full_like(d_dt, np.nan), where=np.abs(d_dt) > 1e-12)
+    azimuth = np.sign(dip)
+    azimuth[~np.isfinite(dip)] = np.nan
+    return dict(dipSecondsPerMetre=dip, azimuthSense=azimuth)
+
+
+def spectral_decomposition(block, frequencies):
+    """Band-limited envelopes at reviewed centre frequencies (Morlet-style complex wavelet)."""
+    complete(block)
+    require(block.domain == "TWT", "Spectral decomposition requires TWT.")
+    freqs = np.asarray(frequencies, float)
+    require(freqs.ndim == 1 and 1 <= len(freqs) <= 64 and np.all(np.isfinite(freqs)) and np.all(freqs > 0), "Provide 1–64 positive frequencies.")
+    require(np.all(freqs < .5 / block.dt), "Frequencies must remain below Nyquist.")
+    t = np.arange(-32, 33) * block.dt
+    cubes = []
+    for f0 in freqs:
+        sigma = 1.0 / (2 * np.pi * f0)
+        wavelet = np.exp(-t ** 2 / (2 * sigma ** 2)) * np.exp(2j * np.pi * f0 * t)
+        wavelet /= np.sqrt(np.sum(np.abs(wavelet) ** 2)) + np.finfo(float).eps
+        band = np.empty(block.samples.shape)
+        for i, trace in enumerate(block.samples):
+            band[i] = np.abs(signal.convolve(trace, wavelet, mode="same"))
+        cubes.append(band)
+    return dict(frequencies=freqs.tolist(), envelopes=np.asarray(cubes))
+
+
 def dix_interval(times, rms):
     times, rms = np.asarray(times, float), np.asarray(rms, float)
     require(times.ndim == 1 and times.shape == rms.shape and len(times) >= 2, "Provide matching time/RMS velocity functions.")

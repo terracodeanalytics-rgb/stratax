@@ -1,4 +1,4 @@
-"""Owner-scoped Batch admission and shared review records for analytical graph previews."""
+"""Owner-scoped Cloud Run Jobs admission and shared review for analytical graph previews."""
 import json
 import os
 import time
@@ -63,8 +63,10 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
             value = json.loads(os.environ.get('STRATAX_SEISMIC_BATCH_PROFILE', '{}'))
         except ValueError:
             fail(503, 'batch_profile', 'The seismic compute profile requires administrator review.')
-        if not isinstance(value, dict) or not os.environ.get('STRATAX_SEISMIC_BATCH_ACCOUNT'):
-            fail(503, 'batch_unavailable', 'The seismic Batch service identity has not been commissioned. No job was submitted.')
+        if not isinstance(value, dict) or not (
+            os.environ.get('STRATAX_SEISMIC_BATCH_ACCOUNT') or os.environ.get('STRATAX_SEISMIC_WORKER_ACCOUNT')
+        ):
+            fail(503, 'batch_unavailable', 'The seismic Cloud Run worker identity has not been commissioned. No job was submitted.')
         return value
 
     def load_run(ref, rid):
@@ -137,10 +139,11 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         if not existing and quotation['expiresAtEpoch'] < time.time():
             fail(409, 'estimate_expired', 'Refresh the resource estimate before approval.')
         project_id = os.environ.get('GOOGLE_CLOUD_PROJECT', 'project-9afac')
-        region = os.environ.get('STRATAX_SEISMIC_BATCH_REGION', 'us-central1')
-        account = os.environ.get('STRATAX_SEISMIC_BATCH_ACCOUNT', '')
+        region = os.environ.get('STRATAX_SEISMIC_BATCH_REGION') or os.environ.get('STRATAX_SEISMIC_REGION', 'us-central1')
+        account = os.environ.get('STRATAX_SEISMIC_BATCH_ACCOUNT') or os.environ.get('STRATAX_SEISMIC_WORKER_ACCOUNT', '')
+        job = os.environ.get('STRATAX_SEISMIC_JOB', 'stratax-seismic-worker')
         if not account:
-            fail(503, 'batch_unavailable', 'The seismic Batch service identity is unavailable.')
+            fail(503, 'batch_unavailable', 'The seismic Cloud Run worker identity is unavailable.')
         request_path = f'stratax_projects/{user["uid"]}/records/{pid}/seismicRuns/{rid}'
 
         @firestore.transactional
@@ -178,6 +181,7 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
             record['seismicActiveRun'] = rid
             runtime['activeCount'] = runtime.get('activeCount', 0)+1
             runtime.setdefault('owners', {})[user['uid']] = runtime.get('owners', {}).get(user['uid'], 0)+1
+            dispatch = batch_request(project_id, region, account, request_path, rid, quotation, job_name=job)
             value = dict(id=rid, revision=1, status='queued', dispatchState='pending', createdAt=now(),
                          estimateId=body.estimateId, estimateFingerprint=body.estimateFingerprint, reservation=reservation,
                          idempotencyKey=body.idempotencyKey,
@@ -186,8 +190,7 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
                          selection=quotation['selection'], cancelRequested=False, settled=False,
                          restartRunId=body.restartRunId, restartCheckpoint=checkpoint,
                          runtimeReserved=True, ownerUid=user['uid'],
-                         jobName=f'projects/{project_id}/locations/{region}/jobs/{rid}',
-                         batchRequest=batch_request(project_id, region, account, request_path, rid, quotation))
+                         jobName=dispatch['job'], batchRequest=dispatch)
             tx.set(ref, record)
             tx.set(runtime_ref, runtime)
             tx.set(item, firestore_value(value))
@@ -196,13 +199,21 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         if run.get('settled') or run.get('cancelRequested') or run.get('dispatchState') != 'pending':
             return public_run(run)
         try:
-            response = provider().post(f'https://batch.googleapis.com/v1/projects/{project_id}/locations/{region}/jobs', params=dict(jobId=rid), json=run['batchRequest'], timeout=30)
-            if response.status_code not in (200, 201, 409):
+            response = provider().post(
+                f'https://run.googleapis.com/v2/{run["jobName"]}:run',
+                json={'overrides': run['batchRequest']['overrides']},
+                timeout=30,
+            )
+            if response.status_code not in (200, 201):
                 fail(503, 'batch_submission', 'Scheduling could not be confirmed. Retry this same submission key or cancel it; no duplicate job will be created.')
-            item.update(dict(dispatchState='submitted'))
+            payload = response.json() if callable(getattr(response, 'json', None)) else {}
+            if not isinstance(payload, dict):
+                payload = {}
+            metadata = payload.get('metadata') if isinstance(payload.get('metadata'), dict) else {}
+            item.update(dict(dispatchState='submitted', operation=payload.get('name'), execution=metadata.get('name')))
             run['dispatchState'] = 'submitted'
         except requests.RequestException:
-            fail(503, 'batch_submission', 'Scheduling is not confirmed. Retry this same submission key; the deterministic job identity prevents duplicate execution.')
+            fail(503, 'batch_submission', 'Scheduling is not confirmed. Retry this same submission key; the deterministic run identity prevents duplicate scientific writes.')
         return public_run(run)
 
     @app.get('/api/projects/{pid}/seismic/runs')
@@ -216,12 +227,20 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         item, run = load_run(ref, rid)
         if not run.get('settled'):
             try:
-                response = provider().get('https://batch.googleapis.com/v1/'+run['jobName'], timeout=20)
-                state = response.json().get('status', {}).get('state') if response.status_code == 200 else None
-                if state in ('FAILED', 'CANCELLED', 'SUCCEEDED') or response.status_code == 404 and run.get('cancelRequested'):
+                op = run.get('operation', '')
+                if re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/operations/[\w-]+', op or ''):
+                    response = provider().get('https://run.googleapis.com/v2/'+op, timeout=20)
+                    if response.status_code == 200 and response.json().get('done'):
+                        prefix = f'owners/{user["uid"]}/projects/{pid}/seismic/runs/{rid}/'
+                        actual = sum(blob.size or 0 for blob in storage.Client().list_blobs(run['input']['outputBucket'], prefix=prefix))
+                        # Worker settles successful runs; a done operation without settlement is a failed execution.
+                        current = restore_value(item.get().to_dict())
+                        if current and not current.get('settled'):
+                            run = settle(database(), ref, item, 'failed', actual, dict(error='The Cloud Run execution ended without a complete scientific result.'))
+                elif run.get('cancelRequested'):
                     prefix = f'owners/{user["uid"]}/projects/{pid}/seismic/runs/{rid}/'
                     actual = sum(blob.size or 0 for blob in storage.Client().list_blobs(run['input']['outputBucket'], prefix=prefix))
-                    run = settle(database(), ref, item, 'failed', actual, dict(error='The provider stopped before a complete scientific result was committed.'))
+                    run = settle(database(), ref, item, 'cancelled', actual)
             except requests.RequestException:
                 fail(503, 'run_status_pending', 'The provider status is temporarily unavailable; your run and storage reservation are retained.')
         return public_run(run)
@@ -242,13 +261,16 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         run = record_cancel(database().transaction())
         if run.get('settled'):
             return public_run(run)
+        execution = run.get('execution', '')
         try:
-            response = provider().delete('https://batch.googleapis.com/v1/'+run['jobName'], timeout=30)
+            if re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/jobs/[\w-]+/executions/[\w-]+', execution or ''):
+                response = provider().post('https://run.googleapis.com/v2/'+execution+':cancel', json={}, timeout=30)
+            else:
+                response = type('R', (), dict(status_code=404))()
         except requests.RequestException:
             fail(503, 'cancellation_pending', 'Cancellation is recorded; provider shutdown is not yet confirmed.')
         if response.status_code not in (200, 202, 404):
             fail(503, 'cancellation_pending', 'Cancellation is recorded; provider shutdown is not yet confirmed.')
-        # A missing provider job cannot write new artifacts; a live job settles on confirmed shutdown.
         if response.status_code == 404:
             prefix = f'owners/{user["uid"]}/projects/{pid}/seismic/runs/{rid}/'
             actual = sum(blob.size or 0 for blob in storage.Client().list_blobs(run['input']['outputBucket'], prefix=prefix))

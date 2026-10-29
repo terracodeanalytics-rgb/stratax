@@ -23,6 +23,18 @@ The exhaustive operation/case ledger is [SEISMIC_ACCEPTANCE.md](SEISMIC_ACCEPTAN
 
 No milestone has met its complete acceptance gate. This is an internal source checkpoint, not the complete programme or a production release.
 
+## 2026-10-29 programme-wide foundations continuation
+
+- Programme control: [SEISMIC_EVIDENCE.md](SEISMIC_EVIDENCE.md) evidence-bundle template; [scripts/configure-seismic.py](scripts/configure-seismic.py) Batch IAM/pricing dry-run (no job submit); [scripts/estimate-seismic-capacity.py](scripts/estimate-seismic-capacity.py) for M9.10–14 estimates; [scripts/qualify-seismic-reference.py](scripts/qualify-seismic-reference.py) reference receipts. Stratton swath SHA re-verified `3fa51c26…4808`.
+- M0 contracts: [backend/seismic_resources.py](backend/seismic_resources.py) survey/gather/angle/velocity/model/4D types with SI/domain guards; [backend/seismic_profiles.py](backend/seismic_profiles.py) Batch/acoustic profile catalog; execution capabilities expose operators + profiles.
+- M1: survey QC/binning/qualification ([backend/seismic_survey_qc.py](backend/seismic_survey_qc.py) + `/geometry/qualify`); inline/crossline/time/arbitrary slices ([backend/seismic_slices.py](backend/seismic_slices.py)); Cloud index partition manifests ([backend/seismic_cloud_index.py](backend/seismic_cloud_index.py)). CRS transform and hosted/provider acceptance still open.
+- M2–M3: ties/wavelets/misties ([backend/seismic_ties.py](backend/seismic_ties.py)); horizon grids/fault surfaces that refuse incompatible sticks ([backend/seismic_surfaces.py](backend/seismic_surfaces.py)); velocity conversions ([backend/seismic_velocity_work.py](backend/seismic_velocity_work.py)).
+- M4–M5: land mute/sweep-correlation/decon/statics/DMO/phase-shift migration ([backend/seismic_land.py](backend/seismic_land.py)); marine designature/deghost/swell/Radon/PSTM foundations ([backend/seismic_marine.py](backend/seismic_marine.py)); graph operators extended (mute, amplitude-balance, spike-decon, sweep-correlate).
+- M6–M8: coherence/dip/spectral decomposition attributes; model grid/well-block/export refusal ([backend/seismic_models_work.py](backend/seismic_models_work.py)); RTM/FWI step wrappers ([backend/seismic_rtm_work.py](backend/seismic_rtm_work.py)).
+- M9 foundations: 4D associate/difference/match ([backend/seismic_4d.py](backend/seismic_4d.py)); capacity estimate script. No 1 TiB/10 TiB run, no Batch `--apply`, no production promote.
+- Seismic execution is **Cloud Run Jobs + GCS only** (no standby). Capacity estimate: **750 job-hours** @ 4 vCPU/16 GiB (~**USD 367** compute + ~**USD 225**/mo GCS) — approval still required before spend. Mobil Line 12 candidate downloaded.
+- Verification this continuation: full backend **181 passed / 4 acoustic skips**; loopback seismic UI **10/10**. Production remains Sites v15 / API `stratax-api-00017-saf`. Every complete M0–M9 gate remains open; **no production promote until the ledger closes**.
+
 ## 2026-10-29 indexed traces and 3D continuation
 
 - See SEISMIC_INDEXED_3D.md for exact source contracts, limits, build reproduction/notices and candidate provenance. Existing import chunks now retain exact variable-trace locators/checksums and conservative bin bounds. Source/metadata generations and original headers are verified in API and Batch reads. Native newer-header fallback remains; source arrays are never regularised silently.

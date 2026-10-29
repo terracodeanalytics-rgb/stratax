@@ -24,7 +24,7 @@ Open: reviewed geometry/header-role resource, elevation/unit handling, trace cla
 ## Other investigated candidates
 
 - [Poland Line 001](https://wiki.seg.org/wiki/Poland_2D_Vibroseis_Line_001): public-domain land 2D with SPS/RPS/XPS. Published FreeUSP HTTPS endpoint failed to connect both inside and outside the restricted network; no source was downloaded from that endpoint.
-- [Mobil Viking Graben Line 12](https://wiki.seg.org/wiki/Mobil_AVO_viking_graben_line_12): unprocessed marine 2D and two wells; source download/header/amplitude-history qualification pending.
+- [Mobil Viking Graben Line 12](https://wiki.seg.org/wiki/Mobil_AVO_viking_graben_line_12): candidate marine 2D downloaded to ignored `.release/seismic-fixtures/mobil_viking/seismic.segy` (749,552,400 bytes; SHA-256 `64cbb49796b940717c57cddf5c7e0130b56df7061009a770565bdd0978cfccf3`) via `scripts/qualify-seismic-reference.py mobil-viking-line12`. Licence text, geometry/header review and amplitude-history qualification remain open before M0.07 / M5 acceptance.
 - [Penobscot](https://terranubis.com/datainfo/Penobscot): published prestack products are conditioned angle gathers and PSTM/NMO migrated gathers. They may support interpretation/QI after specific licence and amplitude-history checks; they cannot qualify raw streamer processing. The AGC stack is unsuitable as calibrated inversion input.
 - [NLOG](https://www.nlog.nl/en/seismic-data): raw 3D availability can require a request and quoted fees. No provider message, request or purchase has been made.
 

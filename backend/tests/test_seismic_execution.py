@@ -20,9 +20,10 @@ def graph():
 
 
 def profile():
-    return dict(image='us-central1-docker.pkg.dev/project/repo/worker@sha256:'+'a'*64, machineType='e2-standard-2', cpuMilli=2000,
-                memoryMib=8192, maxSeconds=900, bootDiskGib=10, vmHourlyUsd=.1, diskGibHourUsd=.0001,
-                priceAsOf='fixture-only-not-a-market-price', priceSource='independent test fixture')
+    return dict(image='us-central1-docker.pkg.dev/project/repo/worker@sha256:'+'a'*64, cpu=2,
+                memoryMib=8192, maxSeconds=900, vcpuSecondUsd=0.000024, memoryGibSecondUsd=0.0000025,
+                priceAsOf='fixture-only-not-a-market-price', priceSource='independent test fixture',
+                minInstances=0, standby=False, provider='cloud-run-jobs')
 
 
 def test_estimate_binds_inputs_limits_price_and_image():
@@ -31,17 +32,19 @@ def test_estimate_binds_inputs_limits_price_and_image():
     result = estimate(graph(), selection, dimensions, profile())
     assert result['outputShape'] == [3,64] and result['outputSampleInterval'] == .004
     assert result['checkpointReservationBytes'] > 0 and result['taskCount'] == 1
+    assert result['resources']['provider'] == 'cloud-run-jobs' and result['resources']['minInstances'] == 0
     assert estimate(graph(), selection | dict(sampleCount=100), dimensions, profile())['fingerprint'] != result['fingerprint']
-    assert estimate(graph(), selection, dimensions, profile() | dict(vmHourlyUsd=.2))['fingerprint'] != result['fingerprint']
+    assert estimate(graph(), selection, dimensions, profile() | dict(vcpuSecondUsd=.00005))['fingerprint'] != result['fingerprint']
     with pytest.raises(ValueError, match='retained source'):
         estimate(graph(), selection | dict(firstTrace=2), dimensions, profile())
     bad=graph();bad['nodes'][0].update(operator='bandpass', parameters=dict(low=5, high=300))
     with pytest.raises(ValueError, match='Nyquist'):
         estimate(bad, selection, dimensions, profile())
     request = batch_request('project', 'us-central1', 'worker@project.iam.gserviceaccount.com', 'safe/run', 'sx-test', result)
-    task=request['taskGroups'][0]['taskSpec']
-    assert task['maxRetryCount'] == 0 and task['maxRunDuration'] == '900s'
-    assert task['runnables'][0]['container']['commands'] == ['python','seismic_batch_worker.py']
+    assert request['provider'] == 'cloud-run-jobs'
+    assert request['job'].endswith('/jobs/stratax-seismic-worker')
+    assert request['overrides']['containerOverrides'][0]['env'][0]['name'] == 'STRATAX_SEISMIC_RUN'
+    assert request['resources']['minInstances'] == 0 and request['resources']['standby'] is False
 
 
 def test_checkpoint_restart_matches_uninterrupted_solution_and_rejects_mismatch():

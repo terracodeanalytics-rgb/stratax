@@ -16,6 +16,22 @@ OPERATORS = {
     "nmo": {"parameters": {"offsets": None, "velocity": None, "maxStretch": .3}, "required": ["offsets", "velocity"]},
     "stack": {"parameters": {"weights": None}, "required": []},
     "fk-filter": {"parameters": {"spacing": None, "minimumVelocity": None}, "required": ["spacing", "minimumVelocity"]},
+    "mute": {"parameters": {"top": None, "bottom": None, "taper": 0}, "required": []},
+    "amplitude-balance": {"parameters": {"window": None}, "required": []},
+    "spike-decon": {"parameters": {"operatorLength": 32, "noiseFloor": 0.001}, "required": []},
+    "sweep-correlate": {"parameters": {"sweep": None}, "required": ["sweep"]},
+    "residual-statics": {"parameters": {"maxLagSamples": 16}, "required": []},
+    "dmo": {"parameters": {"offsets": None, "midpointSpacing": None, "velocity": None}, "required": ["offsets", "midpointSpacing", "velocity"]},
+    "phase-shift-migration": {"parameters": {"velocity": None, "traceSpacing": None}, "required": ["velocity", "traceSpacing"]},
+    "designature": {"parameters": {"signature": None, "noiseFloor": 0.01}, "required": ["signature"]},
+    "deghost": {"parameters": {"ghostDelaySeconds": None, "reflectionCoeff": -1.0}, "required": ["ghostDelaySeconds"]},
+    "swell-noise": {"parameters": {"timeHighpassHz": None, "spaceHighpass": None}, "required": ["timeHighpassHz", "spaceHighpass"]},
+    "parabolic-radon": {
+        "parameters": {"offsets": None, "pMin": None, "pMax": None, "pCount": 64, "multiplePCut": None, "mutePrimary": True},
+        "required": ["offsets", "pMin", "pMax", "multiplePCut"],
+    },
+    "kirchhoff-pstm": {"parameters": {"offsets": None, "midpointSpacing": None, "velocity": None}, "required": ["offsets", "midpointSpacing", "velocity"]},
+    "kirchhoff-psdm": {"parameters": {"offsets": None, "midpointSpacing": None, "velocity": None}, "required": ["offsets", "midpointSpacing", "velocity"]},
 }
 
 
@@ -82,6 +98,56 @@ def validate_parameters(node):
     if node.operator == "fk-filter":
         number(p["spacing"], "trace spacing", 1e-12)
         number(p["minimumVelocity"], "minimum velocity", 1e-12)
+    if node.operator == "mute":
+        if p.get("top") is None and p.get("bottom") is None:
+            raise ValueError("Provide a top and/or bottom mute.")
+        number(p.get("taper", 0), "mute taper", 0)
+    if node.operator == "amplitude-balance" and p.get("window") is not None:
+        window = p["window"]
+        if not (isinstance(window, list) and len(window) == 2 and all(type(v) is int for v in window)):
+            raise ValueError("Amplitude-balance window must be [start, stop) sample indices.")
+    if node.operator == "spike-decon":
+        if type(p["operatorLength"]) is not int or not 3 <= p["operatorLength"] <= 256:
+            raise ValueError("Spike-decon operator length must be 3–256.")
+        number(p["noiseFloor"], "noise floor", 1e-12)
+    if node.operator == "sweep-correlate":
+        vector(p["sweep"], "supplied sweep")
+    if node.operator == "residual-statics":
+        if type(p["maxLagSamples"]) is not int or not 0 <= p["maxLagSamples"] <= 64:
+            raise ValueError("Residual-statics lag search must be 0–64 samples.")
+    if node.operator == "dmo":
+        vector(p["offsets"], "DMO offsets")
+        number(p["midpointSpacing"], "midpoint spacing", 1e-12)
+        number(p["velocity"], "DMO velocity", 1e-12)
+    if node.operator == "phase-shift-migration":
+        number(p["velocity"], "migration velocity", 1e-12)
+        number(p["traceSpacing"], "trace spacing", 1e-12)
+    if node.operator == "designature":
+        vector(p["signature"], "source signature")
+        number(p["noiseFloor"], "designature noise floor", 1e-12)
+    if node.operator == "deghost":
+        number(p["ghostDelaySeconds"], "ghost delay", 1e-12)
+        number(p["reflectionCoeff"], "reflection coefficient", -1.0)
+        if p["reflectionCoeff"] > 1.0:
+            raise ValueError("Reflection coefficient must be within -1 to 1.")
+    if node.operator == "swell-noise":
+        number(p["timeHighpassHz"], "time high-pass", 1e-12)
+        number(p["spaceHighpass"], "space high-pass", 0)
+    if node.operator == "parabolic-radon":
+        vector(p["offsets"], "Radon offsets")
+        number(p["pMin"], "minimum curvature")
+        number(p["pMax"], "maximum curvature")
+        if p["pMax"] < p["pMin"]:
+            raise ValueError("Radon curvature range must be non-decreasing.")
+        if type(p["pCount"]) is not int or not 4 <= p["pCount"] <= 256:
+            raise ValueError("Radon curvature sample count must be 4–256.")
+        number(p["multiplePCut"], "multiple curvature cut")
+        if type(p["mutePrimary"]) is not bool:
+            raise ValueError("mutePrimary must be boolean.")
+    if node.operator in ("kirchhoff-pstm", "kirchhoff-psdm"):
+        vector(p["offsets"], "migration offsets")
+        number(p["midpointSpacing"], "midpoint spacing", 1e-12)
+        number(p["velocity"], "migration velocity", 1e-12)
 
 
 def validate_graph(graph):
@@ -116,7 +182,11 @@ def validate_graph(graph):
         if any(node.parameters.get(k) is None for k in spec["required"]):
             raise ValueError(f"Provide required parameters for {node.operator}.")
         validate_parameters(node)
-        if node.operator in ("bandpass", "nmo", "fk-filter") and graph.domain != "TWT":
+        twt_only = (
+            "bandpass", "nmo", "fk-filter", "dmo", "phase-shift-migration",
+            "swell-noise", "parabolic-radon", "kirchhoff-pstm", "kirchhoff-psdm", "deghost",
+        )
+        if node.operator in twt_only and graph.domain != "TWT":
             raise ValueError(f"{node.operator} requires TWT seconds.")
         visit(node.input)
         visiting.remove(key)
@@ -135,6 +205,24 @@ def validate_graph(graph):
 
 def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value: None,
                   checkpoint=lambda value: None, resumed=None):
+    from seismic_land import (
+        amplitude_balance,
+        apply_residual_statics,
+        dmo_approximate,
+        mute,
+        poststack_phase_shift_migration,
+        residual_statics_shifts,
+        spiking_deconvolution,
+        supplied_sweep_correlation,
+    )
+    from seismic_marine import (
+        kirchhoff_psdm_constant_velocity,
+        kirchhoff_pstm_constant_velocity,
+        parabolic_radon_demultiple,
+        simple_deghost,
+        source_signature_designature,
+        swell_noise_attenuation,
+    )
     from seismic_processing import bandpass, detrend, fk_filter, nmo, resample, stack, static_shift
     if isinstance(graph, dict):
         graph = Graph(**graph)
@@ -173,6 +261,38 @@ def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value:
             result, _ = stack(b, p["weights"])
         elif operation == "fk-filter":
             result = fk_filter(b, p["spacing"], p["minimumVelocity"])
+        elif operation == "mute":
+            result = mute(b, p.get("top"), p.get("bottom"), p.get("taper", 0))
+        elif operation == "amplitude-balance":
+            window = p.get("window")
+            result = amplitude_balance(b, tuple(window) if window is not None else None)
+        elif operation == "spike-decon":
+            result = spiking_deconvolution(b, p["operatorLength"], p["noiseFloor"])
+        elif operation == "sweep-correlate":
+            result = supplied_sweep_correlation(b, p["sweep"])
+        elif operation == "residual-statics":
+            shifts, _ = residual_statics_shifts(b, p["maxLagSamples"])
+            result = apply_residual_statics(b, shifts)
+        elif operation == "dmo":
+            result = dmo_approximate(b, p["offsets"], p["midpointSpacing"], p["velocity"])
+        elif operation == "phase-shift-migration":
+            result = poststack_phase_shift_migration(b, p["velocity"], p["traceSpacing"])
+        elif operation == "designature":
+            result = source_signature_designature(b, p["signature"], p["noiseFloor"])
+        elif operation == "deghost":
+            result = simple_deghost(b, p["ghostDelaySeconds"], p["reflectionCoeff"])
+        elif operation == "swell-noise":
+            result = swell_noise_attenuation(b, p["timeHighpassHz"], p["spaceHighpass"])
+        elif operation == "parabolic-radon":
+            result = parabolic_radon_demultiple(
+                b, p["offsets"], p["pMin"], p["pMax"], p["pCount"], p["multiplePCut"], p["mutePrimary"],
+            )
+        elif operation == "kirchhoff-pstm":
+            result = kirchhoff_pstm_constant_velocity(b, p["offsets"], p["midpointSpacing"], p["velocity"])
+        elif operation == "kirchhoff-psdm":
+            result = kirchhoff_psdm_constant_velocity(b, p["offsets"], p["midpointSpacing"], p["velocity"])
+        else:
+            raise ValueError(f"The {operation} operator is not executable in this graph version.")
         values[node.id] = result
         consumers[node.input] -= 1
         if consumers[node.input] == 0:

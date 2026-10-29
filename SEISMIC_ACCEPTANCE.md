@@ -12,13 +12,13 @@ Evidence status vocabulary: **foundation** means some code or small-fixture evid
 | --- | --- | --- |
 | M0.01 | Complete operation and acceptance inventory | This ledger; every row still needs its completed evidence bundle |
 | M0.02 | Supported-format and header-mapping contracts | SEG-Y rev0/1 numeric encodings and SU bounded fixtures; ZGY/SGZ native imports retained; certify individual dialects |
-| M0.03 | Canonical versioned resources and SI units | Source/graph/interpretation foundations; distinct survey, gather/angle/velocity/model resource contracts pending |
-| M0.04 | Coordinate/datum, TWT/one-way/depth and velocity-type constraints | Unknown references retained; complete reviewed conversion contracts pending |
-| M0.05 | Frozen independent scientific fixtures and tolerances | Existing operator/inversion fixtures; complete imaging/model/4D manifests pending |
-| M0.06 | Legally usable raw land 2D and 3D field references | Candidate sources below; actual files, checksums and complete geometry not yet qualified |
-| M0.07 | Legally usable raw streamer 2D and 3D references | Candidate sources below; migrated gathers cannot qualify raw marine conditioning |
+| M0.03 | Canonical versioned resources and SI units | **foundation:** `seismic_resources.py` survey/gather/angle/velocity/model/4D contracts with SI/domain guards; acceptance pending hosted/resource round trips |
+| M0.04 | Coordinate/datum, TWT/one-way/depth and velocity-type constraints | **foundation:** DomainFrame/CoordinateFrame confirmation + `seismic_crs.py` refuse-without-engine; CRS transform acceptance pending |
+| M0.05 | Frozen independent scientific fixtures and tolerances | Existing operator/inversion fixtures; programme ops tests added; complete imaging/model/4D manifests pending |
+| M0.06 | Legally usable raw land 2D and 3D field references | Stratton swath retained+SHA verified; Poland still undownloaded; complete geometry qualification pending |
+| M0.07 | Legally usable raw streamer 2D and 3D references | **foundation:** Mobil Line 12 candidate downloaded (749,552,400 B, SHA `64cbb497…ccf3`); licence/geometry/amplitude-history qualification pending |
 | M0.08 | Dependency/compiler/container locks and notices | Aligned import/seismic builds pass 27/39 Linux checks; vtk.js/renderer locks and notices retained; MPI/OpenACC and model profiles/distribution qualification pending |
-| M0.09 | Per-method resource/storage/pricing profiles | Bounded preview estimate contract tested; live pricing and commissioned infrastructure pending |
+| M0.09 | Per-method resource/storage/pricing profiles | **foundation:** `seismic_profiles.py` + dry-run `configure-seismic.py` profile for digest `cfe45af5…bdd4`; live IAM `--apply` and commissioned infrastructure pending |
 
 ## M1 — survey foundation and workspaces
 
@@ -30,11 +30,11 @@ Evidence status vocabulary: **foundation** means some code or small-fixture evid
 | M1.04 | Resumable large import, unchanged originals and source lineage | Existing resumable import foundation; target-scale indexing/restart pending |
 | M1.05 | Full header/trace indexing, irregular geometry, missing bins and duplicates | SQLite/import-chunk exact locators, SHA checks and bounded bin lookup; distributed/full-survey field qualification pending |
 | M1.06 | Variable trace lengths, intervals, origins and masks | Ragged Zarr/local field storage and owner-scoped Cloud trace API foundations; variable-index geometry preview passes; actual hosted/scale acceptance pending |
-| M1.07 | Reviewed source/receiver geometry, binning, CRS and datum revisions | Explicit source-bound declarations/immutable revisions and variable-layout native-header preview; full survey validation/binning/CRS transformation pending |
-| M1.08 | Incremental sharded Zarr analytical storage and separate labelled pyramids | Local fixed/ragged stores and fixed-trace display levels; Cloud multi-partition qualification pending |
+| M1.07 | Reviewed source/receiver geometry, binning, CRS and datum revisions | **foundation:** `seismic_survey_qc.py` + `/geometry/qualify`; CRS transform still pending explicit engine |
+| M1.08 | Incremental sharded Zarr analytical storage and separate labelled pyramids | Local fixed/ragged stores; **foundation:** `seismic_cloud_index.py` partition manifests; Cloud multi-partition qualification pending |
 | M1.09 | Bounded trace sections and gathers | Native indexed ragged traces, compatible sections and preview outputs; semantic shot/CDP/angle gather selection pending |
-| M1.10 | Inlines, crosslines and time/depth slices | Pending indexed multidimensional view path |
-| M1.11 | Arbitrary sections and linked map/cursor coordinates | Pending reviewed coordinate sampling and maps |
+| M1.10 | Inlines, crosslines and time/depth slices | **foundation:** `seismic_slices.py` extractors; hosted indexed volume path pending |
+| M1.11 | Arbitrary sections and linked map/cursor coordinates | **foundation:** arbitrary IJ section sampler; physical map/cursor linkage pending |
 | M1.12 | Genuine GPU-backed 3D scenes with locally bundled vtk.js | Bounded native poststack 3D amplitude workbooks/rendering/camera/export pass loopback browser fixture; physical coordinates/complete hosted field acceptance pending |
 | M1.13 | Source browser, context properties, status, loading/error/WebGL recovery | 2D/processing/3D foundations; forced WebGL loss/reload passes; complete programme acceptance pending |
 | M1.14 | Graph data-type/domain/geometry validation and immutable versions | Seven-operator graph foundation; complete programme operator contracts pending |
@@ -50,28 +50,28 @@ Evidence status vocabulary: **foundation** means some code or small-fixture evid
 
 | ID | Required case | Current evidence / remaining qualification |
 | --- | --- | --- |
-| M2.01 | Checkshot/sonic calibration with explicit units/datum and monotonicity QC | Numerical foundations; full tie workbook pending |
-| M2.02 | Constrained time–depth edits and bulk shifts | Pending complete reviewed edit path |
-| M2.03 | Wavelet import, creation and extraction/assessment | Ricker foundation; import/extraction/calibration workflow pending |
+| M2.01 | Checkshot/sonic calibration with explicit units/datum and monotonicity QC | Numerical `time_depth`; **foundation:** `seismic_ties.py`; full tie workbook pending |
+| M2.02 | Constrained time–depth edits and bulk shifts | **foundation:** `stretch_squeeze_piecewise` / `tie_bulk_shift`; UI workbook pending |
+| M2.03 | Wavelet import, creation and extraction/assessment | Ricker + **foundation:** Wiener extract; import/calibration workbook pending |
 | M2.04 | Synthetics, nearby seismic comparison, residuals and tie review | Synthetic foundation; complete calibrated workbook pending |
 | M2.05 | Manual horizon picks, movement/deletion/locks, tables and undo/redo | Bounded 2D browser foundation; 3D/survey coordinate integration pending |
 | M2.06 | Peak/trough/zero-crossing assisted tracking, reviewed seeds and barriers | Bounded 2D proposals preserve locked/manual picks; 3D propagation and independent cases pending |
 | M2.07 | Tracking stop conditions, support and proposal acceptance | 2D correlation/support tests; full survey qualification pending |
-| M2.08 | Ordered fault sticks and reviewed fault surfaces | 2D sticks foundation; surface/topology workflow pending |
-| M2.09 | Well/line/survey mistie QC | Pending |
-| M2.10 | Interpretation maps, flattening, persistence and independent table/mesh export | Section CSV/JSON foundation; full maps/meshes/round trips pending |
+| M2.08 | Ordered fault sticks and reviewed fault surfaces | **foundation:** `fault_surface_from_sticks` refuses incompatible topology; hosted surface workflow pending |
+| M2.09 | Well/line/survey mistie QC | **foundation:** `mistie_table` / `mistie_residuals`; survey acceptance pending |
+| M2.10 | Interpretation maps, flattening, persistence and independent table/mesh export | Section CSV/JSON + mesh JSON export foundation; full maps/round trips pending |
 
 ## M3 — velocity and geological frameworks
 
 | ID | Required case | Current evidence / remaining qualification |
 | --- | --- | --- |
-| M3.01 | Velocity functions/cubes with explicit interval/RMS/average types | Pending full resource/workbook path |
-| M3.02 | Explicit RMS-to-interval and other supported conversions with invalid support | Dix numerical foundation; complete conversion workflow pending |
-| M3.03 | Velocity/well calibration and reviewed revisions | Pending |
-| M3.04 | Time-to-depth/depth-to-time conversion with reference/datum handling | Time–depth foundation; spatial conversion/maps pending |
-| M3.05 | Fault-block-aware surfaces retaining discontinuities | Pending |
+| M3.01 | Velocity functions/cubes with explicit interval/RMS/average types | **foundation:** `VelocityResource` contracts; workbook path pending |
+| M3.02 | Explicit RMS-to-interval and other supported conversions with invalid support | **foundation:** `seismic_velocity_work.convert_velocity`; hosted workflow pending |
+| M3.03 | Velocity/well calibration and reviewed revisions | Pending complete revisioned velocity workbook |
+| M3.04 | Time-to-depth/depth-to-time conversion with reference/datum handling | **foundation:** `apply_time_depth_volume`; spatial maps pending |
+| M3.05 | Fault-block-aware surfaces retaining discontinuities | Pending (surfaces refuse topology invention) |
 | M3.06 | Zones/layers and truncation/pinchout relationships | Pending |
-| M3.07 | Thickness, structural closures and uncertainty maps | Pending |
+| M3.07 | Thickness, structural closures and uncertainty maps | **foundation:** `thickness_map`; closures/uncertainty pending |
 
 ## M4 — conventional land processing
 
