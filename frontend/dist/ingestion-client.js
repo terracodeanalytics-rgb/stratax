@@ -13,11 +13,11 @@ export async function browserRead(file,family,options,{previewOnly=true,onChunk,
  });
 }
 
-export async function resumableUpload(file,url,{signal,progress}={}){
+export async function resumableUpload(file,url,{signal,progress,checkScope=()=>{}}={}){
  const size=file.size,chunkSize=8*1024*1024;
- async function offset(){const response=await fetch(url,{method:'PUT',headers:{'Content-Range':`bytes */${size}`},body:new Blob(),signal});if(response.ok)return size;if(response.status===308){const range=response.headers.get('Range');return range?Number(range.split('-')[1])+1:0;}throw new Error('This upload session expired. Restart the transfer; the original on your device is unchanged.');}
+ async function offset(){checkScope();const response=await fetch(url,{method:'PUT',headers:{'Content-Range':`bytes */${size}`},body:new Blob(),signal});if(response.ok)return size;if(response.status===308){const range=response.headers.get('Range');return range?Number(range.split('-')[1])+1:0;}throw new Error('This upload session expired. Restart the transfer; the original on your device is unchanged.');}
  let position=await offset();
- while(position<size){const end=Math.min(size,position+chunkSize);let response;
+ while(position<size){checkScope();const end=Math.min(size,position+chunkSize);let response;
   try{response=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/octet-stream','Content-Range':`bytes ${position}-${end-1}/${size}`},body:file.slice(position,end),signal});}
   catch(error){if(signal?.aborted)throw error;await new Promise(r=>setTimeout(r,1000));position=await offset();continue;}
   if(response.status===308){const range=response.headers.get('Range');position=range?Number(range.split('-')[1])+1:end;}else if(response.ok)position=size;else if([408,429,500,502,503,504].includes(response.status)){await new Promise(r=>setTimeout(r,1500));position=await offset();}else throw new Error('The file transfer was rejected. Reopen this import to resume or start a new transfer.');
@@ -27,15 +27,18 @@ export async function resumableUpload(file,url,{signal,progress}={}){
 
 export async function loadCloud(project){return api(`/api/projects/${project.id}/imports`);}
 export async function nativeImport(project,files,family,options,{signal,onProgress,onSession}={}){
- const result=await api(`/api/projects/${project.id}/imports`,{method:'POST',body:{family,files:files.map(a=>({name:a.file.name,size:a.file.size,existing_id:a.existingId||null})),options}});
+ const ownerUid=session.user?.uid,checkScope=()=>{if(session.user?.uid!==ownerUid)throw new Error('The signed-in account changed. The import was stopped.');},call=(path,options={})=>api(path,{...options,ownerUid});
+ checkScope();
+ const result=await call(`/api/projects/${project.id}/imports`,{method:'POST',body:{family,files:files.map(a=>({name:a.file.name,size:a.file.size,existing_id:a.existingId||null})),options}});
  onSession?.(result);
- for(const asset of result.assets){if(signal?.aborted)throw new DOMException('Cancelled','AbortError');const original=files.find(a=>a.file.name===asset.name);if(!asset.existing){const transfer=await api(`/api/projects/${project.id}/imports/${result.id}/upload/${asset.id}`,{method:'POST',body:{}});if(!transfer.stored)await resumableUpload(original.file,transfer.upload_url,{signal,progress:p=>onProgress?.(`${asset.name} · ${Math.round(p.loaded/p.total*100)}% uploaded`)});await api(`/api/projects/${project.id}/imports/${result.id}/complete/${asset.id}`,{method:'POST',body:{}});}}
- await api(`/api/projects/${project.id}/imports/${result.id}/inspect`,{method:'POST',body:{}});
+ for(const asset of result.assets){if(signal?.aborted)throw new DOMException('Cancelled','AbortError');const original=files.find(a=>a.file.name===asset.name);if(!asset.existing){const transfer=await call(`/api/projects/${project.id}/imports/${result.id}/upload/${asset.id}`,{method:'POST',body:{}});if(!transfer.stored)await resumableUpload(original.file,transfer.upload_url,{signal,checkScope,progress:p=>onProgress?.(`${asset.name} · ${Math.round(p.loaded/p.total*100)}% uploaded`)});await call(`/api/projects/${project.id}/imports/${result.id}/complete/${asset.id}`,{method:'POST',body:{}});}}
+ await call(`/api/projects/${project.id}/imports/${result.id}/inspect`,{method:'POST',body:{}});
+ checkScope();
  return pollImport(project,result.id,{signal,onProgress});
 }
 export async function pollImport(project,id,{signal,onProgress}={}){
- let delay=1500;
- for(let attempt=0;attempt<900;attempt++){if(signal?.aborted)throw new DOMException('Cancelled','AbortError');const result=await api(`/api/projects/${project.id}/imports/${id}`);onProgress?.(result.status==='inspecting'?'Inspecting retained originals…':result.status);if(!['inspecting','importing'].includes(result.status))return result;await new Promise(resolve=>setTimeout(resolve,delay));delay=Math.min(5000,delay+250);}
+ const ownerUid=session.user?.uid;let delay=1500;
+ for(let attempt=0;attempt<900;attempt++){if(signal?.aborted)throw new DOMException('Cancelled','AbortError');const result=await api(`/api/projects/${project.id}/imports/${id}`,{ownerUid});onProgress?.(result.status==='inspecting'?'Inspecting retained originals…':result.status);if(!['inspecting','importing'].includes(result.status))return result;await new Promise(resolve=>setTimeout(resolve,delay));delay=Math.min(5000,delay+250);}
  throw new Error('Inspection is still running. You can reopen it from Import history.');
 }
 export async function commitNative(project,record,acknowledgeWarnings,templateName,replaceId,selection={}){return api(`/api/projects/${project.id}/imports/${record.id}/commit`,{method:'POST',body:{revision:record.revision,acknowledge_warnings:acknowledgeWarnings,template_name:templateName||null,replace_dataset_id:replaceId||null,...selection}});}

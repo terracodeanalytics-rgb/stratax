@@ -20,11 +20,13 @@ export function rememberChoice(){return localGet('stratax.keepSignedIn')!=='0';}
 export function hasActionLink(){return new URLSearchParams(location.search).has('oobCode');}
 export function clearActionLink(){history.replaceState(null,'',location.pathname+'#email-action');}
 
-export async function api(path,{method='GET',body,authenticated=true}={}){
+export async function api(path,{method='GET',body,authenticated=true,ownerUid}={}){
   const headers = {'Content-Type':'application/json'};
-  if(authenticated){if(!session.user)throw new Error('Sign in to continue.');headers.Authorization='Bearer '+await session.user.getIdToken();}
+  const actor=session.user,expected=ownerUid??actor?.uid;
+  if(authenticated){if(!actor)throw new Error('Sign in to continue.');if(actor.uid!==expected)throw new Error('The signed-in account changed. Reopen this operation in the intended account.');headers.Authorization='Bearer '+await actor.getIdToken();if(session.user?.uid!==expected)throw new Error('The signed-in account changed. The operation was stopped.');}
   const response=await fetch(API_ORIGIN+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',referrerPolicy:'no-referrer'});
   const data=await response.json().catch(()=>({}));
+  if(authenticated&&session.user?.uid!==expected)throw new Error('The signed-in account changed. The previous response was not applied.');
   if(!response.ok){const error=new Error(data.message||'StrataX is temporarily unavailable. Please try again.');error.code=data.code;throw error;}
   return data;
 }

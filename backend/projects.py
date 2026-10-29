@@ -90,6 +90,8 @@ def install_projects(app, database, current_user, fail, acceptance_current):
             old = restore_value(ref.get(transaction=transaction).to_dict())
             if (old or {}).get("revision", 0) != body.revision:
                 fail(409, "project_conflict", "This project changed elsewhere. Reopen it before saving; your pending changes remain on this device.")
+            if (old or {}).get('seismicActiveRun') and clean['status'] != 'Active':
+                fail(409, 'seismic_run_active', 'Cancel or finish the active seismic run before archiving or removing this project.')
             workspace = dict(body.workspace)
             # Stored source metadata can only be added by the upload endpoint.
             workspace["files"] = (old or {}).get("workspace", {}).get("files", [])

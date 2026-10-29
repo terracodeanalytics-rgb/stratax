@@ -6,22 +6,33 @@ One complete production release is required. Internal source checkpoints are not
 
 ## Acceptance ledger
 
+The exhaustive operation/case ledger is [SEISMIC_ACCEPTANCE.md](SEISMIC_ACCEPTANCE.md). The milestone table below is a summary, not an alternative acceptance inventory. All complete milestone gates remain open.
+
 | Milestone | Acceptance | Status |
 | --- | --- | --- |
 | M0 | Source/operation contracts, reproducible fixtures, numerical tolerances and resource profiles | In progress |
-| M1 | Immutable survey indexing, analytical storage and bounded persistent viewer | In progress: bounded original reader, local native index and independent 2D workbook; large Cloud indexing/3D pending |
+| M1 | Immutable survey indexing, analytical storage and bounded persistent viewer | In progress: Processing/Interpretation navigation and modes, revisioned graphs, bounded Batch control/worker source, ragged local indexing/storage and independent 2D books; Cloud indexing/3D/provider commissioning pending |
 | M2 | Well calibration, manual/assisted horizon/fault interpretation, export/reload | In progress: manual horizon/fault sticks and reviewed section tracking; full well ties and surfaces pending |
 | M3 | Reviewed velocity conversion, structural framework, maps and uncertainty | Numerical Dix/time–depth foundations only; complete workflow pending |
-| M4 | Actual land shot records through reviewed processing graph and image | Numerical trace operators and graph validator only; hosted execution/field case pending |
+| M4 | Actual land shot records through reviewed processing graph and image | Bounded graph execution/approval/review source and local integration fixture; full processing/field image pending |
 | M5 | Actual 2D/3D marine correction, demultiple and prestack imaging | Pending |
 | M6 | AVO/inversion and independently evaluated property predictions | Numerical Shuey and matrix-free post/prestack inversion only; hosted quantitative workspace/field comparison pending |
 | M7 | Validated faulted grids/properties and interoperable model exports | Pending |
-| M8 | Acoustic 2D/3D RTM/FWI, adjoint/gradient and declared-scale checks | Pending |
+| M8 | Acoustic 2D/3D RTM/FWI, adjoint/gradient and declared-scale checks | Small compiled 2D/3D acoustic adapter adjoint/Taylor qualification passes; RTM/FWI application, MPI/GPU and field workflows pending |
 | M9 | 4D signal preservation, all integration/capacity gates, hosted acceptance | Numerical stable-mask gain/lag matching and repeatability only; integrated workflow pending |
 
 No milestone has met its complete acceptance gate. This is an internal source checkpoint, not the complete programme or a production release.
 
-## 2026-10-29 implementation checkpoint
+## 2026-10-29 continued implementation
+
+- Added `#processing` between Map and the single Interpretation entry. Mixed projects expose Petrophysics/Seismic mode controls; seismic, processing and petrophysics keep separate state. Processing books have an editable graph/ribbon/source browser/properties and persisted revisions, source/domain/amplitude requirements, explicit Local-to-Cloud copy and scope guards for account/project changes.
+- Added version-bound resource estimates/approval, idempotent Batch submission, cancellation/reconciliation, bounded checkpoint restart, private result/provenance retrieval and shared review into independent downstream dataset versions. Existing quotas/small workers remain intact. The executable hosted capability is limited to a configured bounded preview profile; there is no commissioned production profile. The loopback integration fixture runs the actual scientific worker with fake provider/identity/storage boundaries; it is not a real hosted Batch acceptance.
+- Added full variable-length trace/header SQLite indexing and sharded ragged analytical arrays. A real 1.67 GB Stratton raw swath completes local analytical storage and independent sample comparisons; its geometry needs reviewed header roles/units/auxiliary classification. See SEISMIC_REFERENCES.md. Cloud field indexing and bounded survey map/slice/3D services remain open.
+- Added an SI-facing Devito acoustic adapter with explicit geometry, fixed stability-bounded time step, bounded saved-wavefield allocation, source/Born adjoints and objective gradient. Four compiled tests pass in actual 2D/3D on frozen small fixtures. This is not complete RTM/FWI orchestration or field acceptance. Exact images/compiler/source obligations are in backend/SEISMIC_NOTICES.md.
+- Latest verification: 156 backend tests pass, four acoustic tests skip on Windows and separately pass in the pinned Linux image; 12 JavaScript model/account tests; nine seismic browser groups including actual loopback processing/review/downstream use; existing six-LAS regression passes 17 groups/57 configurations. Browser suites report zero page errors/content uploads and unchanged LAS hashes.
+- All M0–M9 complete gates remain open. No complete production release, signed-in hosted seismic acceptance or populated 1 TiB/10 TiB benchmark has occurred. Production remains Sites v15 / API revision 17. Existing quotas were not raised; no large run was approved or dispatched.
+
+## Earlier source checkpoint 352c335
 
 - `#seismic` is independent of the existing petrophysics canvas. It reuses project storage/authentication and branded controls, with searchable retained sources, up to four resizable sections, exact source-index picks, locks/table editing, ordered fault sticks, undo/redo, named workbook versions and real CSV/JSON exports. Source samples never enter saved workspace JSON. Cursor linking is restricted to matching retained source versions while shared survey datums remain unconfirmed.
 - Local and owner-scoped Cloud section readers access the retained SEG-Y/SU original in bounded ranges, not importer previews. The new direct adapter explicitly supports fixed-length rev 0/1 layouts and the tested numeric encodings. Existing native ZGY/SGZ import support remains; those formats and variable layouts are not supported by this new direct section route.
@@ -39,7 +50,7 @@ No milestone has met its complete acceptance gate. This is an internal source ch
 - A sparse logical-array test is not a 1 TiB capacity demonstration. No 1 TiB volume, 10 TiB prestack project, field migration, RTM/FWI, faulted-grid export or integrated 4D acceptance has run. No large compute spending was approved or started.
 - No API/worker/Sites deployment, account change, production promotion or partial release. Production remains Sites v15 / API `stratax-api-00017-saf`. Hosted signed-in acceptance of the new workspace has not occurred.
 
-Next required work: complete survey contracts/reference manifests and Cloud indexing with variable trace metadata, reviewed geometry/domains, bounded map/slice/3D access and persistent resource payloads; commission Batch estimates/approval/checkpointed execution; then finish the remaining M2–M9 workflows and their independent field/scale acceptance. Existing 10 GiB/file, 50 GiB/project and small-worker quotas were not raised. Do not convert these numerical foundations into claims that the full programme is implemented.
+Next required work: finish Cloud indexing with variable trace metadata, reviewed geometry/domains, bounded map/slice/3D access and persistent resource payloads; commission and independently test the implemented bounded Batch control/worker path with current prices/IAM; finish all remaining M2–M9 application workflows and independent field/scale acceptance. Resolve legacy seismic shortcuts while preserving their existing configurations/results. Existing 10 GiB/file, 50 GiB/project and small-worker quotas were not raised. Do not convert numerical foundations or source checkpoints into full-programme completion claims.
 
 ## Required verification
 

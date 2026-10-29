@@ -89,6 +89,27 @@ def test_graph_executes_validated_steps_without_mutation():
         execute_graph(graph(ds), source, cancelled=lambda:True)
 
 
+def test_graph_persistence_ownership_revisions_and_staleness():
+    db, ds = fixture()
+    main.app.dependency_overrides[main.current_user] = lambda: dict(uid='owner')
+    try:
+        with patch.object(main, '_db', db), patch.object(seismic_api.firestore, 'transactional', lambda f:f):
+            client = TestClient(main.app)
+            body = graph(ds)
+            saved = client.put('/api/projects/project/seismic/graphs/graph-one', json=body)
+            assert saved.status_code == 200, saved.text
+            assert saved.json()['graph']['revision'] == 1
+            assert client.get('/api/projects/project/seismic/graphs/graph-one').json()['fingerprint'] == saved.json()['fingerprint']
+            assert len(client.get('/api/projects/project/seismic/graphs').json()['graphs']) == 1
+            assert client.put('/api/projects/project/seismic/graphs/graph-one', json=body).status_code == 409
+            ds['parserVersion'] = 'changed'
+            assert client.put('/api/projects/project/seismic/graphs/graph-two', json=body).status_code == 409
+            main.app.dependency_overrides[main.current_user] = lambda: dict(uid='other')
+            assert client.get('/api/projects/project/seismic/graphs/graph-one').status_code == 404
+    finally:
+        main.app.dependency_overrides.clear()
+
+
 def test_api_ownership_workflow_source_versions_and_pick_conflicts():
     db, ds = fixture()
     client = TestClient(main.app)

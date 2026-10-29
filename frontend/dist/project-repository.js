@@ -1,4 +1,5 @@
 import {api, session, API_ORIGIN} from './auth.js';
+import {remapSeismicCopy} from './seismic-transfer.js';
 
 const handles = new Map();
 let activeUid = null;
@@ -162,20 +163,25 @@ export async function linkOriginal(project,handle){if(project.storage!=='local')
 export async function copyToCloud(project,workspace,name,onProgress=()=>{}){
   if(project.storage==='cloud')throw new Error('This project is already stored in Cloud.');
   if(!name.trim()||name.length>100)throw new Error('Enter a Cloud project name up to 100 characters.');
+  const ownerUid=session.user?.uid,checkScope=()=>{if(!ownerUid||session.user?.uid!==ownerUid)throw new Error('The signed-in account changed. The copy was stopped.');};
+  checkScope();
   const {nativeImport,commitNative}=await import('./ingestion-client.js');
   const copy={...structuredClone(project),id:id(),name:name.trim(),storage:'cloud',status:'Active',revision:0,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   delete copy.directoryName;delete copy.pendingSave;
   const context=structuredClone(workspace);context.project=copy.name;context.files=[];delete context.ingestion;
   if(context.interpretation){for(const w of context.interpretation.windows||[]){delete w.runId;delete w.configurationId;delete w.configurationRevision;}}
   let record=await save(copy,context);copy.revision=record.revision;
+  checkScope();
   onProgress('Cloud copy created. Retaining originals…');
   const datasetIds={},sourceIds={};let completed=0;
   try{
     for(const original of workspace.files||[]){
       const blob=await source(project,original),file=new File([blob],original.name,{type:blob.type});
+      checkScope();
       const previous=workspace.ingestion?.imports?.find(r=>r.assets?.some(a=>a.id===original.id));
-      const family=previous?.family||'documents',options=structuredClone(previous?.options||{});
+      const family=previous?.family||(workspace.ingestion?.datasets||[]).find(d=>d.sourceId===original.id)?.family||'documents',options=structuredClone(previous?.options||{});
       const imported=await nativeImport(copy,[{file}],family,options,{onProgress:text=>onProgress(`${completed+1}/${workspace.files.length} · ${text}`)});
+      checkScope();
       sourceIds[original.id]=imported.assets[0].id;
       const oldActive=(workspace.ingestion?.datasets||[]).filter(d=>d.sourceId===original.id&&d.active!==false);
       const chosen=(imported.datasets||[]).filter(d=>oldActive.some(old=>old.name===d.name&&old.rowCount===d.rowCount));
@@ -184,11 +190,14 @@ export async function copyToCloud(project,workspace,name,onProgress=()=>{}){
       completed++;onProgress(`${completed}/${workspace.files.length} originals retained in Cloud.`);
     }
     record=await load(copy);copy.revision=record.revision;
+    checkScope();
     for(const w of context.interpretation?.windows||[]){if(w.datasetId)w.datasetId=datasetIds[w.datasetId]||'';for(const b of Object.values(w.bindings||{})){b.datasetId=datasetIds[b.datasetId]||'';b.confirmed=false;}}
     for(const note of context.interpretation?.annotations||[])if(note.datasetId)note.datasetId=datasetIds[note.datasetId]||null;
+    for(const b of context.interpretation?.board?.books||[])for(const well of b.wells||[])for(const track of well.tracks||[])for(const curve of track.curves||[])curve.datasetId=datasetIds[curve.datasetId]||curve.datasetId;
+    if(context.seismicWorkspace||context.seismicProcessing){const resources=copy.workflows.includes('seismic')?await api(`/api/projects/${copy.id}/seismic`,{ownerUid}):{sources:[]};checkScope();remapSeismicCopy(context,workspace,datasetIds,resources.sources,project.id);}
     context.files=record.workspace.files;
     context.audit||=[];context.audit.unshift({action:'Created independent Cloud copy from Local originals',time:new Date().toISOString()});
     record=await save(copy,context);
     return record;
-  }catch(error){throw new Error(`Cloud copy “${copy.name}” retains ${completed} completed source transfers and is available in My projects. Your Local project is unchanged. ${error.message}`);}
+  }catch(error){checkScope();throw new Error(`Cloud copy “${copy.name}” retains ${completed} completed source transfers and is available in My projects. Your Local project is unchanged. ${error.message}`);}
 }

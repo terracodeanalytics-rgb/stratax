@@ -4,10 +4,52 @@ This adapter certifies fixed-length rev 0/1 layouts. It never substitutes import
 """
 import math
 import struct
+import gzip
+import hashlib
+import io
+import json
 
 
 class SectionError(ValueError):
     pass
+
+
+def read_preview(manifest, load_chunk, *, first_trace=0, trace_count=128, first_sample=0, sample_count=1000):
+    need(manifest.get('format') == 'seismic-trace-preview/v1' and manifest.get('complete') is True, 'This analytical result is incomplete.')
+    need(all(type(v) is int for v in (first_trace, trace_count, first_sample, sample_count)) and first_trace >= 0 and first_sample >= 0 and 1 <= trace_count <= 512 and 1 <= sample_count <= 4096 and trace_count*sample_count <= 2_000_000,
+         'Choose a bounded analytical result section.')
+    need(first_trace+trace_count <= manifest['traceCount'] and first_sample+sample_count <= manifest['samplesPerTrace'], 'This section exceeds the calculated result.')
+    rows = []
+    expected_trace = 0
+    for chunk in manifest['chunks']:
+        need(type(chunk['firstTrace']) is int and type(chunk['traceCount']) is int and chunk['firstTrace'] == expected_trace and 1 <= chunk['traceCount'] <= 16,
+             'Analytical chunks must retain ordered, non-overlapping trace support.')
+        expected_trace += chunk['traceCount']
+    need(expected_trace == manifest['traceCount'], 'Analytical chunk support does not match its manifest.')
+    for chunk in manifest['chunks']:
+        start, stop = chunk['firstTrace'], chunk['firstTrace']+chunk['traceCount']
+        if stop <= first_trace or start >= first_trace+trace_count:
+            continue
+        raw = load_chunk(chunk['path'])
+        need(len(raw) <= 2*1024**2 and hashlib.sha256(raw).hexdigest() == chunk['sha256'], 'An analytical chunk exceeded its budget or changed checksum.')
+        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as stream:
+            expanded = stream.read(4*1024**2+1)
+        need(len(expanded) <= 4*1024**2, 'An analytical chunk exceeded its expanded-byte budget.')
+        values = json.loads(expanded)
+        need(len(values) == chunk['traceCount'], 'Analytical chunk trace count changed.')
+        for t in range(max(start, first_trace), min(stop, first_trace+trace_count)):
+            row = values[t-start]
+            need(len(row) == manifest['samplesPerTrace'], 'Analytical sample counts changed.')
+            picked = row[first_sample:first_sample+sample_count]
+            need(all(v is None or type(v) in (int, float) and math.isfinite(v) for v in picked), 'Analytical samples contain unsupported values.')
+            rows.append(picked)
+    need(len(rows) == trace_count, 'The selected result has missing or duplicate chunk support.')
+    start = manifest['sampleStart']+first_sample*manifest['sampleInterval']
+    return dict(samples=rows, traceHeaders=manifest['traceHeaders'][first_trace:first_trace+trace_count],
+                traceCount=manifest['traceCount'], samplesPerTrace=manifest['samplesPerTrace'], sampleInterval=manifest['sampleInterval'],
+                sampleStarts=[start]*trace_count, sampleStart=start, firstTrace=first_trace, firstSample=first_sample,
+                level=0, displayOnly=False, analytical=True, axisUnit='s', sourceDomain=manifest['domain'],
+                history=manifest.get('history', []), adapter='processed-analytical-traces/v1')
 
 
 def need(condition, message):

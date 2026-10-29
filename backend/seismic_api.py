@@ -4,6 +4,7 @@ import os
 import re
 import logging
 import math
+import hashlib
 from typing import Literal
 
 from fastapi import Depends
@@ -13,7 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from scientific_api import fingerprint, firestore_value, now, restore_value
 from seismic_graph import Graph, OPERATORS, VERSION, validate_graph
-from seismic_reader import SectionError, read_section
+from seismic_reader import SectionError, read_section, read_preview
+from seismic_execution import execution_capabilities
 
 
 class TrackingSettings(BaseModel):
@@ -87,9 +89,10 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
     @app.get("/api/projects/{pid}/seismic/capabilities")
     def capabilities(pid: str, user=Depends(owner)):
         project(user["uid"], pid)
-        return dict(version=VERSION, sectionAdapters=["fixed-length-segy-rev0-1", "su-ieee"],
+        execution = execution_capabilities()
+        return dict(version=VERSION, sectionAdapters=["fixed-length-segy-rev0-1", "su-ieee", "processed-analytical-traces/v1"],
                     sectionLimits=dict(traces=512, samples=4096, cells=2_000_000),
-                    processingOperators=OPERATORS, hostedGraphExecution=False,
+                    processingOperators=OPERATORS, hostedGraphExecution=execution['available'], executionProfiles=[execution],
                     capacityQualification="Not yet field-scale qualified",
                     restrictions=["ZGY/SGZ and variable-layout sections require the indexed worker adapter.",
                                   "RTM/FWI, inversion and geological-grid execution are not connected to this API version."])
@@ -99,7 +102,7 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         ref, _ = project(user["uid"], pid)
         sources = [s.to_dict() for s in ref.collection("datasets").limit(1000).stream()]
         sources = [dict(id=d["id"], name=d["name"], sourceId=d.get("sourceId"), references=d.get("references", {}),
-                        sourceVersion=fingerprint(d), status=d.get("status", "Imported"))
+                        sourceVersion=fingerprint(d), sourceSha256=d.get('sourceSha256'), status=d.get("status", "Imported"))
                    for d in sources if d.get("active") is True and d.get("family") == "seismic"]
         interpretations = [restore_value(d.to_dict()) for d in ref.collection("seismicInterpretations").limit(200).stream()]
         versions = {s["id"]: s["sourceVersion"] for s in sources}
@@ -108,6 +111,33 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         return dict(sources=sources, interpretations=interpretations)
 
     def fetch_section(uid, pid, record, ds, **bounds):
+        if ds.get('seismicRunId'):
+            prefix = f'owners/{uid}/projects/{pid}/seismic/runs/{valid(ds["seismicRunId"])}/'
+            if ds.get('manifest') != prefix+'manifest.json':
+                fail(400, 'invalid_artifact', 'The calculated seismic reference is invalid.')
+            bucket = storage.Client().bucket(os.environ['STRATAX_DERIVED_BUCKET'])
+            manifest_blob = bucket.blob(ds['manifest'])
+            manifest_blob.reload()
+            if manifest_blob.size > 2*1024**2:
+                fail(413, 'manifest_budget', 'This calculated metadata exceeds its budget.')
+            encoded = manifest_blob.download_as_bytes()
+            if hashlib.sha256(encoded).hexdigest() != ds['sourceSha256']:
+                fail(409, 'source_checksum', 'This calculated source changed checksum. No replacement data was substituted.')
+            manifest = json.loads(encoded)
+            def load(path):
+                if not re.fullmatch(re.escape(prefix)+r'preview/[0-9]+\.json\.gz', path):
+                    fail(400, 'invalid_artifact', 'A calculated chunk leaves its run scope.')
+                blob = bucket.blob(path)
+                blob.reload()
+                if blob.size > 2*1024**2:
+                    fail(413, 'chunk_budget', 'This analytical chunk exceeds its read budget.')
+                return blob.download_as_bytes()
+            try:
+                value = read_preview(manifest, load, **bounds)
+            except SectionError as error:
+                fail(400, 'result_section', str(error))
+            return value | dict(_identity=dict(bucket=os.environ['STRATAX_DERIVED_BUCKET'], object=ds['manifest'], generation=manifest_blob.generation, sha256=ds['sourceSha256'],
+                                               size=manifest_blob.size, kind='trace-preview', endian='big', headerBytes={}))
         original = next((f for f in record["workspace"].get("files", []) if f["id"] == ds.get("sourceId")), None)
         if not original:
             fail(404, "source_missing", "The immutable original is not attached to this project.")
@@ -133,7 +163,9 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
                                       header_bytes=allowed, **bounds)
         except SectionError as error:
             fail(400, "section_input", str(error))
-        return result
+        return result | dict(_identity=dict(bucket=os.environ["STRATAX_PROJECT_BUCKET"], object=prefix+"originals/"+valid(original["id"]),
+                                            generation=getattr(raw, "generation", None), size=raw.size, kind="su" if extension == "su" else "segy",
+                                            endian=metadata.get("endian", "big"), headerBytes=allowed))
 
     def retained_section(uid, pid, record, ds, **bounds):
         try:
@@ -149,6 +181,7 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
         ds = source(ref, did)
         result = retained_section(user["uid"], pid, record, ds, first_trace=first_trace,
                                   trace_count=trace_count, first_sample=first_sample, sample_count=sample_count)
+        result.pop('_identity', None)
         return result | dict(datasetId=did, sourceVersion=fingerprint(ds), references=ds.get("references", {}))
 
     @app.put("/api/projects/{pid}/seismic/interpretations/{iid}")
@@ -198,6 +231,9 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
             return data
         return write(database().transaction())
 
+    from seismic_runs_api import install_seismic_runs
+    install_seismic_runs(app, database, owner, project, source, retained_section, valid, fail)
+
     @app.post("/api/projects/{pid}/seismic/graphs/validate")
     def graph_validation(pid: str, body: Graph, user=Depends(owner)):
         ref, _ = project(user["uid"], pid)
@@ -208,5 +244,45 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
             nodes, digest = validate_graph(body)
         except ValueError as error:
             fail(400, "graph_input", str(error))
+        available = execution_capabilities()['available']
         return dict(valid=True, fingerprint=digest, steps=[n.id for n in nodes],
-                    executionAvailable=False, message="Graph structure validated. Hosted graph dispatch and resource estimates are not commissioned yet.")
+                    executionAvailable=available, message="Graph validated. Estimate and review the exact analytical selection before execution." if available else "Graph validated. The Batch worker image/resource profile has not been commissioned; no job was submitted.")
+
+    @app.get("/api/projects/{pid}/seismic/graphs")
+    def graph_list(pid: str, user=Depends(owner)):
+        ref, _ = project(user["uid"], pid)
+        return dict(graphs=[restore_value(d.to_dict()) for d in ref.collection("seismicGraphs").limit(100).stream()])
+
+    @app.get("/api/projects/{pid}/seismic/graphs/{gid}")
+    def graph_read(pid: str, gid: str, user=Depends(owner)):
+        ref, _ = project(user["uid"], pid)
+        saved = ref.collection("seismicGraphs").document(valid(gid)).get().to_dict()
+        if not saved:
+            fail(404, "graph_missing", "This processing graph could not be found.")
+        return restore_value(saved)
+
+    @app.put("/api/projects/{pid}/seismic/graphs/{gid}")
+    def graph_save(pid: str, gid: str, body: Graph, user=Depends(owner)):
+        ref, _ = project(user["uid"], pid)
+        ds = source(ref, body.sourceId)
+        if fingerprint(ds) != body.sourceVersion:
+            fail(409, "stale_source", "Reload this source before saving its graph. Your local draft is retained.")
+        try:
+            _, digest = validate_graph(body)
+        except ValueError as error:
+            fail(400, "graph_input", str(error))
+        item = ref.collection("seismicGraphs").document(valid(gid))
+
+        @firestore.transactional
+        def write(tx):
+            old = restore_value(item.get(transaction=tx).to_dict() or {})
+            current = ref.collection("datasets").document(body.sourceId).get(transaction=tx).to_dict()
+            if not current or current.get("active") is not True or fingerprint(current) != body.sourceVersion:
+                fail(409, "stale_source", "The input changed before this graph save. Your draft is retained.")
+            if old.get("revision", 0) != body.revision:
+                fail(409, "graph_conflict", "This graph changed elsewhere. Keep your draft and reload before merging.")
+            graph = body.model_dump() | dict(revision=body.revision+1)
+            data = dict(id=gid, revision=body.revision+1, graph=graph, fingerprint=digest, updatedAt=now())
+            tx.set(item, firestore_value(data))
+            return data
+        return write(database().transaction())

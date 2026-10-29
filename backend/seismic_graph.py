@@ -133,18 +133,28 @@ def validate_graph(graph):
     return ordered, hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value: None):
+def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value: None,
+                  checkpoint=lambda value: None, resumed=None):
     from seismic_processing import bandpass, detrend, fk_filter, nmo, resample, stack, static_shift
     if isinstance(graph, dict):
         graph = Graph(**graph)
     ordered, fingerprint = validate_graph(graph)
     if source.domain != graph.domain:
         raise ValueError("Graph domain does not match its analytical source.")
-    values = {"source": source}
+    completed = resumed.get('completed', 0) if resumed else 0
+    if type(completed) is not int or not 0 <= completed <= len(ordered) or resumed and resumed.get('fingerprint') != fingerprint:
+        raise ValueError("The checkpoint does not identify this exact processing graph.")
+    processed = {n.id for n in ordered[:completed]}
+    needed = {n.input for n in ordered[completed:] if n.input == 'source' or n.input in processed}
+    if completed == len(ordered):
+        needed = {graph.output}
+    values = dict(resumed['values']) if resumed else {"source": source}
+    if resumed and set(values) != needed:
+        raise ValueError("The checkpoint does not contain the graph's required live inputs.")
     consumers = {"source": 0} | {n.id: 0 for n in ordered}
-    for n in ordered:
+    for n in ordered[completed:]:
         consumers[n.input] += 1
-    for i, node in enumerate(ordered):
+    for i, node in enumerate(ordered[completed:], start=completed):
         if cancelled():
             raise ValueError("Processing cancelled at a completed step boundary.")
         b, p = values[node.input], OPERATORS[node.operator]["parameters"] | node.parameters
@@ -168,4 +178,5 @@ def execute_graph(graph, source, cancelled=lambda: False, progress=lambda value:
         if consumers[node.input] == 0:
             del values[node.input]
         progress(dict(step=node.id, completed=i+1, total=len(ordered)))
+        checkpoint(dict(fingerprint=fingerprint, completed=i+1, values=values))
     return values[graph.output], fingerprint

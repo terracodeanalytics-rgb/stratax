@@ -1,0 +1,10 @@
+FROM us-central1-docker.pkg.dev/project-9afac/stratax/stratax-seismic-worker@sha256:102f9275a01e5843485197b07138ebd9998367bfc1b134c5d00b68555195f58b
+RUN apt-get update -qq && apt-get install -y --no-install-recommends gcc-14=14.2.0-19 g++-14=14.2.0-19 libc6-dev && rm -rf /var/lib/apt/lists/*
+ENV CC=gcc-14 CXX=g++-14 DEVITO_ARCH=gcc-14 DEVITO_LANGUAGE=C DEVITO_LOGGING=ERROR DEVITO_SAFE_MATH=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 STRATAX_COMPILED_ACOUSTIC_TESTS=1
+COPY requirements-acoustic.txt ./
+RUN pip install --no-cache-dir -r requirements-acoustic.txt
+RUN pip download --no-deps --no-binary=devito,pyrevolve --dest /usr/share/stratax/sources devito==4.8.23 pyrevolve==2.2.8
+COPY seismic_acoustic.py ./
+COPY tests/test_seismic_acoustic.py ./tests/
+COPY tests/fixtures/acoustic-reference-v1.json ./tests/fixtures/
+RUN gcc-14 --version && python -m pytest tests/test_seismic_acoustic.py -q -s

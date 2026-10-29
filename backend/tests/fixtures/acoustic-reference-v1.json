@@ -1,0 +1,22 @@
+{
+  "id": "acoustic-reference-v1",
+  "status": "frozen-before-qualification",
+  "engine": "devito-4.8.23",
+  "precision": "float64",
+  "dimensions": [2, 3],
+  "shapePerAxis": 17,
+  "spacingMetres": 10,
+  "velocityMetresPerSecond": 2000,
+  "maximumVelocityMetresPerSecond": 2500,
+  "timeStepSeconds": 0.0005,
+  "endSeconds": 0.2,
+  "sourceFrequencyHz": 20,
+  "absorbingBoundaryCells": 8,
+  "spaceOrder": 4,
+  "forwardAdjointRelativeTolerance": 0.00001,
+  "bornAdjointRelativeTolerance": 0.00001,
+  "taylorStepSizes": [0.1, 0.05, 0.025, 0.0125],
+  "taylorSlopeRange": [1.8, 2.2],
+  "arrivalTolerance": "two spatial cells / velocity plus two time steps",
+  "fieldScaleQualification": false
+}

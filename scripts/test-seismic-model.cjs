@@ -28,6 +28,23 @@ test('canvas picks resolve to retained trace/sample identity',async()=>{
 });
 
 const trackingFixture=()=>({analytical:true,firstTrace:100,firstSample:200,sourceVersion:'truth-v1',samples:Array.from({length:20},(_,t)=>Array.from({length:80},(_,s)=>{const x=s-25-t;return (1-x*x/2)*Math.exp(-x*x/4);}))});
+test('workflow navigation keeps one Interpretation entry and independent modes',async()=>{
+ const m=await moduleFrom('frontend/dist/workspace-navigation.js'),mixed={workflows:['petrophysics','seismic']};
+ assert.deepEqual(m.workspaceNavigation(mixed,{}).map(x=>x[1]),['Overview','Data','Map','Processing','Interpretation','Reports']);
+ assert.equal(m.interpretationTarget(mixed,{lastInterpretationMode:'seismic'}),'seismic');
+ assert.equal(m.interpretationTarget({workflows:['petrophysics']},{lastInterpretationMode:'seismic'}),'interpretation');
+ assert.ok(!m.workspaceNavigation({workflows:['petrophysics']},{}).some(x=>x[0]==='processing'));
+ assert.equal(m.interpretationModes({workflows:['seismic']},'seismic'),'');
+});
+test('independent Cloud copies preserve picks and rebind only matching source bytes',async()=>{
+ const {remapSeismicCopy}=await moduleFrom('frontend/dist/seismic-transfer.js');
+ const original={ingestion:{datasets:[{id:'old',sourceSha256:'same-bytes'}]},seismicWorkspace:{books:[{views:[{datasetId:'old'}],interpretations:[{datasetId:'old',sourceVersion:'local-version',revision:3,points:[{trace:4,sample:20,locked:true}],assistance:{sourceVersion:'local-version'}}]}]},seismicProcessing:{books:[{graph:{sourceId:'old',sourceVersion:'local-version',revision:2,domainConfirmed:true,nodes:[]},run:{id:'previous-run'}}]}};
+ const before=structuredClone(original),copy=structuredClone(original);
+ remapSeismicCopy(copy,original,{old:'new'},[{id:'new',sourceVersion:'cloud-version',sourceSha256:'same-bytes'}],'local-project');
+ assert.deepEqual(original,before);const pick=copy.seismicWorkspace.books[0].interpretations[0];assert.equal(pick.sourceVersion,'cloud-version');assert.equal(pick.points[0].locked,true);assert.equal(pick.copiedFrom.sourceVersion,'local-version');assert.equal(pick.assistance.sourceVersion,'cloud-version');
+ assert.equal(copy.seismicProcessing.books[0].graph.domainConfirmed,false);assert.equal(copy.seismicProcessing.books[0].graph.revision,0);assert.equal(copy.seismicProcessing.books[0].run,undefined);
+ const mismatch=structuredClone(original);remapSeismicCopy(mismatch,original,{old:'new'},[{id:'new',sourceVersion:'changed',sourceSha256:'different-bytes'}],'local-project');assert.equal(mismatch.seismicWorkspace.books[0].interpretations[0].stale,true);assert.equal(mismatch.seismicWorkspace.books[0].interpretations[0].sourceVersion,'local-version');
+});
 test('section tracking recovers planted events without replacing manual or locked seeds',async()=>{
  const {trackSection}=await moduleFrom('frontend/dist/seismic-tracking.js'),s=trackingFixture(),seeds=[{trace:105,sample:230,locked:true},{trace:112,sample:237,locked:false}],before=JSON.stringify({s,seeds});
  const proposal=trackSection(s,seeds,{radius:2,window:5,minimumCorrelation:.99});

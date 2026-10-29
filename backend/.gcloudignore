@@ -3,5 +3,13 @@ __pycache__
 .venv
 tests/*
 !tests/test_science.py
+!tests/test_seismic_processing.py
+!tests/test_seismic_store.py
+!tests/test_seismic_inversion.py
+!tests/test_seismic_execution.py
+!tests/test_seismic_trace_index.py
+!tests/test_seismic_acoustic.py
+!tests/fixtures/
+!tests/fixtures/acoustic-reference-v1.json
 *.log
 .env*

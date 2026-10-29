@@ -2,6 +2,7 @@ import {api,session} from './auth.js';
 import * as repository from './project-repository.js';
 import {readLocalSection} from './seismic-reader.js';
 import {trackSection} from './seismic-tracking.js';
+import {openCloudCopy} from './workspace-cloud-copy.js';
 import {seismicState,activeSeismicBook,freshSeismicBook,sectionPoint,addSeismicPick,removeSeismicPick,pickPolyline} from './seismic-model.js';
 
 let host,scope='',generation=0,selectedView=null,picking=false,query='',browser=true,properties=true,refreshing=0;
@@ -17,6 +18,7 @@ const localVersion=d=>d.sourceVersion||d.sourceSha256||`${d.importId}:${d.id}`;
 const viewKey=v=>JSON.stringify([scope,v.datasetId,v.firstTrace,v.traceCount,v.firstSample,v.sampleCount,dataset(v.datasetId)?.sourceVersion||null]);
 const sectionFor=v=>v&&cache.get(v.id)?.key===viewKey(v)?cache.get(v.id).section:null;
 const storageKey=()=>`${scope}:${book().id}`;
+const scopeCurrent=g=>g===generation&&scope===`${session.user?.uid}:${host.getProject()?.id}`;
 const safe=fn=>async e=>{try{await fn(e);}catch(error){host.toast(error.message);}};
 
 export function configureSeismic(context){host=context;}
@@ -41,10 +43,10 @@ async function refresh(){
  try{
   if(p.storage==='cloud'){
    const data=await api(`/api/projects/${encodeURIComponent(p.id)}/imports`);
-   if(g!==generation)return;
+   if(!scopeCurrent(g))return;
    host.getState().ingestion={...(host.getState().ingestion||{}),...data};
    const remote=await api(`/api/projects/${encodeURIComponent(p.id)}/seismic`);
-   if(g!==generation)return;
+   if(!scopeCurrent(g))return;
    for(const s of remote.sources){const d=dataset(s.id);if(d)d.sourceVersion=s.sourceVersion;}
    const known=new Set(board().books.flatMap(b=>b.interpretations.map(i=>i.id)));
    for(const item of remote.interpretations)if(!known.has(item.id))book().interpretations.push({...item,dirty:false});
@@ -54,7 +56,7 @@ async function refresh(){
    }
   }
   cache.clear();errors.clear();host.render();
- }catch(error){if(g===generation)host.toast(error.message);}finally{if(refreshing===g)refreshing=0;}
+ }catch(error){if(scopeCurrent(g))host.toast(error.message);}finally{if(refreshing===g)refreshing=0;}
 }
 function addView(id){
  const ds=dataset(id);if(!ds)throw new Error('Choose an active seismic source.');
@@ -82,20 +84,20 @@ async function load(v){
    section.sourceVersion=localVersion(ds);section.datasetId=ds.id;section.references=ds.references||{};
   }
   if(section.sampleStarts.some(start=>Math.abs(start-section.sampleStarts[0])>section.sampleInterval*1e-9))throw new Error('These traces have different time origins. Select compatible trace groups or a single trace; this section view does not silently align or resample them.');
-  if(g!==generation||!book().views.includes(v))return;
+  if(!scopeCurrent(g)||!book().views.includes(v))return;
   const current=viewKey(v);
   if(current!==key)return;
   cache.set(v.id,{key,section});errors.delete(v.id);
   // Cache is bounded across open windows; source arrays never enter saved project JSON.
   while(cache.size>4){const oldest=cache.keys().next().value;if(oldest===v.id)break;cache.delete(oldest);}
- }catch(error){if(g===generation)errors.set(v.id,{key,message:error.message});}finally{
-  pending.delete(key);if(g===generation&&document.querySelector('.sw'))host.render();
+ }catch(error){if(scopeCurrent(g))errors.set(v.id,{key,message:error.message});}finally{
+  pending.delete(key);if(scopeCurrent(g)&&document.querySelector('section[aria-label="Seismic interpretation workspace"]'))host.render();
  }
 }
 
 export function seismicView(){
  normalize();const s=board(),b=book(),v=view(),selected=interpretation();
- return `<section class="sw" aria-label="Seismic interpretation workspace"><header class="sw-heading"><div><div class="study-kicker">SEISMIC INTERPRETATION</div><h1>${esc(host.getProject().name)}</h1><p>${host.getProject().storage==='cloud'?'Private retained sources · independent interpretation versions':'Local sources stay on this device'}</p></div><button id="sw-refresh">${host.icon('clock')} Refresh</button></header>
+ return `<section class="sw" aria-label="Seismic interpretation workspace"><header class="sw-heading"><div><div class="study-kicker">SEISMIC INTERPRETATION</div><h1>${esc(host.getProject().name)}</h1><p>${host.getProject().storage==='cloud'?'Private retained sources · independent interpretation versions':'Local sources stay on this device'}</p></div><button id="sw-refresh">${host.icon('clock')} Refresh</button>${host.getProject().storage!=='cloud'?'<button id="sw-cloud-copy">Create Cloud copy…</button>':''}</header>
  <nav class="sw-ribbon" aria-label="Seismic tools">${[['import','Sources','data'],['new-view','Add section','plus'],['new-interpretation','New horizon / fault','layers'],['picking',picking?'Stop picking':'Pick points','pin'],['track','Track section','layers'],['history','Saved versions','clock'],['export','Export','reports'],['browser',browser?'Hide sources':'Show sources','layers'],['properties',properties?'Hide properties':'Show properties','settings']].map(([id,name,icon])=>`<button data-sw-action="${id}" ${id==='picking'?`aria-pressed="${picking}"`:''}>${host.icon(icon)}<span>${name}</span></button>`).join('')}</nav>
  <div class="sw-body ${browser?'':'sw-no-browser'} ${properties?'':'sw-no-properties'}">${browser?`<aside class="sw-browser" aria-label="Seismic sources"><header><strong>Surveys & objects</strong></header><input id="sw-search" aria-label="Find seismic source" placeholder="Find survey…" value="${esc(query)}">${sources().filter(d=>d.name.toLowerCase().includes(query.toLowerCase())).map(d=>`<button class="sw-source" draggable="true" data-sw-source="${esc(d.id)}"><strong>${esc(d.name)}</strong><small>Retained original · ${esc(d.references?.domain||'domain unconfirmed')}</small></button>`).join('')||'<p class="sub">No matching seismic sources. Import and review a survey first.</p>'}<div class="sw-objects"><strong>Interpretations</strong>${b.interpretations.map(i=>`<button data-sw-object="${i.id}" aria-pressed="${i.id===b.activeInterpretation}">${esc(i.label)}<small>${esc(i.kind)} · ${i.points.length} picks${i.dirty?' · draft':''}${i.stale?' · stale source':''}</small></button>`).join('')||'<p class="sub">No horizons or faults picked.</p>'}</div></aside>`:''}
  <div class="sw-workspace" id="sw-dropzone"><nav class="sw-books" aria-label="Seismic workbooks">${s.books.map(w=>`<button data-sw-book="${w.id}" aria-pressed="${w.id===s.activeBook}">${esc(w.name)}</button>`).join('')}<button data-sw-action="new-book" aria-label="New seismic workbook">+</button><button data-sw-action="rename-book">Rename</button></nav>
@@ -197,7 +199,8 @@ function action(name){
 }
 
 export function bindSeismic(){
- if(!$('.sw'))return;
+ if(!$('section[aria-label="Seismic interpretation workspace"]'))return;
+ if($('#sw-cloud-copy'))$('#sw-cloud-copy').onclick=()=>openCloudCopy(host,'seismic');
  $('.sw').onkeydown=e=>{
   if(e.key==='Escape'&&picking){picking=false;host.render();return;}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!e.target.closest('input,textarea,select,[contenteditable]')){
@@ -243,7 +246,7 @@ export function bindSeismic(){
   if(host.getProject().storage==='cloud'){
    const body=Object.fromEntries(['revision','datasetId','sourceVersion','kind','label','points','notes','assistance'].filter(k=>i[k]!==undefined).map(k=>[k,i[k]]));
    const g=generation,result=await api(`/api/projects/${host.getProject().id}/seismic/interpretations/${i.id}`,{method:'PUT',body});
-   if(g!==generation)return;Object.assign(i,result);
+   if(!scopeCurrent(g))return;Object.assign(i,result);
   }
   i.dirty=false;host.save();host.render();host.toast('Interpretation saved. Original samples remain unchanged.');
  });
