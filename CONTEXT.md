@@ -1,8 +1,18 @@
 # StrataX context
 
+## Current local implementation — 2026-10-30
+
+- Authoritative completion ledger: `SEISMIC_ENGINE_COMPLETION.md`. First three engines have local implementation/source-review passes; Velocity has an unwired draft;5–16 have not had their completion pass. Overall implementation is incomplete. Testing and deployment remain pending, separately from implementation gaps.
+- Standing scope: backend only, Google Cloud cost efficiency, sequential engines. Do not run scientific/automated/browser/benchmark tests, build/deploy images, provision infrastructure, execute paid jobs, change UI availability or invent source geometry/calibration/pricing.
+- New field path extends existing owner-scoped FastAPI/Firestore/GCS admission. Server-reviewed `STRATAX_SEISMIC_FIELD_PROFILES` and explicit `STRATAX_SEISMIC_STORAGE_POLICY.maximumBytes` control Batch resources/pricing/storage. These settings are not configured by this work. Shared per-project execution admission stays at one; independent indexing defaults to recoverable CPU/Spot, while coupled MPI needs an explicit standard-VM profile. No automatic GPU/standard fallback.
+- Field indexing currently covers native SEG-Y/SU originals and compatible retained locator indexes. Existing bounded format adapters remain. Native discovery is a checkpointed streaming phase; analytical partitions are distributed. Lossless arrays and labelled display pyramids are separate. Fanout256 directories and checksummed generation-pinned256KiB ranges avoid whole-survey reads. Missing/duplicate/ragged support and unknown references stay explicit.
+- New `indexed-volume`/`indexed-traces` bindings connect accepted indexes to bounded physical slices and well ties. Reviewed source/geometry versions and actual CRS/datum are required. Paired well sampling avoids materialising a section for each trajectory sample. Calibration, wavelets and ties persist separately; private named exports use owner-scoped expiring signed access.
+- Capability responses add implementation/configured-execution/testing/deployment distinctions. This is source metadata only; no field-scale qualification or full-programme completion is claimed. Legacy bounded estimates still exclude storage/network fees; complete full-cost coverage across all engine paths remains work to finish.
+- Live frontend/API/workers unchanged by local work. Site is public according to the user's later explicit sharing instruction; original private-audience descriptions are historical. No new access check or scientific verification was performed.
+
 ## Current frontend — 2026-10-29 UI-only redesign
 
-Private Site https://stratax-seismic-workbench.neonwhale8.chatgpt.site now serves source b2902f2f2113fc8a398dd2a27234e5e926674c20, successful deployment appgdep_6ae397e67ae88191bc8838c1dcdd3f8f. Keep Site project appgprj_6ae37700e488819196b149dee2c6053f and its audience; source checkout .release/sites-seismic-v2 remains separate from root GitHub origin. Root frontend/dist is the maintained source.
+The Site (now public by later user instruction) https://stratax-seismic-workbench.neonwhale8.chatgpt.site serves source b2902f2f2113fc8a398dd2a27234e5e926674c20, successful deployment appgdep_6ae397e67ae88191bc8838c1dcdd3f8f. Keep Site project appgprj_6ae37700e488819196b149dee2c6053f and its audience; source checkout .release/sites-seismic-v2 remains separate from root GitHub origin. Root frontend/dist is the maintained source.
 
 Seismic engines is a Processing tab, not a sidebar page. #processing / #seismic-qi both highlight Processing; #interpretation / #seismic retain the single Interpretation entry and independent log/seismic state. Shared new UI modules are seismic-ui.js, seismic-ui-availability.js, seismic-engine-controls.js and seismic-studio.css. Processing and seismic interpretation retain separate workbook/layout/source state.
 
