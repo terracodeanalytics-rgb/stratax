@@ -1,5 +1,15 @@
 # StrataX status
 
+## 2026-11-03 - Mobile Cloud source transfer published; environment creation blocked
+
+- User declined paid infrastructure and explicitly selected the existing public STRATAX repository for transfer. Published the full reviewed source snapshot to `codex/mobile-cloud-20261103` using an isolated clone; source commit `edc8e23af507b1346760055913781b91def62c50`. Original laptop checkout/branch/index remain in place, and public `main` was not pushed or merged.
+- Snapshot includes 299 tracked/nonignored source files plus Cloud handoff and setup instructions. Omitted flagged `backend/deploy-env.yaml`, login caches, .env files, Local browser data, user originals, Windows virtualenvs and ignored release/recovery assets. All originals remain on laptop. This is unfinished development source, not a deployable release.
+- Added branch-only `CLOUD_HANDOFF.md`, `AGENTS.md` and `.codex/cloud-install.sh`. Syntax checks: 137 Python files and 51 frontend JS files pass. ZIP CRC/hash and whitespace checks pass. No scientific runtime qualification or Linux dependency installation completed.
+- Signed-in desktop Settings > Codex Cloud could list/select `terracodeanalytics-rgb/stratax`, but creation failed twice. First: "Could not connect to cloud setup." Retry: "Could not start this chat" and "Couldn't create the environment. Try again to continue setup." No published environment, branch binding, Cloud execution or mobile continuation has been verified. Existing CLI legacy task listing works but does not establish new Cloud environment readiness.
+- Next: retry Create environment in the signed-in desktop/web app; select STRATAX, use migration branch `codex/mobile-cloud-20261103`, read CLOUD_HANDOFF.md, install with `bash .codex/cloud-install.sh`, inspect setup, publish privately, then verify a mobile task uses this branch before turning laptop off. Do not buy credits or provision paid infrastructure. This local chat cannot directly hand itself off to Codex Cloud; use the written handoff.
+- Production remains Site v10 / API unchanged. No VM, paid scientific job, backend/frontend deployment, new persistent key or credit purchase occurred. Cloud service permissions were not transferred.
+- Cleanup reviewed: zero disposable files removed; migration ZIP, inventory, receipts and isolated clone retained as recovery/operational assets. Zero container builds or image deletions. Preserve unrelated dirty importer/seismic work. Receipts: `.release/mobile-cloud-transfer-20261103`.
+
 ## 2026-11-03 - Project recovery and imported-view support fix live (Site v10)
 
 - Published Site v10: source `067289c63fd8411c86cdc0bf31ad621ef51e9857`, deployment `appgdep_6ae94ca8025c819180c34e0a677b53cb`, existing public URL/audience preserved. Site v9 retained for rollback. API/workers unchanged; API health ok.
