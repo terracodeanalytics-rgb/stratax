@@ -31,7 +31,7 @@ def fixture(mid):
     if mid=='porosity-effective':p['shalePorosity']=.1
     if mid.startswith('saturation-'):p['rw']=.08;p.update({'rsh':2} if 'rsh' in p else {})
     if mid=='permeability-regression':a['coreK']=1000*phi**2
-    if mid in ('permeability-timur','permeability-coates'):p.update(coefficient=1000,calibration='Fixture core relationship')
+    if mid in ('permeability-timur','permeability-coates'):p.update(coefficient=1000,calibration='Fixture core relationship',applicationBounds=dict(phiLow=.05,phiHigh=.5,swiLow=.1,swiHigh=.8))
     if mid=='mineral-inversion':p.update(matrix=[[1,0],[0,1]],minerals=['A','B']);a['responses']=np.column_stack([phi,1-phi])
     if mid=='nmr-partition':a['spectrum']=np.tile([.05,.1,.05],(n,1));p.update(t2=[10,50,100],coefficient=1);units['spectrum']='v/v'
     if mid in ('core-fit','simulation-compare'):
@@ -59,6 +59,13 @@ def fixture(mid):
     if mid=='trajectory-clearance':a['planned']=np.column_stack([d,np.zeros(n),d]);a['offset']=a['planned']+[10,0,0];p['threshold']=2;units.update(planned='m',offset='m')
     if mid=='in-place-volumes':p.update(area=1e6,netThickness=10,porosity=.2,sw=.25,fvf=1.2)
     if mid=='volume-uncertainty':p.update(distributions={k:dict(low=v,mode=v,high=v) for k,v in dict(area=1e6,netThickness=10,porosity=.2,sw=.25,fvf=1.2).items()})
+    if mid=='depth-match':p.update(anchors=[[0,1],[39,41]],sourceRun='fixture-run')
+    if mid=='align-curve':p.update(top=0,base=39,spacing=1,maxGap=2,depthReference='MD')
+    if mid=='endpoint-proposal':p.update(top=0,base=39)
+    if mid=='temperature-profile':p.update(top=0,base=39,temperatureC=20,gradientCPerM=.03,depthReference='TVD',citation='Fixture measured anchor and gradient')
+    if mid=='resistivity-temperature':a['temperature']=20+d;units['temperature']='degC';p.update(sampleResistivity=.1,sampleTemperatureC=20,constantC=21.5,citation='Fixture empirical domain only')
+    if mid=='porosity-combine':a['estimates']=np.column_stack([phi,phi+.01]);units['estimates']='v/v';p.update(weights=[.5,.5])
+    if mid=='pickett-fit':a['rt']=.08/phi**2;p.update(waterZoneEvidence='Fixture clean water zone')
     return a,p,units
 
 

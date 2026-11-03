@@ -104,9 +104,10 @@ def test_review_stale_inputs_and_independent_result_activation():
 
 def test_canvas_scope_rejects_invalid_and_cross_project_indices():
     db=Database();main.app.dependency_overrides[main.current_user]=lambda:dict(uid='owner');client=TestClient(main.app)
+    db.records[ROOT+'/datasets/source']['columns'].append(dict(id='column-1',unit='ft'))
     try:
         with patch.object(main,'_db',db),patch.object(science.firestore,'transactional',lambda f:f):
-            body=config(scope=dict(datasetId='source',columnId='column-0',unit='ft',reference='Unconfirmed',top=0,base=100,rowRanges=[[0,1]]))
+            body=config(scope=dict(datasetId='source',columnId='column-1',unit='ft',reference='Unconfirmed',top=0,base=100,rowRanges=[[0,1]]))
             saved=client.put('/api/projects/project/science/configurations/scoped',json=body).json()
             assert saved['scope']['rowRanges']==[dict(start=0,end=1)]
             assert client.post('/api/projects/project/science/validate',json=body).status_code==200

@@ -1,5 +1,116 @@
 # StrataX context
 
+## 2026-11-03 - Project recovery and imported-view support fix live (Site v10)
+
+- Published Site v10: source `067289c63fd8411c86cdc0bf31ad621ef51e9857`, deployment `appgdep_6ae94ca8025c819180c34e0a677b53cb`, existing public URL/audience preserved. Site v9 retained for rollback. API/workers unchanged; API health ok.
+- Stale project saves no longer block opening other projects. Pending work remains cached; known conflicts persist across reload and stop repeated autosaves. Explicit recovery saves a backup before loading Cloud state. Save operations stay scoped to the active project when required.
+- Existing active imports rebuild missing well/location registrations from retained evidence. The first empty log workbook opens imported wells automatically. Import completion links directly to logs and map/location review. Unknown CRS remains unplaced; no invented coordinates or scientific approvals.
+- Passed six focused browser checks locally and six on published assets with isolated mocked accounts/APIs, five account-scope tests and ten adjacent map checks. Eight published asset hashes match; zero page errors, real user writes, Cloud executions or backend deployments. This does not verify users' inaccessible Local browser files.
+- Map regression fixtures were updated for current importer and required survey datum/Z meaning. Map surfaces fit 320/768/1024/1440; preexisting shared-header overflow at 768 remains outside this support change and must not be claimed fixed.
+- Receipts: `.release/project-import-recovery-20261103`, `.release/support-recovery-live.json`, `.release/map-workspace-verification.json`. Root Git unpublished; unrelated dirty importer/seismic work preserved.
+- Cleanup reviewed: zero disposable files removed; all release/QA/recovery assets retained. No container images built or pruned. Remaining support step: users refresh/reopen; any retained conflict uses Review save conflict. Missing coordinates still require source-reference review.
+
+## 2026-11-02 - Dense multidisciplinary frontend and slim wells live (Site v9)
+
+- Site version 9 succeeded at the existing public URL; source `db7a43641cd993a1d250b177dbb40f5b8dad2a38`, deployment `appgdep_6ae820d84f84819187c740c3200315ad`. Site v8 retained for rollback. API/workers unchanged; API health ok; no paid scientific executions.
+- User expanded scope to the full multidisciplinary frontend. Thirteen discipline tabs expose working methods directly, plus 74 disabled planned capabilities in 19 groups. Added browser Data/Models/Processes/Results categories, view chooser, output tabs, disabled future context actions and searchable capability inventory. Planned controls do not dispatch or invent objects/results.
+- New tracks default to 48 px; reference rulers to 44 px. Drag/keyboard resize, per-track/per-well/all-well width settings, Slim wells and Fit wells persist through existing view metadata/undo. Saved explicit widths remain; source samples and transforms are unchanged. Long centered dialogs respect CSS zoom bounds.
+- Passed 28 local browser groups / 64 method configurations, 11 focused groups on six real LAS originals (hashes unchanged), five mocked Cloud/report checks, and 11 published-browser groups with isolated mocked account/API/Local fixtures. Seven deployed asset hashes match; zero page errors/uploads. Native browser-chrome zoom and actual Cloud/field qualification remain unclaimed.
+- Read `SUBSURFACE_INTERFACE_2026-11-02.md` for reference links, disabled capability IDs and backend follow-up inventory; `.release/multidiscipline-ui-20261102` retains exact source/deployment receipts and archive. Unrelated dirty work preserved. No root Git commit/push.
+- Cleanup: zero disposable local files/deletions, zero container builds or registry changes. Preserve all original data, release/QA receipts and recovery assets.
+
+## 2026-11-02 - Grouped petrophysics ribbon and collapsible sidebar live (Site v8)
+
+- Site version 8 succeeded: source `fc7bae98fc98313d761f1864e05e49eeb3455486`, deployment `appgdep_6ae7c5c2fa8081919a20106c2685af16`, existing public URL/audience preserved. Site version 7 retained for rollback. API/workers unchanged; no paid scientific jobs.
+- Replaced stacked toolbars with grouped commands, seven tabs and contextual tools; retained every method via searchable Advanced methods. Guided preparation creates proposed method setups without confirmations/execution; calibration/evaluation reuse existing review workflows. Workspace dialogs are centered with bounded content and reachable actions.
+- Application sidebar and Project Browser now collapse independently; project preferences persist and top-bar restore remains available on narrow screens.
+- Passed 25 local browser groups / 64 method configurations, 8 focused follow-up groups, 5 mocked Cloud/report checks, and 8 published-browser groups with mocked account/APIs and Local fixtures. Five released asset hashes match; API health ok. Zero page errors or Cloud content uploads. Widths 320–1920 px; CSS zoom 125–150% tested, native browser-chrome zoom not automated.
+- Read `PETROPHYSICS_RIBBON_2026-11-02.md` and `.release/petrophysics-ribbon-20261102/deployment-receipt.json`. Real Cloud/field qualification retains prior input blockers. Root Git remains unpublished; unrelated dirty work preserved.
+- Cleanup: zero disposable local files found/deleted; zero container builds or registry deletions. Preserve all release/QA/recovery assets.
+
+## 2026-10-31 - Petrophysics deployed live (Site v7)
+
+- Site version 7 succeeded at https://stratax-seismic-workbench.neonwhale8.chatgpt.site; source `7ccdbc3f1b78c2a0eec690927e91a3d3c3339468`, deployment `appgdep_6ae64903b1408191a83868b44b9dcbd7`. Public audience preserved.
+- API `stratax-api-petrophysics-1031d` is Ready at 100% traffic. Build `f263b613-df2c-47e3-a45f-679cc758379c`; science build `22bc6d42-72fd-4aba-a8be-3757468dd03b`. Matching science job image verified and Ready; resources unchanged, zero agent-started executions. Import/seismic jobs unchanged.
+- Candidate/production health passed; workflow route correctly requires authentication (401), DELETE CORS passed, fresh revision ERROR query empty. Live petrophysics JS/CSS and interpretation module match release hashes. Read-only Chromium smoke: title, visible page, stylesheet present, zero page errors. Hosting modifies index HTML; its byte hash differs. Authenticated live workflow execution is not qualified.
+- Release overlays only 8 backend and 6 frontend files onto the completed importer baseline. Unrelated dirty seismic/importer changes preserved. API rollback tag `petrophysics-previous` retains `stratax-api-import-bundles-1031c`; Site version 6 remains available. Previous science digest and final job settings are in `.release/petrophysics-live-20261031`.
+- Prior local validation: 93 Python tests, 21 current browser groups, 5 mocked Cloud/report checks. Real field qualification still requires approved TMB units/Rw/matrix/shale/permeability evidence; no fixture defaults substituted. Paid Cloud study acceptance and root commit/push remain separate authorization steps.
+- Cleanup inventory: 68 images total, 34 API/science images all tagged/protected, zero eligible/deleted; zero disposable local files removed. Preserve all release archives/receipts and user recovery assets. See `PETROPHYSICS_WORKSPACE_2026-10-31.md` and `.release/petrophysics-live-20261031/deployment-receipt.json`.
+
+## Current local petrophysics architecture — 2026-10-31
+
+- The current checkout now contains an undeployed conventional petrophysics workspace and reviewed workflow implementation. Live state is unchanged from the recorded importer release; do not treat this mixed dirty tree as a qualified deployment bundle.
+- Frontend: `petrophysics-workspace.js/.css` supplies layout migration, ribbon actions, contextual panels, zone/parameter editors, workflow definitions, per-well mapping review and accepted reporting. `interpretation-workspace.js` and `well-canvas.js` connect it to existing scientific views, retained rows and workbook interactions.
+- Backend: `scientific_conventional.py` adds bounded calibration/preparation methods; `scientific_workflows.py` owns revisioned definitions/runs; `scientific_workflow_worker.py` executes private checkpoint dependencies on the existing scientific worker. `scientific_api.py` supplies shared admission, review, source-unit/lineage guards and calibration publication. Catalog version is `stratax-science/1.1`; regenerate the browser mirror with `scripts/generate-science-catalog.py`.
+- Canonical workflow/run/calibration records are owner-scoped Firestore subcollections, separate from project view metadata. Sample arrays remain in chunked artifacts. Checkpoint acceptance publishes selected datasets atomically; an earlier accepted checkpoint survives a later failure. Unknown dispatch outcomes retain their reservations.
+- Published depth outputs can bind a downstream scope by step ID. Within a segment, private outputs cannot be selected by unrelated calculations. Resampling requires explicit reviewed spacing/reference/interpolation/gap rules; ordinary multi-dataset methods verify retained physical axes.
+- Logging-run depth anchors and interwell ghost display anchors are distinct. Ghost anchors retain marker evidence and become stale when that evidence changes. Display fills/ghosts do not create lithology or fluid interpretations.
+- Approved units/calibration for the actual TMB field study remain missing. Controlled fixtures verify calculation contracts and publication behavior, not field geology. Full field acceptance, native zoom/account-switch browser qualification and live paid-worker qualification remain pending.
+- Existing endpoints and originals remain retained. Expanded fingerprints may mark legacy scientific runs stale. Existing empirical permeability configurations need explicit calibration bounds before execution.
+- Details and evidence: [PETROPHYSICS_WORKSPACE_2026-10-31.md](PETROPHYSICS_WORKSPACE_2026-10-31.md).
+
+## Current deployment - updated 2026-10-31
+
+- Frontend: [STRATAX](https://stratax-seismic-workbench.neonwhale8.chatgpt.site), public Site version 6. Source `27e78ffb60dcc5381050fc9d90de7478a731fcd4`; deployment `appgdep_6ae59f5950d08191b4ae2712177c203b` succeeded. Versions 3-5 below are release history, not current production.
+- Cloud: project `project-9afac`, region `us-central1`. API `stratax-api-import-bundles-1031c` was verified Ready at 100% traffic. Import worker build `a18238d9-2473-4050-8076-9893c0173ae7` is aligned; science/seismic jobs were unchanged in the latest release.
+- Evidence: candidate/production `/api/health` passed and the fresh API revision ERROR query was empty at deployment. These are recorded release checks, not a fresh live check during this documentation update. Exact builds, digests and receipts: [IMPORT_BUNDLES_2026-10-31.md](IMPORT_BUNDLES_2026-10-31.md), `.release/import-bundles-20261031/deployment-receipt.json`.
+- Import remains Files -> Review -> Match -> Mapping -> Import. Real observed stages/counters, elapsed time and observation age replace the idle-looking 0%; unknown totals stay indeterminate. Lower per-file bars are removed. The enlarged viewport-bounded panel keeps its footer outside scrolling content.
+- Files can attach deviation to a selected log before advancing. Stable well IDs carry the association; conflicts and excluded/removed owners require review. Log-derived header creation is an explicit checkbox, using available metadata only.
+- ZIP originals are retained; selected entries have independent asset IDs, paths, editable types and well associations. Directory-scoped companions, inclusion controls, exclusion notes and transient passwords preserve reviewability. Core limits: 100 total assets, up to 99 extracted entries for one ZIP, 256 MiB/member and 1 GiB cumulative expansion. See the release document for nesting, metadata, timeout and format boundaries.
+- Sources Actions: Inspect, Rename, Download original, Import/reclassify and Delete to restorable Trash. Display names change independently of physical originals. Trash preserves originals, datasets, associations and retained storage usage.
+- Key implementation files: `frontend/dist/well-importer.js`, `well-import-ui.js`, `well-import.css`, `archive-intake.js`, `archive-worker.js`, `ingestion-client.js`, `source-actions.js`; native progress/ownership in `backend/imports_api.py`, `ingestion_worker.py`, `ingestion_core.py`, `well_ingestion.py`.
+- Verification boundary: source checks and operational release checks passed. Browser/data/ZIP fixtures, scientific acceptance and speed benchmarks remain unrun; no agent-started import jobs. Preserve the existing source-only restriction until the user changes it.
+- Preserve unrelated dirty seismic work. Latest backend release used an isolated previously-live source plus three scoped overlays. Root GitHub publication remains deferred; the separate Site source was committed/pushed for deployment. Keep recovery archives and registry-tagged/live/worker images.
+
+
+## 2026-10-31 - Progress, related deviations and ZIP intake deployed
+
+- Site version6 succeeded at https://stratax-seismic-workbench.neonwhale8.chatgpt.site; source `27e78ffb60dcc5381050fc9d90de7478a731fcd4`, deployment `appgdep_6ae59f5950d08191b4ae2712177c203b`; existing public audience preserved.
+- Progress now shows observed startup/verification/row/chunk/validation/finalization work, elapsed time and observation age; unknown totals are indeterminate and lower per-file bars are removed. Added Files-stage deviation attachment with editable ownership and explicit conflict review.
+- ZIP intake preserves originals and paths, detects editable file types and well suggestions, offers per-entry selection and exclusion notes, isolates companion folders and preserves reviewed entries on password retry. Integrity-verified zip.js2.24.0 is vendored with license/provenance. Passwords are transient. Bounds:99 extracted entries for one ZIP,100 total assets,256 MiB/member,1 GiB cumulative expansion,10,000 inventory entries,8 MiB metadata, three nested ZIP levels and a two-minute deadline. Unsupported/unsafe/ambiguous cases remain review exclusions; conversion may still be needed.
+- API `stratax-api-import-bundles-1031c` Ready at100%, import worker image updated without agent-started executions; science/seismic jobs untouched. Candidate/production health passed, fresh revision ERROR query empty. Prior API protected as `import-bundles-previous`.
+- Verification:7 application JavaScript syntax checks,1 vendor syntax check,3 Python AST checks, relative imports, whitespace, CSS balance, staged-source/hash review. Browser/data/ZIP fixtures, numerical and performance acceptance remain unrun under the continuing source-only restriction. Existing user-triggered execution status/logs were read only.
+- Cleanup:66 registry images inventoried,39 scoped tagged/protected,27 out of scope, zero eligible/deleted; zero local junk removed. Retain `.release/import-bundles-20261031` receipts/recovery and vendor source evidence. Unrelated seismic drafts preserved; root GitHub publication deferred. See [IMPORT_BUNDLES_2026-10-31.md](IMPORT_BUNDLES_2026-10-31.md) and deferred acceptance scenarios.
+
+
+## 2026-10-31 - Import panel/footer correction deployed
+
+- Site version5 succeeded: source `1c378c50bf471a7be3c86b79e69cf9239ac5180c`, deployment `appgdep_6ae586f41fb08191bf664a838b99b949`; existing public audience preserved.
+- CSS-only fix in `frontend/dist/well-import.css`: larger viewport-bounded panel (1440px maximum width), definite dialog height, bounded grid/flex children, independently scrolling stage content and a non-scrolling Back/Continue/Cancel footer. Review/mapping expansion no longer grows the outer dialog; narrow layouts retain the same footer containment.
+- Focused CSS bounds/cascade/scroll source review, balanced blocks and whitespace checks passed. Browser/data tests remain unrun under the continuing source-only restriction. Deferred screenshot regression cases were added to `WELL_WORKFLOW_ACCEPTANCE.md`.
+- No backend build/deployment or job execution. Cleanup inventoried64 images:37 scoped images all tagged/protected,27 out of scope, zero eligible/deleted; zero local junk removed. Retain `.release/import-panel-layout-20261031` recovery/provenance. Unrelated dirty work is preserved; root GitHub publication remains deferred.
+
+
+## 2026-10-31 - Import UI refinement deployed live
+
+- Site version4 succeeded at https://stratax-seismic-workbench.neonwhale8.chatgpt.site, source `b10c3afbda73298e7b635153b696f2a6feb404a7`, deployment `appgdep_6ae58154a9188191a36c3f623420f2c7`; existing public audience preserved.
+- Redesigned all five import stages with original SVGs, readable mapping/association cards, explicit log-derived header opt-in, actual byte/file progress and committed-success thumbs-up/review popup. Source Actions offers Inspect, Rename, Download, Reclassify and Delete to restorable Trash; originals/datasets/quota remain retained. Sources/datasets resolve known well names.
+- Eliminated redundant unit/reference preview reads, unnecessary prehashes for new Cloud originals, fresh-session status requests and repeated native fingerprints within one dispatch. Fixed concurrent resumable-session field updates. Upload speed remains unbenchmarked.
+- API `stratax-api-well-import-ui-1031b` Ready at100%; candidate/production health passed, zero fresh revision ERROR logs. Import/science job images updated without executions or resource changes. Previous live revision retained as `well-import-ui-previous`.
+- Source-only checks:9 JavaScript syntax checks,4 Python AST checks, relative imports and whitespace passed. No browser/data/scientific/performance tests. Release source derives from the previous isolated live release plus four scoped backend overlays; unrelated seismic drafts were excluded.
+- Cleanup:64 registry images inventoried,37 scoped tagged/protected,27 out of scope, zero eligible/deleted; zero local junk removed. Recovery/provenance remains in `.release/well-import-ui-20261031`. Root GitHub publication remains deferred; separate Site source only was committed/pushed. See [IMPORT_UI_RELEASE_2026-10-31.md](IMPORT_UI_RELEASE_2026-10-31.md).
+
+
+## Current live well-workflow release - 2026-10-31
+
+- Well-workflow source is now deployed. Current Site version3: `appgprj_6ae37700e488819196b149dee2c6053f~appgver_75bb8528ad848191a3c13efda739164e`, successful deployment `appgdep_6ae57207eb6481919148f3065553ca6b`, source `3ba2fd4cd0a3d7a4326b7f28e88519ec74b0525a`, same public URL/audience.
+- Current API: `stratax-api-well-workflow-1031a` at100% in `project-9afac` / `us-central1`. Import/science workers use the matching new digests in `WELL_WORKFLOW_DEPLOYMENT_2026-10-31.md`. Seismic/models/acoustic workers and disabled-engine gates are unchanged.
+- Use `/api/health` for operational HTTP verification; it returned OK before/after promotion and fresh revision ERROR logs were empty. `/healthz` returned an edge404 in this environment. Direct Site asset fetch returned403; native publication success is the frontend deployment verification.
+- Isolated backend package is based on exact API28 live source plus only well-workflow overlays. Never deploy the dirty root backend wholesale: unrelated seismic draft files must remain excluded. Keep ignored `.release/well-workflow-20261031` receipts, archive and source; keep `.release/sites-seismic-v2` as the separate frontend source checkout.
+- No data/browser/scientific/benchmark tests authorized by this deployment request. Root GitHub publication remains unauthorized. Required cleanup retained all61 tagged/protected images, with zero local/image deletions.
+
+
+## Current local well-workflow contract (2026-10-31)
+
+- Maintained application: `frontend/dist`. The shared shell uses `workbench.js`/`workbench.css`; original routes, scientific APIs and disabled-engine gates remain authoritative.
+- Import sequence is Files -> Review -> Match -> Mapping -> Import. `well-importer.js` orchestrates existing browser/native readers. Per-asset keys are client UUIDs, independent of filenames and retained-original IDs; old single-family/per-file requests remain readable.
+- `well-data.js` and `well-evidence.js` provide suggestions, stable registrations, duplicate evidence and browser coordinate/survey support. `backend/well_ingestion.py` decorates native evidence. `ingestion_native.py` additionally retains scalar DLIS/LIS identity observations and flags conflicts. Table identifiers preserve leading zeroes.
+- `wellDrafts` retains existing IDs and gains names, UWI, aliases, evidence references and active survey/checkshot IDs. Shared marker definitions/picks live in `stratigraphy`. Full measurements stay in original/chunk artifacts; view state stores references, styles and bounded metadata.
+- Log-section visibility is separate from imported column selection and persists per workbook. Templates use unique confirmed type/unit matches and report exceptions. Imported marker correlations connect actual compatible picks and are not geological surfaces.
+- Depth conversion requires compatible active survey references; supplied observations remain unchanged. Checkshot QC keeps original rows separate from derived values and requires a referenced TVD conversion for MD interval velocities. Implementation bounds and every deferred scenario are in `WELL_WORKFLOW_ACCEPTANCE.md`.
+- Only source checks are authorized for this milestone. No deployment, tests/data/browser execution, paid Cloud processing or Git publication occurred. Speed improvements and numerical qualification remain unverified. Preserve unrelated seismic draft changes and the previously documented live state.
+
+
 ## Current local implementation — 2026-10-30
 
 - Authoritative completion ledger: `SEISMIC_ENGINE_COMPLETION.md`. First three engines have local implementation/source-review passes; Velocity has an unwired draft;5–16 have not had their completion pass. Overall implementation is incomplete. Testing and deployment remain pending, separately from implementation gaps.

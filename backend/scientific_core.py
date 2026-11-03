@@ -130,7 +130,10 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
     m = method_id
     with np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        if m == "log-view":
+        from scientific_conventional import IDS, evaluate_conventional
+        if m in IDS:
+            out, output_units, summary, notes = evaluate_conventional(m, a, p, units)
+        elif m == "log-view":
             out = dict(depth=a["depth"], curve=a["curve"])
             output_units = dict(depth="m", curve=units["curve"])
         elif m.startswith("qc-"):
@@ -201,7 +204,7 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
             fractional(a["vsh"],"Shale volume");fractional(a["total"],"Total porosity")
             out=dict(effectivePorosity=a["total"]-a["vsh"]*number(p,"shalePorosity",0,1));output_units["effectivePorosity"]="v/v"
         elif m.startswith("saturation-"):
-            phi,rt=a["porosity"],a["rt"];fractional(phi,"Porosity")
+            phi,rt=a["porosity"],a["rt"];fractional(phi,"Porosity");require(p["porosityBasis"] in ("total","effective"),"Review the total/effective porosity basis.");summary["porosityBasis"]=p["porosityBasis"]
             rw,aa,mm,nn=[number(p,k,positive=True) for k in ("rw","a","m","n")]
             valid=(phi>0)&(rt>0); sw=np.full(len(phi),np.nan);f=aa/phi**mm
             if m.endswith("archie"): sw[valid]=(f[valid]*rw/rt[valid])**(1/nn)
@@ -218,12 +221,16 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
             x,y=a["porosity"],a["coreK"];valid=np.flatnonzero(np.isfinite(x)&np.isfinite(y)&(x>0)&(y>0)); f=number(p,"validationFraction",.1,.5)
             require(len(valid)>=10,"Provide at least ten depth-matched core/log pairs.")
             split=int(len(valid)*(1-f));train,test=valid[:split],valid[split:];fit=fit_summary(np.log(x[train]),np.log(y[train]));pred=np.exp(fit["intercept"]+fit["slope"]*np.log(x));pred[x<=0]=np.nan
-            out=dict(predictedK=pred);output_units["predictedK"]="mD";summary=fit|dict(heldOutPairs=len(test),holdoutLogRmse=float(np.sqrt(np.mean((np.log(pred[test])-np.log(y[test]))**2))))
+            summary=fit|dict(trainingPairs=len(train),heldOutPairs=len(test),holdoutLogRmse=float(np.sqrt(np.mean((np.log(pred[test])-np.log(y[test]))**2))),applicationPorosityBounds=[float(x[train].min()),float(x[train].max())],holdoutOutsideTrainingBounds=int(np.sum((x[test]<x[train].min())|(x[test]>x[train].max()))))
+            outside=(x<x[train].min())|(x>x[train].max());pred[outside]=np.nan;summary["outsideCalibrationRows"]=int(np.sum(outside));out=dict(predictedK=pred);output_units["predictedK"]="mD"
+            notes.append("Application is restricted to the training porosity range. Held-out errors include independently observed pairs outside that range and do not authorize extrapolation.")
         elif m in ("permeability-timur","permeability-coates"):
             text(p,"calibration");phi,sw=a["porosity"],a["swi"];fractional(phi,"Porosity");fractional(sw,"Swi")
             value=number(p,"coefficient",positive=True)*phi**number(p,"phiExponent",positive=True)/(sw**number(p,"swiExponent",positive=True))
             if m.endswith("coates"):value*= (1-sw)**number(p,"swiExponent",positive=True)
-            value[sw<=0]=np.nan;out=dict(permeability=value);output_units["permeability"]="mD"
+            bounds=p["applicationBounds"];require(isinstance(bounds,dict) and set(bounds)=={"phiLow","phiHigh","swiLow","swiHigh"},"Supply core-calibrated porosity and Swi application bounds before estimating permeability.")
+            pl,ph,sl,sh=[number(bounds,key,0,1) for key in ("phiLow","phiHigh","swiLow","swiHigh")];require(ph>pl and sh>sl,"Calibration application bounds must be ordered.")
+            outside=(phi<pl)|(phi>ph)|(sw<sl)|(sw>sh);value[(sw<=0)|outside]=np.nan;out=dict(permeability=value);output_units["permeability"]="mD";summary=dict(applicationBounds=bounds,calibration=p["calibration"],outsideCalibrationRows=int(np.sum(outside)))
         elif m == "hydraulic-units":
             phi,k=a["porosity"],a["k"];fractional(phi,"Porosity");rqi=.0314*np.sqrt(k/phi);fzi=rqi/(phi/(1-phi));rqi[(phi<=0)|(k<0)]=np.nan;fzi[(phi<=0)|(phi>=1)|(k<0)]=np.nan
             out=dict(rqi=rqi,fzi=fzi);output_units=dict(rqi="µm",fzi="µm")
@@ -284,6 +291,7 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
             text(p,"tool");text(p,"citation");x,y=np.asarray(p["x"],float),np.asarray(p["delta"],float);require(x.ndim==y.ndim==1 and len(x)==len(y) and len(x)>=2 and np.all(np.isfinite(x)) and np.all(np.isfinite(y)) and np.all(np.diff(x)>0),"Provide a finite increasing authorized response table.")
             curve=a["curve"];delta=np.interp(curve,x,y,left=np.nan,right=np.nan);out=dict(original=curve,correction=delta,proposed=curve+delta);notes.append("No extrapolation outside the documented calibration table; acquisition applicability must be reviewed.")
         elif m == "cutoff-rules":
+            require(p["depthReference"] in ("MD","TVD","TVDSS"),"Confirm the cutoff depth reference.");summary["depthReference"]=p["depthReference"]
             d=a["depth"];increasing(d);require(p["combine"] in ("AND","OR"),"Choose AND or OR.");rules=p["rules"];require(isinstance(rules,list) and 0<len(rules)<=20,"Define at least one cutoff rule.");ops={"<":np.less,"<=":np.less_equal,">":np.greater,">=":np.greater_equal}
             def mask_for(items):
                 tests=[];valid=np.ones(len(d),bool)
@@ -302,7 +310,7 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
                 if region is None:continue
                 bounds=region[0];end=min(bounds.stop,len(d)-1)
                 if d[end]-d[bounds.start]<bed:mask[bounds]=0
-            out=dict(depth=d,qualified=mask);summary=dict(unknownRows=int(np.isnan(mask).sum()),ruleType="User-defined; reservoir/pay meaning must be assigned explicitly")
+            out=dict(depth=d,qualified=mask);summary=dict(depthReference=p["depthReference"],unknownRows=int(np.isnan(mask).sum()),ruleType="User-defined; reservoir/pay meaning must be assigned explicitly")
         elif m == "reservoir-summary":
             text(p,"depthReference");require(p["depthReference"] in ("MD","TVD","TVDSS"),"Confirm the summary depth basis.");top,base,gap=number(p,"top"),number(p,"base"),number(p,"maxGap",positive=True);w=thickness(a["depth"],top,base,gap);gross=base-top
             reservoir=a["reservoir"];pay=a["pay"];require(np.all(np.isin(reservoir[np.isfinite(reservoir)],[0,1])) and np.all(np.isin(pay[np.isfinite(pay)],[0,1])),"Reservoir and pay inputs must be reviewed binary masks.");require(not np.any((pay==1)&(reservoir!=1)),"Pay must be a subset of reservoir.")

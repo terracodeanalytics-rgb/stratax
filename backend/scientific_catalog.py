@@ -1,5 +1,5 @@
 """Public, dependency-light contracts for the versioned scientific methods."""
-VERSION = "stratax-science/1.0"
+VERSION = "stratax-science/1.1"
 MAX_ROWS = 250_000
 MAX_CELLS = 2_000_000
 ARTIFACT_BUDGET = 256 * 1024**2
@@ -50,7 +50,7 @@ method("porosity-effective", "porosity", "Shale porosity subtraction", [("total"
 for model in ["archie", "indonesian", "simandoux"]:
     inputs = [("porosity", "fraction"), ("rt", "resistivity")]
     if model != "archie": inputs += [("vsh", "fraction")]
-    params = {"rw": p(None, "Water resistivity at formation temperature, ohm·m"), "a": p(1, "Tortuosity"), "m": p(2, "Cementation exponent"), "n": p(2, "Saturation exponent")}
+    params = {"rw": p(None, "Water resistivity at formation temperature, ohm·m"), "a": p(1, "Tortuosity"), "m": p(2, "Cementation exponent"), "n": p(2, "Saturation exponent"), "porosityBasis": p("total", "Reviewed total or effective porosity basis", "text")}
     if model != "archie": params["rsh"] = p(None, "Reviewed shale resistivity ohm·m")
     method("saturation-"+model, "saturation", model.title(), inputs, params, AAPG)
 method("permeability-regression", "permeability", "Core-calibrated log-linear regression", [("porosity", "fraction"), ("coreK", "permeability")], {"validationFraction": p(0.2, "Contiguous held-out tail fraction")}, SCIPY)
@@ -101,6 +101,22 @@ METHODS["nmr-partition"]["inputs"][0]["dimension"]="fraction-array"
 for item in METHODS["trajectory-clearance"]["inputs"]:
     item["dimension"]="length-array"
 
+
+method("depth-match", "qc", "Reviewed piecewise depth matching", [("depth", "length"), ("curve", "numeric")], {"anchors": p([], "Increasing [source,target] metre pairs", "json"), "sourceRun": p("", "Retained logging-run identity", "text")}, SCIPY)
+method("align-curve", "qc", "Explicit bounded depth alignment", [("depth", "length"), ("curve", "numeric")], {"top": p(None, "Target top metres"), "base": p(None, "Target base metres"), "spacing": p(None, "Target spacing metres"), "maxGap": p(None, "Maximum interpolation gap metres"), "interpolation": p("linear", "linear or nearest", "text"), "depthReference": p("", "MD, TVD or TVDSS", "text")}, SCIPY)
+method("endpoint-proposal", "shale", "Reviewed-interval endpoint proposal", [("depth", "length"), ("curve", "numeric")], {"top": p(None, "Calibration top metres"), "base": p(None, "Calibration base metres"), "lowPercentile": p(5, "Proposed low percentile"), "highPercentile": p(95, "Proposed high percentile")}, SCIPY)
+method("temperature-profile", "porosity", "Supplied vertical temperature profile", [("depth", "length")], {"top": p(None, "Anchor vertical depth metres"), "base": p(None, "Last supported vertical depth metres"), "temperatureC": p(None, "Anchor temperature Celsius"), "gradientCPerM": p(None, "Reviewed Celsius per metre gradient"), "depthReference": p("", "TVD or TVDSS", "text"), "citation": p("", "Temperature evidence", "text")}, AAPG)
+METHODS["temperature-profile"]["parameters"]["anchors"] = p([], "Optional [vertical depth metres, Celsius] anchors; no extrapolation", "json")
+method("resistivity-temperature", "saturation", "Documented fluid resistivity temperature conversion", [("temperature", "numeric")], {"sampleResistivity": p(None, "Measured fluid resistivity ohm.m"), "sampleTemperatureC": p(None, "Measurement temperature Celsius"), "constantC": p(None, "Documented empirical Celsius constant"), "fluidKind": p("formation-water", "formation-water, mud, mud-filtrate or mud-cake", "text"), "citation": p("", "Equation, fluid applicability and evidence", "text")}, AAPG)
+method("porosity-combine", "porosity", "Explicit weighted porosity combination", [("estimates", "fraction-array")], {"weights": p([], "One nonnegative weight per estimate", "json"), "basis": p("total", "total or effective", "text"), "missing": p("strict", "strict or renormalize", "text")}, SCIPY)
+method("pickett-fit", "saturation", "Reviewed clean water-zone Pickett fit", [("porosity", "fraction"), ("rt", "resistivity")], {"waterZoneEvidence": p("", "Independent clean water-zone evidence", "text"), "knownParameter": p("none", "none, a or rw", "text"), "knownValue": p(None, "Independently known a or Rw; optional when none")}, SCIPY)
+
+
+METHODS["cutoff-rules"]["parameters"]["depthReference"] = p("MD", "Reviewed MD, TVD or TVDSS; no implicit conversion", "text")
+METHODS["resistivity-temperature"]["reference"] = "https://pubs.usgs.gov/of/1990/0031/report.pdf"
+METHODS["pickett-fit"]["reference"] = "https://www.kgs.ku.edu/software/Pf/description.html"
+for key in ("permeability-timur", "permeability-coates"):
+    METHODS[key]["parameters"]["applicationBounds"] = p({}, "Core-calibrated phiLow, phiHigh, swiLow, swiHigh in v/v", "json")
 
 def allowed(spec, workflows):
     needed = spec["workflows"]

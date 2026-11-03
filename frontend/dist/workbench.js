@@ -1,0 +1,13 @@
+// Shared shell controls; page routes and engine availability remain authoritative.
+export function enhanceWorkbench({state,save,tabs,route,navigate,importer}){
+ const shell=document.querySelector('.shell'),header=shell?.querySelector('.topbar');if(!header)return;
+ state.workbench||={};shell.classList.toggle('workbench-compact',!!state.workbench.navigationCollapsed);
+ const toggle=document.createElement('button');toggle.className='workbench-collapse';toggle.type='button';toggle.title='Toggle project navigation';toggle.setAttribute('aria-label','Toggle project navigation');toggle.setAttribute('aria-expanded',String(!state.workbench.navigationCollapsed));toggle.textContent='☰';header.querySelector('.breadcrumbs')?.prepend(toggle);toggle.onclick=()=>{state.workbench.navigationCollapsed=!state.workbench.navigationCollapsed;shell.classList.toggle('workbench-compact',state.workbench.navigationCollapsed);toggle.setAttribute('aria-expanded',String(!state.workbench.navigationCollapsed));save();};
+ if(shell.querySelector('.iw')){
+  const sidebar=shell.querySelector('.sidebar');sidebar.id='workbench-navigation';toggle.setAttribute('aria-controls',sidebar.id);
+  const collapse=document.createElement('button');collapse.className='pp-navigation-close';collapse.type='button';collapse.setAttribute('aria-label','Collapse application sidebar');collapse.innerHTML='<span>Project navigation</span><span aria-hidden="true">‹</span>';sidebar.prepend(collapse);
+  const sync=()=>{const collapsed=!!state.workbench.navigationCollapsed;shell.classList.toggle('workbench-compact',collapsed);if(innerWidth<=760)sidebar.classList.toggle('open',!collapsed);toggle.setAttribute('aria-expanded',String(!collapsed));toggle.title=collapsed?'Expand application sidebar':'Collapse application sidebar';toggle.setAttribute('aria-label',toggle.title);};
+  toggle.onclick=()=>{state.workbench.navigationCollapsed=!state.workbench.navigationCollapsed;sync();save();};collapse.onclick=()=>{state.workbench.navigationCollapsed=true;sync();save();};sync();
+ }
+ const bar=document.createElement('div');bar.className='workbench-commandbar';const nav=document.createElement('nav');nav.setAttribute('aria-label','Project views');for(const [id,label]of tabs){const button=document.createElement('button');button.type='button';button.textContent=label;button.setAttribute('aria-current',route===id?'page':'false');button.onclick=()=>navigate(id);nav.append(button);}const add=document.createElement('button');add.type='button';add.className='workbench-import';add.textContent='＋ Import evidence';add.onclick=()=>importer();bar.append(nav,add);header.after(bar);
+}

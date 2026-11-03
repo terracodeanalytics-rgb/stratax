@@ -17,6 +17,7 @@ export const families=[
  ['documents','Documents & photographs','Documents','PDF, DOCX, text, images','Supporting evidence; no OCR or digitization is implied.']
 ].map(([id,name,group,formats,description])=>({id,name,group,formats,description}));
 export const formatCatalog=[
+ {name:'ZIP well-data bundles',versions:'ZIP / ZIP64; nested folders and up to three nested ZIP levels; optional password; original retained. 99 entries, 256 MiB/member, 1 GiB expanded.',server:'reviewed entries use existing native readers',local:'browser extraction; review classification and associations'},
  {name:'LAS',versions:'1.2, 2.0, 3.0',server:'native',local:'native'},
  {name:'CSV / TSV / ASCII / fixed-width / Excel',versions:'Delimited and mapped columns; XLS/XLSX',server:'native',local:'native'},
  {name:'DLIS / LIS',versions:'RP66 v1 / LIS79; supported TIF wrappers',server:'native · 512 MiB materialized-frame budget',local:'conversion required'},
@@ -31,7 +32,7 @@ export const formatCatalog=[
  {name:'Generic HDF5 / XML / JSON',versions:'Explicit dataset paths or recognized schema required',server:'mapped / schema-specific',local:'mapped JSON only'}
 ];
 export const mappingRoles={
- logs:['index'],well_headers:['well','latitude','longitude','x','y','elevation'],deviation:['md','inclination','azimuth','x','y','z'],tops:['name','depth','base','well'],checkshots:['depth','time','well'],core:['depth','sample','well'],pressure:['depth','pressure','well'],fluids:['sample','well'],geochemistry:['depth','sample','well'],production:['date','well','value'],arrays:['index'],surfaces:['x','y','z'],spatial:[],models:[],documents:[],seismic:[]
+ logs:['index','well','uwi'],well_headers:['well','uwi','latitude','longitude','x','y','elevation','depth'],deviation:['md','inclination','azimuth','dx','dy','tvd','x','y','z','well'],tops:['name','depth','base','well','type'],checkshots:['depth','time','well'],core:['depth','sample','well'],pressure:['depth','pressure','well'],fluids:['sample','well'],geochemistry:['depth','sample','well'],production:['date','well','value'],arrays:['index','well','uwi'],surfaces:['x','y','z'],spatial:[],models:[],documents:[],seismic:[]
 };
 export const labels={index:'Depth / time index',md:'Measured depth',inclination:'Inclination',azimuth:'Azimuth',well:'Well identifier',latitude:'Latitude',longitude:'Longitude',x:'X / easting',y:'Y / northing',z:'Z / vertical coordinate',elevation:'Reference elevation',depth:'Depth',base:'Interval base',name:'Marker / interval name',time:'Observed time',sample:'Sample identifier',pressure:'Pressure',date:'Date / time',value:'Observed value'};
 export function visibleFamily(family,project){return family.group==='Documents'||family.id==='spatial'||family.id==='surfaces'||family.id==='models'||family.group==='Seismic'&&project.workflows?.includes('seismic')||family.group==='Wells'&&project.workflows?.includes('petrophysics');}

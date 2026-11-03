@@ -11,28 +11,38 @@ from seismic_trace_index import SAMPLE_BYTES
 
 
 def select_locators(manifest,load_chunk,source_version,trace_ids):
+    import bisect
     index=manifest.get('metadata',{}).get('traceIndex',{})
     ids=list(trace_ids);total=manifest.get('rowCount')
     need(index.get('format')=='import-trace-locators/v1' and index.get('complete') is True and index.get('sourceVersion')==source_version,'The retained trace index does not match this immutable original.')
     need(type(total) is int and total>0 and 0<len(ids)<=512 and len(set(ids))==len(ids) and all(type(i) is int and 0<=i<total for i in ids),'Choose up to 512 distinct retained trace identities.')
+    if index.get('directory'):
+        need(callable(getattr(load_chunk,'trace_locators',None)), 'A native directory reader is required.')
+        return load_chunk.trace_locators(ids)
     need(index.get('locatorColumn')==8,'Unsupported trace-locator schema.')
-    found={};first=0
-    for chunk in manifest.get('chunks',[]):
-        count=chunk.get('rows');name=chunk.get('name','')
-        need(type(count) is int and count>0 and first+count<=total and re.fullmatch(r'dataset-[a-f0-9]{20}-[0-9]{6,}\.ndjson\.gz',name),'The retained trace chunk index is invalid.')
+    bounds=manifest.get('_locatorChunkStarts')
+    if bounds is None:
+        bounds=[];first=0
+        for chunk in manifest.get('chunks',[]):
+            count=chunk.get('rows');name=chunk.get('name','')
+            need(type(count) is int and count>0 and first+count<=total and re.fullmatch(r'dataset-[a-f0-9]{20}-[0-9]{6,}\.ndjson\.gz',name),'The retained trace chunk index is invalid.')
+            bounds.append(first);first+=count
+        need(first==total,'The retained trace chunk index has missing support.')
+        manifest['_locatorChunkStarts']=bounds
+    found={}
+    for chunk_index in sorted({bisect.bisect_right(bounds,i)-1 for i in ids}):
+        chunk=manifest['chunks'][chunk_index];first=bounds[chunk_index];count=chunk['rows']
         selected={i for i in ids if first<=i<first+count}
-        if selected:
-            encoded=load_chunk(name)
-            need(len(encoded)<=5*1024**2 and hashlib.sha256(encoded).hexdigest()==chunk.get('sha256'),'A retained trace chunk changed checksum or exceeded its read budget.')
-            with gzip.GzipFile(fileobj=io.BytesIO(encoded)) as stream:expanded=stream.read(5*1024**2+1)
-            need(len(expanded)<=5*1024**2,'A retained trace chunk exceeded its expanded budget.')
-            rows=expanded.splitlines();need(len(rows)==count,'A retained trace chunk changed row count.')
-            for identity in selected:
-                row=json.loads(rows[identity-first])
-                need(isinstance(row,list) and len(row)==9 and row[0]==identity and isinstance(row[8],dict) and row[8].get('trace')==identity,'A trace locator changed identity.')
-                found[identity]=row[8]
-        first+=count
-    need(first==total and len(found)==len(ids),'The retained trace chunk index has missing support.')
+        encoded=load_chunk(chunk['name'])
+        need(len(encoded)<=5*1024**2 and hashlib.sha256(encoded).hexdigest()==chunk.get('sha256'),'A retained trace chunk changed checksum or exceeded its read budget.')
+        with gzip.GzipFile(fileobj=io.BytesIO(encoded)) as stream:expanded=stream.read(5*1024**2+1)
+        need(len(expanded)<=5*1024**2,'A retained trace chunk exceeded its expanded budget.')
+        rows=expanded.splitlines();need(len(rows)==count,'A retained trace chunk changed row count.')
+        for identity in selected:
+            row=json.loads(rows[identity-first])
+            need(isinstance(row,list) and len(row)==9 and row[0]==identity and isinstance(row[8],dict) and row[8].get('trace')==identity,'A trace locator changed identity.')
+            found[identity]=row[8]
+    need(len(found)==len(ids),'The retained trace chunk index has missing support.')
     return [found[i] for i in ids]
 
 

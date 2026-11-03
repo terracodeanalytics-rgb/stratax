@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+from collections import OrderedDict
 
 import numpy as np
 
@@ -22,13 +23,24 @@ def indexed_source(client, identity):
     index = identity.get('indexManifest')
     require(index and index.get('generation'), 'This source requires a completed retained trace index.')
     manifest = checked_json(client, index)
+    if manifest.get('metadata',{}).get('traceIndex',{}).get('directory'):
+        from seismic_native_directory import directory_loader
+        return manifest,directory_loader(client,index,manifest)
     bucket = client.bucket(index['bucket'])
     prefix = index['object'].rsplit('/', 1)[0]+'/'
+    cache=OrderedDict();cached=[0]
     def load(name):
         require(re.fullmatch(r'dataset-[a-f0-9]{20}-[0-9]{6,}\.ndjson\.gz', name), 'Invalid trace chunk reference.')
+        if name in cache:
+            cache.move_to_end(name)
+            return cache[name]
         blob = bucket.blob(prefix+name); blob.reload()
         require(blob.size <= 5*1024**2, 'Trace index chunk exceeds its read budget.')
-        return blob.download_as_bytes()
+        raw=blob.download_as_bytes(if_generation_match=int(blob.generation))
+        while cached[0]+len(raw)>8*1024**2 and cache:
+            _,old=cache.popitem(last=False);cached[0]-=len(old)
+        cache[name]=raw;cached[0]+=len(raw)
+        return raw
     return manifest, load
 
 
@@ -67,6 +79,26 @@ def resolve_inputs(parameters, bindings, client, *, cancelled=lambda: False, max
     result = dict(parameters)
     consumed = 0
     recording_axis=None
+    artifact_cache={}
+    def materialize(value):
+        nonlocal consumed
+        if isinstance(value,dict) and {'shape','values'}<=set(value):
+            array=np.asarray(value['values'],float).reshape(value['shape'])
+            consumed+=array.size
+            require(consumed<=maximum_cells, 'Result component exceeds the admitted input cell budget.')
+            return array
+        if isinstance(value,np.ndarray):
+            consumed+=value.size
+            require(consumed<=maximum_cells, 'Result component exceeds the admitted input cell budget.')
+            return value
+        if isinstance(value,dict):return {key:materialize(part) for key,part in value.items()}
+        if isinstance(value,list):
+            if all(part is None or isinstance(part,(bool,int,float)) for part in value):
+                consumed+=len(value)
+                require(consumed<=maximum_cells, 'Result component exceeds the admitted input cell budget.')
+                return value
+            return [materialize(part) for part in value]
+        return value
     def sampling(data,target):
         nonlocal recording_axis
         if '.' in target or target not in ('samples','seismic','baseline','monitor','amplitudes','volume'):return
@@ -82,7 +114,12 @@ def resolve_inputs(parameters, bindings, client, *, cancelled=lambda: False, max
         path = target.split('.')
         require(1 <= len(path) <= 6 and all(re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', part) for part in path),
                 'Use explicit argument names for source bindings.')
-        if binding['kind'] == 'section':
+        if binding['kind'] in ('indexed-volume','indexed-traces'):
+            from seismic_indexed_views import indexed_volume,indexed_traces
+            value=(indexed_volume if binding['kind']=='indexed-volume' else indexed_traces)(client,binding,cancelled)
+            consumed+=value['volume'].size if 'volume' in value else sum(len(trace['samples']) for trace in value['traces'])
+            require(consumed<=maximum_cells, 'Bound analytical view inputs exceed the admitted cell budget.')
+        elif binding['kind'] == 'section':
             data = section_input(client, binding['identity'], binding['selection'])
             value = np.asarray(data['samples'], float)
             sampling(data,target)
@@ -100,11 +137,15 @@ def resolve_inputs(parameters, bindings, client, *, cancelled=lambda: False, max
             sampling(data,target)
         elif binding['kind'] in ('resource','indexed-section'):
             artifact = binding['artifact']
-            blob = client.bucket(binding['bucket']).blob(artifact['path']); blob.reload()
-            require(blob.size <= 64*1024**2, 'Select a bounded result resource.')
-            raw = blob.download_as_bytes()
-            require(hashlib.sha256(raw).hexdigest() == artifact['sha256'], 'Accepted result checksum changed.')
-            value = unpack_result(raw)
+            cache_key=(binding['bucket'],artifact['path'],artifact['sha256'],artifact.get('generation'))
+            if cache_key not in artifact_cache:
+                artifact_cache.clear()
+                blob = client.bucket(binding['bucket']).blob(artifact['path'],generation=artifact.get('generation')); blob.reload()
+                require(blob.size <= 64*1024**2, 'Select a bounded result resource.')
+                raw = blob.download_as_bytes(if_generation_match=int(blob.generation))
+                require(hashlib.sha256(raw).hexdigest() == artifact['sha256'], 'Accepted result checksum changed.')
+                artifact_cache[cache_key]=dict(result=json.loads(raw)) if artifact.get('format') == 'json' else unpack_result(raw)
+            value=artifact_cache[cache_key]
             if binding['kind']=='indexed-section':
                 from seismic_cloud_index_reader import read_cloud_section
                 selection=binding['selection']
@@ -122,6 +163,8 @@ def resolve_inputs(parameters, bindings, client, *, cancelled=lambda: False, max
                     value = value[key]
             if isinstance(value, dict) and set(('shape', 'values')) <= set(value):
                 value = np.asarray(value['values'], float).reshape(value['shape'])
+            elif isinstance(value,dict):
+                value=materialize(value)
         else:
             raise ValueError('Unsupported source binding kind.')
         if isinstance(value, (list, np.ndarray)):

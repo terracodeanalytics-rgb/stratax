@@ -24,7 +24,7 @@ SITE_ORIGIN = os.environ.get("STRATAX_SITE_ORIGIN", "https://stratax-workbench.c
 SITE_ORIGINS = list(dict.fromkeys([SITE_ORIGIN, *[origin.strip().rstrip('/') for origin in os.environ.get('STRATAX_ADDITIONAL_SITE_ORIGINS','').split(',') if origin.strip()]]))
 logger = logging.getLogger("stratax")
 app = FastAPI(title="StrataX account API", docs_url=None, redoc_url=None, openapi_url=None)
-app.add_middleware(CORSMiddleware, allow_origins=SITE_ORIGINS, allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-File-Name"], expose_headers=["Retry-After", "X-Request-ID"])
+app.add_middleware(CORSMiddleware, allow_origins=SITE_ORIGINS, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-File-Name"], expose_headers=["Retry-After", "X-Request-ID"])
 _db = None
 
 def database():

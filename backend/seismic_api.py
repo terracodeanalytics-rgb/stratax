@@ -204,7 +204,7 @@ def install_seismic(app, database, current_user, fail, acceptance_current):
             fail(400, "section_input", str(error))
         return result | dict(_identity=dict(bucket=os.environ["STRATAX_PROJECT_BUCKET"], object=prefix+"originals/"+valid(original["id"]),
                                             generation=getattr(raw, "generation", None), size=raw.size, kind="su" if extension == "su" else "segy",
-                                            endian=metadata.get("endian", "big"), headerBytes=allowed,indexManifest=index_manifest))
+                                            endian=metadata.get("endian", "big"), headerBytes=allowed,indexHeaderBytes=metadata.get("headerBytes",{}),indexManifest=index_manifest))
 
     def retained_section(uid, pid, record, ds, **bounds):
         try:

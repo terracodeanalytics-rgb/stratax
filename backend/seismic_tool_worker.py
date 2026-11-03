@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 import time
+import base64
 from pathlib import Path
 
 import numpy as np
@@ -50,7 +51,7 @@ def main():
         require(not cancelled(),'Engine calculation cancelled.')
         require(actual+len(raw)<=run['reservation'],'Approved artifact storage limit exceeded.')
         target=bucket.blob(prefix+name);target.upload_from_string(raw,if_generation_match=0);actual+=len(raw)
-        return dict(path=prefix+name,sha256=hashlib.sha256(raw).hexdigest(),bytes=len(raw))
+        return dict(path=prefix+name,sha256=hashlib.sha256(raw).hexdigest(),bytes=len(raw),generation=str(target.generation))
     try:
         source=run['input'];require(source['path'].startswith(f'owners/{uid}/projects/{pid}/seismic/tool-inputs/'),'Input scope mismatch.')
         blob=bucket.blob(source['path'],generation=source['generation']);blob.reload()
@@ -66,10 +67,13 @@ def main():
                 blob=bucket.blob(previous['path']);blob.reload();require(blob.size<=run['reservation'],'Checkpoint exceeds approved limit.')
                 saved=blob.download_as_bytes();require(hashlib.sha256(saved).hexdigest()==previous['sha256'],'Checkpoint checksum changed.')
                 resumed=unpack_result(saved)
+        checkpoint_sequence=0
         def checkpoint(value):
+                nonlocal checkpoint_sequence
+                checkpoint_sequence+=1
                 with tempfile.TemporaryDirectory() as directory:
                     file=Path(directory)/'checkpoint.npz';_atomic_npz(file,pack_result(value))
-                    reference=put(f'checkpoints/{value.get("completedPartitions",value.get("completedShots",len(value.get("history",[]))))}.npz',file.read_bytes())
+                    reference=put(f'checkpoints/{checkpoint_sequence}.npz',file.read_bytes())
                     item.update(dict(checkpoint=reference))
         if tool=='index-manifest':
             from seismic_cloud_index_worker import build_cloud_index
@@ -90,11 +94,24 @@ def main():
             def owner():return dict(uid=uid)
             def project(user,project_id):require(user==uid and project_id==pid,'Tool project scope mismatch.')
             def fail(status,code,message):raise HTTPException(status,dict(code=code,message=message))
-            install_seismic_tools(app,owner,project,fail,cancelled=cancelled,progress=progress)
+            install_seismic_tools(app,owner,project,fail,cancelled=cancelled,progress=progress,worker_execution=True,checkpoint=checkpoint,resumed=resumed)
             route=next((r for r in app.routes if r.path==f'/api/projects/{{pid}}/seismic/tools/{tool}' and 'POST' in r.methods),None)
             require(route is not None,'Engine handler is unavailable in this pinned worker.')
             result=route.endpoint(pid=pid,body=parameters,user=dict(uid=uid))
         require(not cancelled(),'Engine run cancelled before artifact commit.')
+        export_manifest=None
+        if isinstance(result,dict) and result.get('exports'):
+            entries=result['exports'];published=[];names=set()
+            require(isinstance(entries,list) and len(entries)<=32,'An engine may publish at most32 named exports.')
+            for entry in entries:
+                name=entry['name']
+                require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,100}',name) and name not in names,
+                        'Export names must be distinct flat artifact names.')
+                names.add(name)
+                raw=entry['text'].encode('utf-8') if 'text' in entry else base64.b64decode(entry['bytesBase64'],validate=True)
+                published.append(dict(name=name,contentType=entry['contentType'],artifact=put('exports/'+name,raw)))
+            export_manifest=put('exports/manifest.json',json.dumps(published,sort_keys=True,allow_nan=False).encode())
+            result=dict(result,exports=published)
         with tempfile.TemporaryDirectory() as directory:
             output=Path(directory)/'result.npz';_atomic_npz(output,pack_result(dict(result=result,
                 sources=payload['sources'],engineVersion=run['estimate']['engineVersion'],estimateFingerprint=run['estimateFingerprint'])))
@@ -109,7 +126,7 @@ def main():
                     for key,part in value.items():
                         if re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*',str(key)):describe(part,path+'.'+key)
         describe(result)
-        settle(db,ref,item,'completed',actual,dict(outputManifest=reference,outputSchema=schema))
+        settle(db,ref,item,'completed',actual,dict(outputManifest=reference,outputSchema=schema,exportManifest=export_manifest))
     except Exception:
         logging.exception('Engine job %s stopped',rid)
         try:actual=sum(blob.size or 0 for blob in client.list_blobs(bucket.name,prefix=prefix))

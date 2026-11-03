@@ -27,9 +27,9 @@ test('stable authenticated requests retain normal API behaviour',async t=>{
 test('native import stops between reservation and upload after an account switch',async t=>{
  const auth=await loadAuth();auth.session.user={uid:'first',getIdToken:async()=>'fixture-token'};let calls=0;
  t.mock.method(globalThis,'fetch',async()=>{calls++;return {ok:true,json:async()=>({id:'import',assets:[{id:'original',name:'fixture.segy',existing:false}]})};});
- globalThis.__seismicScopeFixture=auth;t.after(()=>delete globalThis.__seismicScopeFixture);
+ globalThis.__seismicScopeFixture={...auth,concurrent:(await import('../frontend/dist/well-data.js')).concurrent};t.after(()=>delete globalThis.__seismicScopeFixture);
  const input=fs.readFileSync('frontend/dist/ingestion-client.js','utf8').replace(/^import .*\r?\n/gm,'');
- const module=await import('data:text/javascript;base64,'+Buffer.from('const {api,session}=globalThis.__seismicScopeFixture;\n'+input).toString('base64'));
+ const module=await import('data:text/javascript;base64,'+Buffer.from('const {api,session,concurrent}=globalThis.__seismicScopeFixture;\n'+input).toString('base64'));
  await assert.rejects(module.nativeImport({id:'a'},[{file:{name:'fixture.segy',size:10}}],'seismic',{}, {onSession:()=>{auth.session.user={uid:'second'};}}),/account changed/);
  assert.equal(calls,1);
 });

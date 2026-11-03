@@ -8,17 +8,28 @@ import math
 import re
 from pathlib import Path
 
-PARSER_VERSION = "stratax-import/1.0"
+PARSER_VERSION = "stratax-import/2.0"
 PREVIEW_ROWS = 60
 CHUNK_ROWS = 5000
 GIB = 1024 ** 3
 _output_bytes = 0
 _cancel_check = None
+_progress_callback = None
 
 
 def set_cancel_check(callback):
     global _cancel_check
     _cancel_check = callback
+
+
+def set_progress_callback(callback):
+    global _progress_callback
+    _progress_callback = callback
+
+
+def report_progress(**detail):
+    if _progress_callback:
+        _progress_callback(detail)
 
 
 class ImportProblem(ValueError):
@@ -118,9 +129,14 @@ def detect(path, hint=""):
 
 def digest(path):
     result = hashlib.sha256()
+    loaded, total = 0, Path(path).stat().st_size
     with open(path, "rb") as source:
         for block in iter(lambda: source.read(4 * 1024 * 1024), b""):
+            if _cancel_check and _cancel_check():
+                raise ImportProblem('cancelled', 'Import cancelled. Retained originals are unchanged.')
             result.update(block)
+            loaded += len(block)
+            report_progress(phase='hashing', bytesRead=loaded, totalBytes=total)
     return result.hexdigest()
 
 
@@ -156,7 +172,7 @@ def output_dataset(output, name, columns, rows, metadata=None, issues=None):
         if _output_bytes > int(os.environ.get('IMPORT_ARTIFACT_BUDGET', str(1024**3))):
             if handle:
                 handle.close()
-            raise ImportProblem('artifact_budget', 'Parsed data exceeds this job’s artifact budget. Retain the original and export selected channels or smaller source groups.')
+            raise ImportProblem('artifact_budget', 'Parsed data exceeds this jobâ€™s artifact budget. Retain the original and export selected channels or smaller source groups.')
         if count % CHUNK_ROWS == 0 and _cancel_check and _cancel_check():
             if handle:
                 handle.close()
@@ -173,6 +189,8 @@ def output_dataset(output, name, columns, rows, metadata=None, issues=None):
                 reverse += index < previous
             previous = index
         count += 1
+        if count == 1 or count % 1000 == 0:
+            report_progress(phase='parsing', datasetId=dataset_id, records=count, chunks=len(chunks))
         if handle is None:
             name_part = f"{dataset_id}-{len(chunks):06}.ndjson.gz"
             handle = gzip.open(output / name_part, "wt", encoding="utf-8")
@@ -181,12 +199,15 @@ def output_dataset(output, name, columns, rows, metadata=None, issues=None):
         chunk_count += 1
         chunk_size += len(encoded)
         if chunk_count >= CHUNK_ROWS or chunk_size >= 4 * 1024 * 1024:
+            report_progress(phase='writing', datasetId=dataset_id, records=count, chunks=len(chunks))
             handle.close()
             chunks.append({"name": name_part, "rows": chunk_count, "size": (output / name_part).stat().st_size})
             handle = None
     if handle:
+        report_progress(phase='writing', datasetId=dataset_id, records=count, chunks=len(chunks))
         handle.close()
         chunks.append({"name": name_part, "rows": chunk_count, "size": (output / name_part).stat().st_size})
+    report_progress(phase='parsing', datasetId=dataset_id, records=count, chunks=len(chunks))
     notes = list(issues or [])
     if repeated:
         notes.append(issue("repeated_index", f"{repeated} adjacent repeated index values retained."))
@@ -284,6 +305,7 @@ def read_las(path, output, options):
 def read_table(path, output, options):
     kind = detect(path)
     columns, iterator = [], None
+    detected_null = None
     skip = int(options.get("headerRow", 1)) - 1
     if kind == "xlsx":
         from openpyxl import load_workbook
@@ -297,29 +319,52 @@ def read_table(path, output, options):
         iterator = (sheet.row_values(i) for i in range(skip, sheet.nrows))
     else:
         source = open(path, encoding=options.get("encoding", "utf-8-sig"), errors="replace", newline="")
-        for _ in range(skip):
-            next(source, None)
-        if options.get("widths"):
-            widths = [int(w) for w in options["widths"]]
-            if any(w < 1 or w > 10000 for w in widths):
-                raise ImportProblem("fixed_widths", "Enter valid fixed-width column sizes.")
-            offsets = [0, *itertools.accumulate(widths)]
-            iterator = ([line[offsets[i]:offsets[i+1]].strip() for i in range(len(widths))] for line in source)
+        import shlex
+        definitions, in_header = [], False
+        sample = source.read(16384)
+        undefined = re.search(r'(?im)^\s*(?:[#!]\s*)?(?:UNDEFINED(?:\s+VALUE)?|UNDEF|NULL)\s*[:=]?\s*(-?[\d.]+(?:[EeDd][+-]?\d+)?)', sample)
+        detected_null = number(undefined.group(1)) if undefined else None
+        source.seek(0)
+        structured = bool(re.search(r'(?im)^\s*BEGIN\s+HEADER\s*$', sample))
+        if structured:
+            for line in source:
+                clean = line.strip()
+                if re.fullmatch(r'BEGIN\s+HEADER', clean, re.I):
+                    in_header = True
+                elif re.fullmatch(r'END\s+HEADER', clean, re.I):
+                    break
+                elif in_header and clean and not clean.startswith(('#', '!')) and not re.match(r'^(UNDEFINED|UNDEF|NULL)\b', clean, re.I):
+                    definitions.append(clean)
+            if not definitions:
+                raise ImportProblem('petrel_header', 'The structured ASCII header has no column definitions.')
         else:
-            sample = source.read(8192)
-            source.seek(0)
             for _ in range(skip):
                 next(source, None)
-            delimiter = options.get("delimiter")
-            if delimiter == "whitespace":
-                iterator = (re.split(r"\s+", line.strip()) for line in source if line.strip() and not line.lstrip().startswith(("#", "!")))
-            else:
-                if not delimiter:
-                    try:
-                        delimiter = csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
-                    except csv.Error:
-                        delimiter = "whitespace"
-                iterator = (re.split(r"\s+", line.strip()) for line in source if line.strip()) if delimiter == "whitespace" else csv.reader(source, delimiter=delimiter)
+        delimiter = options.get('delimiter')
+        if not delimiter:
+            try:
+                delimiter = csv.Sniffer().sniff(sample, delimiters=',;\t|').delimiter
+            except csv.Error:
+                delimiter = 'whitespace'
+        def content_lines():
+            quoted = False
+            for line in source:
+                if not quoted and (not line.strip() or line.lstrip().startswith(('#', '!')) or re.fullmatch(r'\s*VERSION\s+\d+\s*', line, re.I) or re.match(r'\s*(UNDEFINED|UNDEF|NULL)\b', line, re.I)):
+                    continue
+                yield line
+                if delimiter != 'whitespace' and line.count('"') % 2:
+                    quoted = not quoted
+        if options.get('widths'):
+            widths = [int(w) for w in options['widths']]
+            if any(w < 1 or w > 10000 for w in widths):
+                raise ImportProblem('fixed_widths', 'Enter valid fixed-width column sizes.')
+            offsets = [0, *itertools.accumulate(widths)]
+            iterator = ([line[offsets[i]:offsets[i+1]].strip() for i in range(len(widths))] for line in content_lines())
+        else:
+            iterator = (shlex.split(line, comments=False) for line in content_lines()) if delimiter == 'whitespace' else csv.reader(content_lines(), delimiter=delimiter)
+        if definitions:
+            iterator = itertools.chain([definitions], iterator)
+            options = {**options, 'noHeader': False}
     first = next(iterator, None)
     if not first:
         raise ImportProblem("empty_table", "The selected sheet or table is empty.")
@@ -328,15 +373,54 @@ def read_table(path, output, options):
         iterator = itertools.chain([first], iterator)
     else:
         names = first
-    columns = [column(str(name or f"Column {i+1}"), (options.get("units") or {}).get(str(i), ""), i) for i, name in enumerate(names)]
+    columns = []
+    for i, name in enumerate(names):
+        label = str(name or f'Column {i+1}').strip().strip('"').strip("'")
+        annotated = re.fullmatch(r'(.+?)\s*[[(]([^\])]+)[\])]', label)
+        unit = annotated.group(2).strip() if annotated else ''
+        columns.append(column(annotated.group(1).strip() if annotated else label, unit, i))
     null = number(options.get("null", ""))
+    if null is None:
+        null = detected_null
+    identifiers = {int(index) for role, index in options.get('mapping', {}).items() if role in ('well', 'uwi', 'name', 'sample') and str(index).isdigit()}
+    identifiers.update(i for i, name in enumerate(names) if re.fullmatch(r'(well\s*name|well|uwi|api|sample\s*id)', str(name), re.I))
     def rows():
         for row in iterator:
             if not any(v is not None and str(v).strip() for v in row):
                 continue
-            yield [number(v, null) for v in row]
+            yield [str(v).strip() if i in identifiers and v is not None and v != '' else number(v, null) for i, v in enumerate(row)]
     try:
-        return [output_dataset(output, Path(path).name, columns, rows(), {"format": kind, "mapping": options.get("mapping", {}), "sheet": options.get("sheet", ""), "well": options.get("well", ""), "references": options.get("references", {})})]
+        metadata = {"format": kind, "mapping": options.get("mapping", {}), "sheet": options.get("sheet", ""), "null": null, "well": options.get("well", ""), "references": options.get("references", {})}
+        well_column = options.get('mapping', {}).get('uwi' if options.get('matching', {}).get('field') == 'uwi' and str(options.get('mapping', {}).get('uwi', '')) != '' else 'well')
+        if options.get('_family') != 'well_headers' and well_column is not None and well_column != '':
+            import tempfile
+            handles, groups, group_names, group_uwis = {}, {}, {}, {}
+            with tempfile.TemporaryDirectory() as scratch:
+                try:
+                    for row in rows():
+                        raw = str(row[int(well_column)] or '').strip()
+                        if not raw:
+                            raise ImportProblem('well_identity', 'A record has no well identifier. Review the source well column.')
+                        if raw not in handles:
+                            if len(handles) >= 100:
+                                raise ImportProblem('well_groups', 'Split tables into at most 100 wells per import.')
+                            target = Path(scratch) / (hashlib.sha256(raw.encode()).hexdigest() + '.jsonl')
+                            groups[raw] = target
+                            well_index = options.get('mapping', {}).get('well')
+                            uwi_index = options.get('mapping', {}).get('uwi')
+                            group_names[raw] = str(row[int(well_index)]) if str(well_index).isdigit() else raw
+                            group_uwis[raw] = str(row[int(uwi_index)]) if str(uwi_index).isdigit() else ''
+                            handles[raw] = target.open('w', encoding='utf-8')
+                        handles[raw].write(json.dumps(row, allow_nan=False) + '\n')
+                finally:
+                    for handle in handles.values():
+                        handle.close()
+                result = []
+                for raw, target in groups.items():
+                    with target.open(encoding='utf-8') as stream:
+                        result.append(output_dataset(output, Path(path).name + ' · ' + raw, columns, (json.loads(line) for line in stream), {**metadata, 'well': raw, 'wellName': group_names[raw], 'rowUwi': group_uwis[raw], 'rowWell': True}))
+                return result
+        return [output_dataset(output, Path(path).name, columns, rows(), metadata)]
     finally:
         if kind == "xlsx":
             book.close()
@@ -372,8 +456,8 @@ def validate_mapping(dataset, family, options):
     if all(c.get('effectiveUnit') or c.get('unit') and c['unit'].upper() != 'UNKNOWN' for c in dataset['columns']):
         notes = [i for i in notes if i['code'] != 'unknown_units']
     required = {"deviation": ["md", "inclination", "azimuth"], "tops": ["name", "depth"], "checkshots": ["depth", "time"], "well_headers": ["well"], "production": ["date"], "spatial": []}.get(family, [])
-    if family == "deviation" and options.get("surveyMethod") == "coordinates":
-        required = ["md", "x", "y", "z"]
+    if family == "deviation":
+        required = {"coordinates": ["x", "y", "z"], "xy_tvd": ["x", "y", "tvd"], "offsets": ["dx", "dy", "tvd"]}.get(options.get("surveyMethod"), required)
     for field in required:
         if str(mapping.get(field, "")) == "":
             notes.append(issue("mapping_" + field, f"Map the {field} column before activating this dataset.", "blocking"))
@@ -407,7 +491,9 @@ def validate_mapping(dataset, family, options):
             try:
                 stats = dataset.get('columnStatistics', [])[int(mapping[role])]
                 if stats['decreasing'] or stats['repeated']:
-                    notes.append(issue('station_order_' + role, f"The mapped {role} contains {stats['decreasing']} decreasing and {stats['repeated']} repeated steps; confirm source ordering."))
+                    note = issue('station_order_' + role, f"The mapped {role} contains {stats['decreasing']} decreasing and {stats['repeated']} repeated steps; confirm source ordering.")
+                    note['count'] = stats['decreasing'] + stats['repeated']
+                    notes.append(note)
             except (IndexError, ValueError, TypeError):
                 pass
     dataset["issues"] = notes
@@ -415,12 +501,15 @@ def validate_mapping(dataset, family, options):
     dataset["family"] = family
     dataset["references"] = references
     dataset["mapping"] = mapping
-    dataset["well"] = options.get("well") or dataset.get("metadata", {}).get("well", "")
+    raw_well = dataset.get('metadata', {}).get('well', '')
+    dataset["well"] = options.get('wellBindings', {}).get(raw_well) or options.get('well') or raw_well
+    if dataset.get('metadata', {}).get('rowWell') and raw_well not in options.get('wellBindings', {}):
+        notes.append(issue('well_match_required', 'Review the well association for ' + raw_well + '.', 'blocking'))
     return dataset
 
 
 def parse(path, output, family, options=None, companions=None):
-    options = options or {}
+    options = {**(options or {}), "_family": family}
     kind = detect(path, family)
     allowed={'las':{'logs','arrays'},'dlis':{'logs','arrays','checkshots'},'lis':{'logs','arrays'},'segy':{'seismic','checkshots','arrays'},'su':{'seismic','checkshots','arrays'},'zgy':{'seismic'},'sgz':{'seismic'},'vds':{'seismic'},'gocad':{'surfaces','models','spatial'},'surface':{'surfaces','models','spatial'},'resqml':{'models'},'eclipse':{'models'},'grdecl':{'models'},'pdf':{'documents'},'docx':{'documents'},'image':{'documents','core','arrays'}}
     if kind in allowed and family not in allowed[kind]:
@@ -433,5 +522,8 @@ def parse(path, output, family, options=None, companions=None):
         from ingestion_native import read_native
         datasets = read_native(kind, path, output, options, companions or {})
     for dataset in datasets:
+        report_progress(phase='validating',datasetId=dataset['id'],records=dataset['rowCount'])
         validate_mapping(dataset, family, options)
+        from well_ingestion import decorate
+        decorate(dataset, output, options)
     return datasets

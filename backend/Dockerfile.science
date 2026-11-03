@@ -3,7 +3,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends libgomp1 &&
 WORKDIR /app
 COPY requirements-science.txt .
 RUN pip install --no-cache-dir -r requirements-science.txt
-COPY scientific_*.py ingestion_core.py ./
+COPY scientific_*.py ingestion_core.py well_ingestion.py ./
 COPY tests/test_science.py tests/test_science.py
 RUN pip install --no-cache-dir pytest==9.0.2 && python -m pytest tests/test_science.py -q --disable-warnings
 ENV PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2

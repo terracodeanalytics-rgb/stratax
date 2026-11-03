@@ -23,6 +23,12 @@ class ProjectWrite(BaseModel):
     workspace: dict = Field(default_factory=dict)
 
 
+class SourceMetadataUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str | None = Field(default=None, max_length=200)
+    trashed: bool | None = None
+
+
 def install_projects(app, database, current_user, fail, acceptance_current):
     def owner(user=Depends(current_user)):
         if not acceptance_current(database().collection("stratax_legal_acceptance").document(user["uid"]).get().to_dict()):
@@ -146,6 +152,40 @@ def install_projects(app, database, current_user, fail, acceptance_current):
         except Exception:
             await run_in_threadpool(blob.delete)
             raise
+
+    @app.post('/api/projects/{project_id}/files/{file_id}/metadata')
+    def update_source_metadata(project_id: str, file_id: str, body: SourceMetadataUpdate, user=Depends(owner)):
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', file_id):
+            fail(400, 'file_reference', 'Choose a valid retained source.')
+        if body.display_name is None and body.trashed is None:
+            fail(400, 'source_change', 'Choose a source name or Trash action.')
+        if body.display_name is not None and (not body.display_name.strip() or any(ord(c) < 32 for c in body.display_name)):
+            fail(400, 'source_name', 'Enter a name without line breaks or control characters.')
+        ref, _ = existing(user['uid'], project_id)
+
+        @firestore.transactional
+        def update(transaction):
+            record = ref.get(transaction=transaction).to_dict()
+            if not record:
+                fail(404, 'project_missing', 'This project could not be found.')
+            workspace = record.setdefault('workspace', {})
+            source = next((f for f in workspace.get('files', []) if f.get('id') == file_id), None)
+            if not source:
+                fail(404, 'file_missing', 'This source file could not be found.')
+            now = datetime.now(timezone.utc).isoformat()
+            if body.display_name is not None:
+                source['displayName'] = body.display_name.strip()
+            if body.trashed is not None:
+                source['trashed'] = body.trashed
+                source['deletedAt'] = now if body.trashed else None
+            action = 'Restored source' if body.trashed is False else 'Moved source to Trash' if body.trashed else 'Renamed source'
+            workspace.setdefault('audit', []).insert(0, {'action': action + ': ' + (source.get('displayName') or source['name']), 'time': now})
+            workspace['audit'] = workspace['audit'][:200]
+            record['revision'] += 1
+            transaction.set(ref, record)
+            return {'file': source, 'revision': record['revision']}
+
+        return update(database().transaction())
 
     @app.get("/api/projects/{project_id}/files/{file_id}")
     def download_file(project_id: str, file_id: str, user=Depends(owner)):

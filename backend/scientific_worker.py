@@ -122,9 +122,9 @@ def write_result(output, prefix, rid, result, sources, configuration):
         # IDs are unique across runs even when result shape/names repeat.
         original_id=ds["id"];ds["id"]="sci-"+rid[4:20]+"-"+str(len(datasets))
         ds.update(well=next(iter({s.get("well","") for s in sources.values()}),"") if len({s.get("well","") for s in sources.values()})==1 else "",family="derived",references={"userConfirmedInputs":True},mapping={})
-        if any(key == "depth" for key,_ in items) and configuration.get("scope"):
+        if any(key == "depth" for key,_ in items) and (configuration.get("scope") or configuration.get("verifiedIndexReference")):
             ds["indexColumnId"] = cols[next(i for i,(key,_) in enumerate(items) if key == "depth")]["id"]
-            ds["references"].update(depthReference=configuration["scope"]["reference"], depthUnit="m")
+            ds["references"].update(depthReference=configuration.get("verifiedIndexReference") or configuration["scope"]["reference"], depthUnit="m")
         (output/(original_id+".json")).write_text(json.dumps(ds,allow_nan=False),encoding="utf-8")
         datasets.append(ds)
     preview={key:values[:min(2000,len(values))] if not values or not isinstance(values[0],list) else [row[:512] for row in values[:256]] for key,values in result["series"].items()}
@@ -150,7 +150,7 @@ def scoped_inputs(inputs, units, selection):
     units.pop("__canvas_index",None)
     depth=np.asarray(raw,dtype=float)*unit_factor("length",selection["unit"])
     mask=np.ones(len(depth),dtype=bool)
-    if selection.get("top") is not None:mask &= np.isfinite(depth)&(depth>=selection["top"])&(depth<=selection["base"])
+    if selection.get("top") is not None:mask &= np.isfinite(depth)&(depth>=selection["top"])&((depth<selection["base"]) if selection.get("halfOpen") else (depth<=selection["base"]))
     if selection.get("rowRanges") is not None:
         rows=np.zeros(len(depth),bool)
         for item in selection["rowRanges"]:
@@ -162,6 +162,31 @@ def scoped_inputs(inputs, units, selection):
         require(len(values)==len(depth),"Canvas interval inputs do not have a common stored row index.","scope_alignment")
         inputs[role]=np.asarray(values)[mask].tolist()
     return inputs,units,depth[mask]
+
+
+def alignment_indices(snapshots):
+    """Require retained, confirmed depth indices; a row-alignment checkbox is insufficient."""
+    result={}
+    for did,source in snapshots.items():
+        index=source.get("indexColumnId")
+        if not index and (source.get("mapping") or {}).get("index") not in (None,""):
+            index="column-"+str(source["mapping"]["index"])
+        column=next((c for c in (source.get("columns") or []) if c["id"]==index),None)
+        require(column and (source.get("references") or {}).get("depthReference") in ("MD","TVD","TVDSS"),"Multi-dataset calculations need confirmed retained depth indices. Align and review curves explicitly first.","alignment_required")
+        result["__alignment_"+did]=dict(datasetId=did,columnId=index,unit=column.get("effectiveUnit") or column.get("unit"))
+    return result
+
+
+def verify_alignment(inputs, units, indices, snapshots):
+    import numpy as np
+    axis,reference=None,None
+    for role,binding in indices.items():
+        values=np.asarray(inputs.pop(role),float)*unit_factor("length",units.pop(role))
+        ref=snapshots[binding["datasetId"]]["references"]["depthReference"]
+        require(values.ndim==1 and len(values)>1 and np.all(np.isfinite(values)) and np.all(np.diff(values)>0),"Retained scalar depth indices must increase without gaps in their coordinates. Prepare and review alignment first.","alignment_required")
+        if axis is not None:require(reference==ref and axis.shape==values.shape and np.allclose(axis,values,rtol=0,atol=1e-8),"These datasets have different depth axes. Equal row counts do not authorize a join; align and review them explicitly.","alignment_required")
+        axis,reference=values,ref
+    return axis,reference
 
 
 def run():
@@ -179,14 +204,24 @@ def run():
     status,message,extra="failed",None,None
     try:
         require(record["status"]!="cancelling","Calculation cancelled.","cancelled")
-        ref.update(dict(status="running"))
+        ref.update(dict(status="running",dispatchUnconfirmed=False,message="Processing reviewed scientific inputs."))
         def cancelled():return ref.get().to_dict().get("status")=="cancelling"
         for did,source in record["inputSnapshots"].items():
             latest=project.collection("datasets").document(did).get().to_dict()
             require(latest and latest.get("active") and fingerprint(latest)==source["fingerprint"],"An input version changed. Submit a new calculation.","stale_inputs")
             prefix=f"owners/{uid}/projects/{pid}/"
             require(source["manifest"].startswith(prefix),"Input artifact leaves the authenticated project.","unsafe_artifact")
+        for did,expected in record.get("inputFingerprints",{}).items():
+            latest=project.collection("datasets").document(did).get().to_dict()
+            require(latest and latest.get("active") and fingerprint(latest)==expected,"An upstream source changed. Recalculate affected checkpoints.","stale_inputs")
+        if record["method"]=="workflow-segment":
+            from scientific_workflow_worker import execute_segment
+            extra=execute_segment(record,project_root,output,relative_prefix,cancelled,lambda value:ref.update(dict(progress=value)))
+            require(not cancelled(),"Calculation cancelled.","cancelled")
+            status="completed"
+            return
         extra_geometry=None
+        verified_axis=None
         if record["method"]=="seismic-attributes":
             binding=record["configuration"]["bindings"]["traces"];ds=record["inputSnapshots"][binding["datasetId"]]
             require(ds.get("family")=="seismic","Select an imported seismic dataset with an immutable original.")
@@ -204,10 +239,19 @@ def run():
             bindings=dict(record["configuration"]["bindings"])
             selection=record["configuration"].get("scope")
             if selection:bindings["__canvas_index"]={k:selection[k] for k in ("datasetId","columnId","unit")}
+            indices=alignment_indices(record["inputSnapshots"]) if len(record["inputSnapshots"])>1 and record["method"]!="trajectory-clearance" else {}
+            bindings.update(indices)
             inputs,units=read_inputs(project_root,{k:dict(v,manifest=v["manifest"].removeprefix(f"owners/{uid}/projects/{pid}/")) for k,v in record["inputSnapshots"].items()},bindings,cancelled)
+            if indices:
+                verified_axis,reference=verify_alignment(inputs,units,indices,record["inputSnapshots"])
+                record["configuration"]["verifiedIndexReference"]=reference
             inputs,units,index=scoped_inputs(inputs,units,selection)
         require(not cancelled(),"Calculation cancelled.","cancelled")
         result=evaluate(record["method"],inputs,record["parameters"],units)
+        if verified_axis is not None:
+            if any(len(values)==len(verified_axis) for values in result["series"].values()):
+                result["series"]={"depth":clean(verified_axis),**result["series"]};result["units"]["depth"]="m"
+            result["summary"]["alignmentEvidence"]=dict(reference=reference,operation="Retained depth axes agree within 1e-8 m conversion tolerance; no resampling or extrapolation",indices=indices)
         if not extra_geometry and record["configuration"].get("scope"):
             if any(len(values)==len(index) for values in result["series"].values()):
                 if "depth" not in result["series"]:result["series"]={"depth":clean(index),**result["series"]}
