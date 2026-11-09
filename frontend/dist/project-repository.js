@@ -1,5 +1,6 @@
 import {api, session, API_ORIGIN} from './auth.js';
 import {remapSeismicCopy} from './seismic-transfer.js';
+import {families} from './ingestion-catalog.js';
 
 const handles = new Map();
 let activeUid = null;
@@ -179,8 +180,9 @@ export async function copyToCloud(project,workspace,name,onProgress=()=>{}){
       const blob=await source(project,original),file=new File([blob],original.name,{type:blob.type});
       checkScope();
       const previous=workspace.ingestion?.imports?.find(r=>r.assets?.some(a=>a.id===original.id));
-      const family=previous?.family||(workspace.ingestion?.datasets||[]).find(d=>d.sourceId===original.id)?.family||'documents',options=structuredClone(previous?.options||{});
-      const imported=await nativeImport(copy,[{file}],family,options,{onProgress:text=>onProgress(`${completed+1}/${workspace.files.length} · ${text}`)});
+      const family=[original.type,(workspace.ingestion?.datasets||[]).find(d=>d.sourceId===original.id)?.family,previous?.family].find(value=>families.some(family=>family.id===value))||'documents',options=structuredClone(previous?.options||{});
+      const clientId=previous?.assets?.find(asset=>asset.id===original.id)?.clientId||original.id;
+      const imported=await nativeImport(copy,[{id:clientId,file,family}],family,options,{onProgress:text=>onProgress(`${completed+1}/${workspace.files.length} · ${text}`)});
       checkScope();
       sourceIds[original.id]=imported.assets[0].id;
       const oldActive=(workspace.ingestion?.datasets||[]).filter(d=>d.sourceId===original.id&&d.active!==false);

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from fastapi import Depends
 from google.cloud import firestore, storage
 from pydantic import BaseModel, ConfigDict, Field
+from import_scope import evidence_family, workflow_allows
 
 MAX_FILE = 10 * 1024**3
 MAX_PROJECT = 50 * 1024**3
@@ -24,6 +25,8 @@ class Asset(Strict):
     name: str = Field(min_length=1, max_length=240)
     size: int = Field(gt=0, le=MAX_FILE)
     existing_id: str | None = None
+    client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,100}$")
+    family: str | None = None
 
 
 class Begin(Strict):
@@ -90,26 +93,37 @@ def install_imports(app, database, current_user, fail, acceptance_current):
 
     @app.post("/api/projects/{pid}/imports", status_code=201)
     def begin(pid: str, body: Begin, user=Depends(owner)):
-        if body.family not in FAMILIES:
+        if body.family not in FAMILIES | {"mixed"}:
             fail(400, "data_type", "Choose a supported data type.")
         for asset in body.files:
             if any(c in asset.name for c in ("/", "\\", "\x00")) or asset.name in (".", ".."):
                 fail(400, "file_name", "Select files with names that do not contain paths.")
         ref, record = project(user["uid"], pid)
+        parent_id=body.options.get('parentImportId')
+        if parent_id:
+            parent=ref.collection('imports').document(valid(parent_id)).get().to_dict()
+            retained={a['id'] for a in (parent or {}).get('assets',[])}
+            if not parent or not parent.get('committedAt') or any(not a.existing_id or a.existing_id not in retained for a in body.files):
+                fail(400,'parent_import','Resolve pending sources from a retained import in this project.')
         selected = record.get('project', {}).get('workflows', [])
-        if body.family == 'seismic' and 'seismic' not in selected or body.family in {'logs','deviation','well_headers','tops','checkshots','core','pressure','fluids','geochemistry','production','arrays'} and 'petrophysics' not in selected:
-            fail(400,'workflow_required','Enable the relevant project workflow before importing this data type.')
         iid = uuid.uuid4().hex
-        assets = []
-        names = set()
+        assets, clients = [], set()
         for asset in body.files:
-            if asset.name.casefold() in names:
-                fail(400, "companion_names", "Files in a bundle must have distinct names. Import conflicting names separately.")
-            names.add(asset.name.casefold())
-            existing = next((f for f in record.get("workspace", {}).get("files", []) if f["id"] == asset.existing_id), None) if asset.existing_id else None
-            if asset.existing_id and (not existing or existing["size"] != asset.size):
-                fail(400, "source_missing", "The selected stored original could not be matched.")
-            assets.append({"id": asset.existing_id or uuid.uuid4().hex, "name": asset.name, "size": asset.size, "existing": bool(existing), "state": "stored" if existing else "awaiting upload"})
+            family = asset.family or body.family
+            if family not in FAMILIES:
+                fail(400, 'data_type', 'Choose a supported type for every source.')
+            if not workflow_allows(evidence_family(family, asset.name), selected):
+                fail(400, 'workflow_required', 'Remove sources that are outside the enabled workflows. Checkshots require both petrophysics and seismic.')
+            client_id = asset.client_id or uuid.uuid4().hex
+            if client_id in clients:
+                fail(400, 'asset_identity', 'Each selected asset needs an independent identity.')
+            clients.add(client_id)
+            existing = next((f for f in record.get('workspace', {}).get('files', []) if f['id'] == asset.existing_id), None) if asset.existing_id else None
+            if asset.existing_id and (not existing or existing.get('trashed') or existing['size'] != asset.size):
+                fail(400, 'source_missing', 'The selected retained original could not be matched.')
+            if existing and not workflow_allows(evidence_family(existing.get('type'), existing['name']), selected):
+                fail(400, 'workflow_required', 'The retained source is outside the enabled project workflows.')
+            assets.append({'id': asset.existing_id or uuid.uuid4().hex, 'clientId': client_id, 'family': family, 'name': asset.name, 'size': asset.size, 'existing': bool(existing), 'state': 'stored' if existing else 'awaiting upload'})
         reserved = sum(a["size"] for a in assets if not a["existing"])
         ir = ref.collection("imports").document(iid)
 
@@ -122,7 +136,7 @@ def install_imports(app, database, current_user, fail, acceptance_current):
                 fail(413, "project_quota", "This upload exceeds the project's 50 GiB storage allowance.")
             quota["reservedBytes"] = quota.get("reservedBytes", 0) + reserved
             current["importQuota"] = quota
-            result = {"schemaVersion": 1, "id": iid, "family": body.family, "assets": assets, "options": body.options, "revision": 1, "status": "uploading" if reserved else "stored", "reservedBytes": reserved, "createdAt": datetime.now(timezone.utc).isoformat(), "datasets": [], "issues": []}
+            result = {"schemaVersion": 2 if body.family == "mixed" else 1, "id": iid, "family": body.family, "assets": assets, "options": body.options, "revision": 1, "status": "uploading" if reserved else "stored", "reservedBytes": reserved, "createdAt": datetime.now(timezone.utc).isoformat(), "datasets": [], "issues": []}
             transaction.set(ref, current)
             transaction.set(ir, result)
             return result
@@ -140,6 +154,9 @@ def install_imports(app, database, current_user, fail, acceptance_current):
                 response = AuthorizedSession(credentials).get('https://run.googleapis.com/v2/'+(data.get('execution') or data['operation']),timeout=10)
                 operation = response.json() if response.ok else {}
                 execution = operation if data.get('execution') else operation.get('response', {})
+                conditions = {c.get('type'):c.get('state') for c in execution.get('conditions', [])}
+                ready = lambda name: conditions.get(name) in ('CONDITION_SUCCEEDED', 'True')
+                startup = 'running' if ready('Started') else 'starting' if ready('ContainerReady') else 'preparing'
                 failed = operation.get('error') or execution.get('failedCount',0) or any(c.get('type')=='Completed' and c.get('state')=='CONDITION_FAILED' for c in execution.get('conditions',[]))
                 @firestore.transactional
                 def checked(transaction):
@@ -148,6 +165,8 @@ def install_imports(app, database, current_user, fail, acceptance_current):
                     if current.get('status')!='inspecting' or current.get('dispatchToken')!=data.get('dispatchToken'):
                         return
                     current['operationCheckedAt']=time.time()
+                    if execution:
+                        current['workerStartup']={'stage':startup, 'updatedAt':time.time()}
                     if failed:
                         current.update(status='failed',revision=current['revision']+1,issues=[{'code':'worker_startup_failed','severity':'blocking','message':'The Cloud parser could not finish this execution. Your originals are retained; retry inspection.'}])
                         if record.get('parserLease',{}).get('id')==iid:
@@ -173,11 +192,12 @@ def install_imports(app, database, current_user, fail, acceptance_current):
         if asset["state"] == "stored":
             return {"stored": True}
         sessions = data.get("uploadSessions", {})
-        if aid not in sessions:
+        fresh_session = aid not in sessions
+        if fresh_session:
             obj = raw_bucket().blob(f"owners/{user['uid']}/projects/{pid}/originals/{aid}")
             sessions[aid] = obj.create_resumable_upload_session(content_type="application/octet-stream", size=asset["size"], origin=os.environ["STRATAX_SITE_ORIGIN"], if_generation_match=0)
-            ir.update({"uploadSessions": sessions})
-        return {"upload_url": sessions[aid], "size": asset["size"]}
+            ir.update({f"uploadSessions.{aid}": sessions[aid]})
+        return {"upload_url": sessions[aid], "size": asset["size"], "fresh_session": fresh_session}
 
     @app.post("/api/projects/{pid}/imports/{iid}/complete/{aid}")
     def complete_upload(pid: str, iid: str, aid: str, user=Depends(owner)):
@@ -198,7 +218,7 @@ def install_imports(app, database, current_user, fail, acceptance_current):
             files = current.setdefault("workspace", {}).setdefault("files", [])
             a = next(a for a in result["assets"] if a["id"] == aid)
             if not any(f["id"] == aid for f in files):
-                files.append({"id": aid, "name": a["name"], "size": a["size"], "type": result["family"], "well": "", "status": "Stored original · classification pending", "local": False, "crc32c": obj.crc32c, "generation": obj.generation, "importId": iid})
+                files.append({"id": aid, "name": a["name"], "size": a["size"], "type": a.get("family", result["family"]), "well": "", "archive": result.get("options",{}).get("perAsset",{}).get(a.get("clientId",aid),{}).get("archive"), "status": "Stored original · classification pending", "local": False, "crc32c": obj.crc32c, "generation": obj.generation, "importId": iid})
                 current["revision"] += 1
             if a["state"] != "stored" and not a["existing"]:
                 result["reservedBytes"] -= a["size"]
@@ -215,13 +235,24 @@ def install_imports(app, database, current_user, fail, acceptance_current):
 
     @app.put("/api/projects/{pid}/imports/{iid}/configuration")
     def configure(pid: str, iid: str, body: Configure, user=Depends(owner)):
-        _, ir, _ = session(user["uid"], pid, iid)
+        ref, ir, _ = session(user["uid"], pid, iid)
 
         @firestore.transactional
         def write(transaction):
             current = ir.get(transaction=transaction).to_dict()
             if current.get('committedAt') or current["revision"] != body.revision or current["status"] in ("inspecting", "importing", "ready", "cancelled"):
                 fail(409, "import_conflict", "Reload the current import before editing its configuration.")
+            workflows = ref.get(transaction=transaction).to_dict().get('project', {}).get('workflows', [])
+            for asset in current['assets']:
+                settings = body.options.get('perAsset', {}).get(asset.get('clientId', asset['id']), {})
+                family = settings.get('family', asset.get('family', current['family']))
+                if family not in FAMILIES:
+                    fail(422, 'invalid_family', 'Choose a supported category for each source asset.')
+                if not settings.get('retainOnly') and not workflow_allows(evidence_family(family, asset['name']), workflows):
+                    fail(422, 'workflow_required', 'This source is outside the enabled project workflows. Checkshots require both petrophysics and seismic.')
+                asset['family'] = family
+            from import_recipes import reusable_assets
+            current['reuseAssetIds']=reusable_assets(current,body.options,ref.get(transaction=transaction).to_dict().get('workspace',{}).get('wellDrafts',[]))
             current.update(options=body.options, status="stored", revision=current["revision"]+1)
             transaction.set(ir, current)
             return public(current)
@@ -262,7 +293,7 @@ def install_imports(app, database, current_user, fail, acceptance_current):
             quota['reservedBytes'] = quota.get('reservedBytes',0)+reservation
             project_data["parserLease"] = {"id": iid, "until": time.time()+2100}
             transaction.set(ref, project_data)
-            transaction.update(ir, {"status": "inspecting", "dispatchToken": dispatch, "artifactReservation": reservation, "revision": current["revision"]+1, "startedAt": datetime.now(timezone.utc).isoformat()})
+            transaction.update(ir, {"status": "inspecting", "progress": {"phase":"queued", "updatedAt":time.time(), "completedAssets":0, "totalAssets":len(current["assets"]), "completedAssetKeys":[]}, "workerStartup":{"stage":"queued","updatedAt":time.time()}, "operation":firestore.DELETE_FIELD, "execution":firestore.DELETE_FIELD, "dispatchToken": dispatch, "artifactReservation": reservation, "revision": current["revision"]+1, "startedAt": datetime.now(timezone.utc).isoformat()})
             return True
 
         if not claim(database().transaction()):
@@ -274,11 +305,19 @@ def install_imports(app, database, current_user, fail, acceptance_current):
             if not response.ok:
                 raise RuntimeError("dispatch")
             operation = response.json().get('name')
-            if operation and re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/operations/[\w-]+',operation):
-                ir.update({'operation':operation,'operationCheckedAt':time.time()})
             execution = response.json().get('metadata',{}).get('name')
-            if execution and re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/jobs/[\w-]+/executions/[\w-]+',execution):
-                ir.update({'execution':execution,'operationCheckedAt':time.time()})
+            @firestore.transactional
+            def attach_execution(transaction):
+                current=ir.get(transaction=transaction).to_dict()
+                if current.get('dispatchToken') != dispatch or current.get('status') != 'inspecting':
+                    return
+                updates={'operationCheckedAt':time.time()}
+                if operation and re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/operations/[\w-]+',operation):
+                    updates['operation']=operation
+                if execution and re.fullmatch(r'projects/[\w-]+/locations/[\w-]+/jobs/[\w-]+/executions/[\w-]+',execution):
+                    updates['execution']=execution
+                transaction.update(ir,updates)
+            attach_execution(database().transaction())
         except Exception:
             @firestore.transactional
             def unclaim(transaction):
@@ -318,12 +357,22 @@ def install_imports(app, database, current_user, fail, acceptance_current):
             project_data = ref.get(transaction=transaction).to_dict()
             if current["revision"] != body.revision or current["status"] not in ("awaiting confirmation", "retained/unresolved"):
                 fail(409, "import_conflict", "Reload and review this import before committing it.")
+            if current.get('committedAt'):
+                fail(409,'already_committed','Accepted datasets are retained. Use Resolve pending sources to review the remaining originals.')
             selected = [d for d in current.get('datasets',[]) if body.selected_dataset_ids is None or d['id'] in body.selected_dataset_ids]
             if not selected or body.selected_dataset_ids is not None and set(body.selected_dataset_ids)-{d['id'] for d in selected}:
                 fail(400,'dataset_selection','Select at least one inspected dataset from this import.')
+            workflows = project_data.get('project', {}).get('workflows', [])
+            names = {a['id']: a['name'] for a in current['assets']}
             sources = {d.get('sourceId') for d in selected}
+            if any(not workflow_allows(evidence_family(d.get('family'), names.get(d.get('sourceId'), '')), workflows) for d in selected):
+                fail(400, 'workflow_required', 'Remove checkshot, seismic or other out-of-scope datasets from this selection.')
+            if any(f.get('trashed') and f['id'] in sources for f in project_data.get('workspace', {}).get('files', [])):
+                fail(409, 'source_trashed', 'Remove trashed sources from the import selection.')
             source_names = {a['name'] for a in current['assets'] if a['id'] in sources}
-            applicable_issues = [i for i in current.get('issues',[]) if not i.get('sourceId') and not i.get('source') or i.get('sourceId') in sources or i.get('source') in source_names]
+            selected_ids={d['id'] for d in selected}
+            applicable_issues = [i for i in current.get('issues',[]) if i.get('datasetId') in selected_ids or not i.get('datasetId') and (not i.get('sourceId') and not i.get('source') or i.get('sourceId') in sources or i.get('source') in source_names)]
+            applicable_issues.extend(i for d in selected for i in d.get('issues',[]))
             if any(i["severity"] == "blocking" for i in applicable_issues):
                 fail(400, "validation_blocked", "Resolve the blocking import issues before activating datasets. Originals remain retained.")
             if current.get("issues") and not body.acknowledge_warnings:
@@ -351,10 +400,14 @@ def install_imports(app, database, current_user, fail, acceptance_current):
             if old_ref:
                 transaction.update(old_ref, {"active": False, "supersededBy": selected[0]["id"]})
             current.update(status=status, revision=current["revision"]+1, committedAt=datetime.now(timezone.utc).isoformat())
+            current['acceptedDatasetIds']=[d['id'] for d in selected]
+            current['pendingDatasetIds']=[d['id'] for d in current.get('datasets',[]) if not d.get('active')]
             workspace = project_data.setdefault("workspace", {})
             workspace.setdefault("audit", []).insert(0, {"action": "Imported " + current["family"] + " evidence", "time": current["committedAt"]})
             workspace["audit"] = workspace["audit"][:200]
-            # Confirmed well matching is explicit; header coordinates are not activated here.
+            from well_ingestion import register_evidence
+            register_evidence(workspace, selected)
+            # Legacy per-file registrations remain compatible.
             wells = workspace.setdefault("wellDrafts", [])
             for filename, selection in current.get("options", {}).get("perFile", {}).items():
                 if filename not in source_names:
@@ -363,11 +416,14 @@ def install_imports(app, database, current_user, fail, acceptance_current):
                 if selected_well and selection.get("createWell") and not any(w["id"] == selected_well for w in wells):
                     wells.append({"id": selected_well, "source": iid, "status": "Imported registration", "curves": sum(len(d.get("columns", [])) for d in current["datasets"] if d.get("well") == selected_well), "depth": "Source reference"})
             for source in workspace.get('files',[]):
-                if any(a['id']==source['id'] for a in current['assets']):
+                if source['id'] in sources:
                     source['status']='Imported · references unresolved' if status!='ready' else 'Imported'
-                    source['type']=current['family']
-                    source['well']=current.get('options',{}).get('perFile',{}).get(source['name'],{}).get('well','')
+                    source['type']=next((a.get('family',current['family']) for a in current['assets'] if a['id']==source['id']),current['family'])
+                    associations = list({d.get('well') for d in selected if d.get('sourceId') == source['id'] and d.get('well')})
+                    source['well'] = associations[0] if len(associations) == 1 else ''
+                    source['wellIds'] = associations
             project_data["revision"] += 1
+            current['projectRevision']=project_data['revision']
             transaction.set(ref, project_data)
             transaction.set(ir, current)
             if body.template_name:

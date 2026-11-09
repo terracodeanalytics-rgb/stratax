@@ -1,5 +1,58 @@
 # StrataX context
 
+## 2026-11-09 - Map location save protection
+
+- Cloud workspace saves preserve a well location with a later confirmation timestamp when an older workspace snapshot arrives. Newer intentional confirmations still save. Map refresh reads newer persisted pins without replacing unsaved workspace edits. The project list keeps the cached workspace revision until the workspace itself loads successfully.
+
+## 2026-11-09 - Current coordinate contract
+
+- The Cloud map location preview uses source X/Y and their documented horizontal CRS. It compares the conversion with retained geographic evidence when available. A difference above 1 km triggers review. Contradictory sources require a separate acknowledgment, and alternate observations remain retained.
+- Explicit LAS CRS declarations can support automatic placement when the evidence agrees. Recognized survey CRS metadata in the same ZIP is proposed only for matching UWIs. Unknown or contradictory evidence stays available for review.
+- In project `test`, the saved map uses Nigeria West Belt rather than the mistaken UTM conversion. The source workbook and Petrel extents corroborate the grid. The location recovery receipt preserves both versions of the six map positions.
+
+## 2026-11-09 - Current petrophysics import release
+
+- Site v19, API `stratax-api-petro-import-1109`, and worker `3a1b156d-76f0-4658-98ae-b83de9443129` are live. The Wells tab is the default and offers activation from retained inspection results.
+- Petrophysics-only intake excludes seismic and checkshots. Both workflows allow checkshots. The browser ZIP worker copies matching compressed members into a transfer ZIP when it finds excluded filenames. The server applies workflow checks to direct intake, archive extraction and activation. A well-header workbook in a checkshots folder remains a well header.
+- Recoverable Trash retains source bytes and import history. The original mixed archive in project `test` still contains its original members. The project has six registered wells and no visible checkshot or seismic sources.
+
+## 2026-11-09 - Current frontend release
+
+- Site v18 adds the ready-dataset shortcut to Cloud ZIP Review and Import history. It reuses the existing revision-checked partial commit endpoint, which applies global, source and dataset blockers to the selected datasets. The wizard shortcut is available for the unchanged native inspection. Match and Mapping remain available for edits.
+- Advisory notes on eligible datasets appear in the confirmation. Deferred or blocked datasets stay pending. Import acceptance is separate from scientific approval. The API and import worker retain the v17-era service versions below.
+
+## 2026-11-09 - Current inventory and map release
+
+- Site v17, API `stratax-api-import-inventory-1109`, and worker build `f235ae4c-cb38-49b2-8977-f5b0874ef029` are live in `project-9afac/us-central1`.
+- Cloud source bulk Trash uses `POST /api/projects/{id}/sources/trash`. The Map location form previews reviewed EPSG coordinate conversion through `POST /api/projects/{id}/locations/preview` and saves the confirmed result through project revision checks.
+- The importer applies explicitly declared checkshot labels and matching companion mappings. Ambiguous units, conflicting labels and unknown CRS remain guided review cases. Seismic members stay in the retained ZIP when skipped for a project without a seismic workflow.
+
+## 2026-11-09 - Previous import performance and review release
+
+- Site v16 deployment `appgdep_6af167f24aec8191bf5721424e27b127` serves the custom domain. API revision `stratax-api-import-repair-1108b` and worker build `7ff4cd36-2d85-4d4f-8948-1d43c2a5d82d` are the release pair.
+- Step 2 shows server inspection summaries immediately. Source previews load on selection. Resolve here opens the existing retained-source editor and returns to the same review after reinspection. Conflicting labeled checkshot profiles require independent evidence.
+
+## 2026-11-09 - Previous import release
+
+- Production uses Sites v15, API `stratax-api-import-repair-1108b` and import worker build `f67f947e-c962-4ac5-bd52-1ebfca07335d` in `project-9afac/us-central1`. The import worker can create immutable extracted originals in the raw bucket.
+- Choosing a Cloud ZIP creates a local draft. **Upload & inspect ZIP** transfers the original and expands members on the native worker. The expanded-batch limit is 1 GiB. Existing import routes manage review, partial acceptance and linked pending-source inspections. Device-only drafts may require file reselection.
+- Unchanged ZIP reviews reuse the completed inspection. Reinspection compares source hashes, recipe settings and the retained well catalog before reusing artifacts. The local scientific catalog remains 1.3. The isolated production baseline retains its existing scientific release.
+
+## 2026-11-08 - Current frontend: Site v12 diagnostic release
+
+- Cleanup removed two one-use helpers only; source/package/recovery evidence, fixtures and operational harnesses retained. Syntax/whitespace passed; zero images changed.
+- Custom domain https://stratax.terracodeanalytics.com now serves source `cdfbf418f48bb4b65e74b15e90858f5c76c3e358`, successful deployment `appgdep_6af0d0c7b1b88191a803a1efbbbb7eb3`. Only importer and new `import-diagnostics.js` shipped; backend/workers and public audience unchanged. Wider local Interpretation work is still unpublished.
+- Import diagnostics version `import/2026-11-08.2`: bounded 200-event browser-session history, console prefix `[StrataX import]`, footer Download diagnostics. Only control states/counts; no file contents/names, well names or credentials, no remote telemetry. Continue click now runs the same validation/advance function as keyboard form submission.
+- Three custom-domain diagnostics/attachment/Continue checks pass, both asset hashes match, no page exceptions or user writes. The exact reported user failure is not yet reproduced. Extra mocked native-copy study timed out; do not claim full native deviation upload verified. Keep generated fixtures, traces, recovery source and operational tests.
+
+## 2026-11-08 - Urgent upload Continue hotfix live on custom domain
+
+- Scoped cleanup removed 49 verified session-only targets; original data, release/recovery evidence and operational harnesses retained. Zero images built/deleted. Post-cleanup syntax and release whitespace checks passed; see hotfix `cleanup.json`.
+- User interrupted the local Interpretation batch to authorize an urgent upload fix and redeployment at **https://stratax.terracodeanalytics.com**. Published **Site v11**, source `78169101cbdb966e0f0376ebee97b199df21bd85`, deployment `appgdep_6af0cd29f0608191abb8b8e0e3c914b5` succeeded. Existing public audience, domain, API and workers unchanged; v10 remains available for rollback.
+- Isolated release changes only `dist/well-importer.js` (three changed lines). Files/Review Continue reuses completed inspection instead of starting redundant readers. Mapping/layout changes still trigger inspection. Capture exceptions are handled, and errors appear/focus beside footer controls. The maintenance copy includes this fix; no unfinished scientific/UI changes were shipped.
+- Evidence: `.release/upload-step-one-20261108`. Generated LAS + attached XLSX reproduces old-code stalling with a controlled nonreturning redundant reader; small ordinary baseline transitions passed. Hotfix passes **3 local + 3 custom-domain upload checks**, **6 custom-domain recovery checks**, **8 exact deployed asset hashes**, syntax and release whitespace checks. No page exceptions, original-content uploads or real user writes; identity/project APIs are mocked. The user's exact originals/account session were not available, so a successful real account upload is not claimed. The screenshot's token-refresh/extension messages were not established as the cause.
+- Only the isolated Sites source repository was published under the redeployment request. No container images built/deleted and no Cloud image pruning; no service or worker changes. Retain source/package/receipts and original files. Users need a hard refresh and file reselection to load the new importer.
+
 ## Current local implementation — 2026-10-30
 
 - Authoritative completion ledger: `SEISMIC_ENGINE_COMPLETION.md`. First three engines have local implementation/source-review passes; Velocity has an unwired draft;5–16 have not had their completion pass. Overall implementation is incomplete. Testing and deployment remain pending, separately from implementation gaps.

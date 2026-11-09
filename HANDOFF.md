@@ -1,5 +1,63 @@
 # StrataX handoff
 
+## 2026-11-09 - Stale location replay and recovery
+
+- `.release/map-persistence-20261109/live-project-check.json` confirms the six live pins at revision 14. The older UTM positions are in the earlier recovery receipt. The current release and rollback details are in `.release/map-persistence-20261109/deployment-receipt.json`.
+- `backend/tests/test_projects.py` reproduces an older location submitted with a current project revision and checks that a new confirmation and unrelated map styles still save. `scripts/verify-map-crs.cjs` verifies the map picks up a newer location after an open project refresh.
+- Retained rollback, original source evidence and the recovery records.
+
+## 2026-11-09 - Coordinate recovery and release
+
+- `.release/map-crs-20261109/recovery.json` records the six verified positions and prior pins. The same folder contains the release receipt, browser evidence and backend JUnit report. Rollback is Site v19, API `stratax-api-petro-import-1109` and worker `3a1b156d-76f0-4658-98ae-b83de9443129`.
+- Run `node scripts/verify-map-crs.cjs` for prefilled CRS, wrong CRS rejection, alternate geographic conflict and reviewed save. The unchanged ZIP inventory regression also passed. The hosted asset was checked publicly. Automatic review usage prevented the hosted browser replay.
+- Scoped cleanup retained tagged images, fixtures, release inputs and recovery evidence.
+
+## 2026-11-09 - Petrophysics intake release and test project recovery
+
+- See `.release/import-petrophysics-20261109/deployment-receipt.json`, `transfer.json`, `live-assets.json`, browser evidence and backend JUnit files. The fixture ran the real native worker for both workflow combinations. The final backend checks cover 26 distinct cases across runs, including retry on legacy records.
+- For rollback use Site v18, API `stratax-api-import-inventory-1109` and worker `f235ae4c-cb38-49b2-8977-f5b0874ef029`. Retained tagged images, release inputs, evidence and original archives.
+- The TOMBOY test project already has its eligible logs, headers, and supporting evidence activated. Reload Data to see the Wells table. The ambiguous survey blocks still require a source decision.
+
+## 2026-11-09 - Ready datasets shortcut released
+
+- Verify the live assets and rollback v17 in `.release/import-ready-20261109/deployment-receipt.json`. The frontend release source commit is `503cab1a221a5dcd9af012012f174fca6e18f040`.
+- Run `node scripts/verify-import-ready.cjs` for the generated ZIP acceptance, pending dataset, single inspection, and saved history regression. The production frontend passed the same test with local mocked Cloud boundaries. The real user ZIP and projects were not used in this release verification.
+- Removed the two temporary baseline copies. Retained release evidence, fixture tooling and rollback versions. No Cloud image changes or root Git publication.
+
+## 2026-11-09 - Inventory and map fixes released
+
+- Verify from `.release/import-inventory-20261109/deployment-receipt.json`, `browser.json` and `compatibility-tests.xml`. The generated browser fixture checked grouped review, reference defaults, skipped seismic, CRS conversion, atomic Trash and retained active datasets.
+- For existing TOMBOY wells, use Map location review and the documented source EPSG code for retained header X/Y. If no pair appears, review and activate the well-header dataset. The field coordinates were not assigned a guessed CRS.
+- Rollback is Site v16 with API `stratax-api-import-repair-1108b` and worker build `7ff4cd36-2d85-4d4f-8948-1d43c2a5d82d`. The 30 tagged API and 13 tagged worker images were retained. Release evidence and local fixtures were retained.
+
+## 2026-11-09 - ZIP speed and Step 2 corrections shipped
+
+- See `.release/import-speed-20261109/deployment-receipt.json`, `native-tests.xml` and `browser.json`. Hosted verification matched all four frontend assets and the Ready worker. End-to-end behavior was verified locally. Previous Site v15 and worker build `f67f947e-c962-4ac5-bd52-1ebfca07335d` remain available for rollback.
+- Review kept all 11 tagged worker images. Release artifacts and operational test scripts were retained.
+
+## 2026-11-09 - Import repair released and verified
+
+- Site v15 deployment `appgdep_6af1639bd27881918953530c9b9bcfb9` succeeded. Custom-domain asset hashes and API/worker alignment were verified. Use `.release/import-repair-20261108/deployment-receipt.json` and `IMPORT_REPAIR_2026-11-09.md` for exact evidence and rollback.
+- For TOMBOY, choose a Cloud project and select **Upload & inspect ZIP**. Review station blocks, checkshot labels, reference systems and unresolved measurement units before scientific use. Existing pending originals can be corrected from Import history.
+- Earlier broad Interpretation work remains a separate unpublished batch. Retain recovery snapshots, release packages, compatibility fixtures and prior production images.
+
+## 2026-11-08 - Urgent diagnostic release, awaiting reported-user trace
+
+- Cleanup complete: two one-use helpers removed, operational scripts and generated fixtures retained. Post-cleanup syntax/release whitespace passed. No Cloud image mutation. See batch `cleanup.json`.
+- User is on a call and reported deviation picker/Continue still silent after v11, from `#collection`; requested logs. Site v12 now live at https://stratax.terracodeanalytics.com: source `cdfbf418f48bb4b65e74b15e90858f5c76c3e358`, deployment `appgdep_6af0d0c7b1b88191a803a1efbbbb7eb3` succeeded. Only two frontend files shipped; no root Git publication/backend/worker changes.
+- User instructed to Ctrl+Shift+R, reopen Import, retry deviation/Continue and use Download diagnostics. Console `[StrataX import]` events show control.received / picker-requested / file-change / attached / continue.click / continue.start / advanced / error; trace has safe counts/states, no source names/content or credentials. Version `import/2026-11-08.2`; last 200 events retained in sessionStorage.
+- Custom-domain regression **3 passed**, 25 trace events, 2 exact asset hashes, zero page errors/user writes/original uploads. Local Continue 3 passed. Full Collection portable LAS+XLSX registration and same-well assignment passed. Extended native Cloud-copy case timed out at copy activation; retain as unresolved, not evidence of successful native deviation upload. Actual user's silent failure remains unknown until their trace arrives. Do not repeat a claim that their exact upload is fixed.
+- Evidence `.release/deviation-continue-20261108`; tests `scripts/verify-import-diagnostics.cjs` and `scripts/verify-deviation-import.cjs`. Baseline old stale startup JSON in the Interpretation evidence is historical, not the current build. Wider Interpretation batch remains open; preserve all unrelated dirty work and user originals. No images built/deleted; v11 retained for rollback.
+
+## 2026-11-08 - Urgent upload Continue hotfix live on custom domain
+
+- Cleanup completed: 49 verified session-only targets removed, including one-use editing helpers and generated fixture outputs. Recovery material, user originals, operational scripts and hotfix package retained. Fixture server regenerates removed outputs on next run. Zero images built/deleted; post-cleanup syntax and isolated release whitespace passed. Do not invoke removed one-use helper scripts. Receipt: `.release/upload-step-one-20261108/cleanup.json`.
+- User interrupted the local Interpretation batch to authorize an urgent upload fix and redeployment at **https://stratax.terracodeanalytics.com**. Published **Site v11**, source `78169101cbdb966e0f0376ebee97b199df21bd85`, deployment `appgdep_6af0cd29f0608191abb8b8e0e3c914b5` succeeded. Existing public audience, domain, API and workers unchanged; v10 remains available for rollback.
+- Isolated release changes only `dist/well-importer.js` (three changed lines). Files/Review Continue reuses completed inspection instead of starting redundant readers. Mapping/layout changes still trigger inspection. Capture exceptions are handled, and errors appear/focus beside footer controls. The maintenance copy includes this fix; no unfinished scientific/UI changes were shipped.
+- Evidence: `.release/upload-step-one-20261108`. Generated LAS + attached XLSX reproduces old-code stalling with a controlled nonreturning redundant reader; small ordinary baseline transitions passed. Hotfix passes **3 local + 3 custom-domain upload checks**, **6 custom-domain recovery checks**, **8 exact deployed asset hashes**, syntax and release whitespace checks. No page exceptions, original-content uploads or real user writes; identity/project APIs are mocked. The user's exact originals/account session were not available, so a successful real account upload is not claimed. The screenshot's token-refresh/extension messages were not established as the cause.
+- Only the isolated Sites source repository was published under the redeployment request. No container images built/deleted and no Cloud image pruning; no service or worker changes. Retain source/package/receipts and original files. Users need a hard refresh and file reselection to load the new importer.
+- Resume the broader batch from `INTERPRETATION_BUTTONS_LIFECYCLE_2026-11-08.md`. Latest local checks: 194 Python passes, 3 JS passes, 10 workflow recovery passes, 3 accepted/rejected/stale result-state passes, Pickett activation and workflow editor passes. New fixes include individual-run stale-source metadata, honest comparison review labels, source metadata in curve CSV/SVG and defensive workflow import containers. Final matrix still has **18 unverified handler groups**; some are dynamic disclosures and an unreachable legacy resize handle, but do not claim complete until reconciled/tested. Required remaining checks include source-inspect/history/saved-guide aliases, well-edge resize, final CSV/SVG verification, native disclosures and disabled/progress explanations. Keep all earlier scientific fixtures/recovery tools.
+
 ## Latest — 2026-10-30 local backend checkpoint, implementation still ongoing
 
 - Read `SEISMIC_ENGINE_COMPLETION.md` before continuing. User wants all16 engines finished sequentially, with **no tests, deployments, provisioning, paid executions or UI changes/enabling**. No subagents are authorised by the active instructions. Do not stop at numerical helpers or claimall16 complete.

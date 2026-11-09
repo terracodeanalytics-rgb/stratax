@@ -1,5 +1,62 @@
 # StrataX status
 
+## 2026-11-09 - Stale map save protection live
+
+- Project `test` revision 12 carried the older UTM positions after the first recovery. The six verified Nigeria West Belt pins were restored and rechecked at revision 14 after API promotion.
+- Site v21 is live and both asset hashes match. API `stratax-api-map-persistence-1109` is healthy at 100% traffic. Four API cases, five local map browser checks and four adjacent import browser checks passed.
+
+## 2026-11-09 - Well map coordinate correction live
+
+- All six map pins in project `test` were corrected from EPSG:32632 to source EPSG:26391 and plotted in WGS84 with EPSG operation 15493. The original X/Y pairs match the well header workbook. OpenWorks and the Petrel SEG-Y extents independently identify the source grid. LAS geographic headers disagree by about 4 km.
+- Site v20 is live on the custom domain. The map asset serves the new review controls. API `stratax-api-map-crs-1109` is healthy at 100% traffic. The import worker build `33d6948b-a738-4c9a-9b1e-9156b4651aac` is Ready.
+- The native importer recognizes explicit LAS coordinate references and proposes supported OpenWorks CRS metadata for wells matched by archive and UWI. Map review flags a contradictory CRS or position. Twenty-eight backend cases and eight local browser checks passed. The hosted workflow replay could not launch because automatic approval review reached its usage limit.
+
+## 2026-11-09 - Petrophysics intake and Wells-first inventory live
+
+- Site v19 deployment `appgdep_6af19b76938c819188481637fa94771c` serves the custom domain. Seven asset hashes match. API `stratax-api-petro-import-1109` is healthy at 100% traffic and worker build `3a1b156d-76f0-4658-98ae-b83de9443129` is Ready.
+- In the Cloud project `test`, the retained TOMBOY inspection had six eligible LAS datasets and zero active datasets. The existing revision-checked commit activated ten datasets and registered six wells. Fifteen checkshot sources moved to recoverable Trash. The project had no separately registered seismic source or active seismic dataset.
+- Data opens on Wells, followed by Sources, Import history and Datasets. Wells gives an activation action for a completed inspection. Petrophysics-only intake skips seismic and checkshots. The TOMBOY transfer test went from 177,059,634 to 6,019,440 bytes with 11 SHA-256-identical kept members. The original archive was used read-only. Four browser cases passed on the live frontend with mocked Cloud services.
+
+## 2026-11-09 - Ready datasets import shortcut live
+
+- Site v18 deployment `appgdep_6af17d64a2f48191937d0263f7fbafbd` serves the custom domain. All four changed assets match the release. The API health endpoint returned 200.
+- Select **Import ready datasets** in ZIP Review or in Import history. The shortcut activates the eligible selection from the inspected revision after an explicit confirmation. Blocked or deferred datasets remain available for later review using the retained originals.
+- The local and live-frontend browser runs each activated three generated datasets and retained one blocked checkshot after a single transfer and inspection. Live UI testing used mocked Cloud boundaries. Two review/transfer cases and three inventory cases passed on the final run. The first inventory run timed out during a bulk-selection redraw.
+
+## 2026-11-09 - Bulk source Trash, grouped ZIP review and projected well placement live
+
+- Site v17 deployment `appgdep_6af16f78c8508191ad4f1d4e316cb815` serves the custom domain. All seven changed assets match the release. API `stratax-api-import-inventory-1109` serves 100% of traffic and worker build `f235ae4c-cb38-49b2-8977-f5b0874ef029` is Ready.
+- The Sources table supports Select all, Delete selected and Delete all shown. Cloud Trash updates are atomic and preserve the originals and linked datasets. ZIP review groups supporting files below logs, applies consistent source mappings, skips seismic in petrophysics-only projects, and gives compact issue-specific guides.
+- TOMBOY well headers supply projected X/Y without a source EPSG code. Map review can use these retained values with a documented EPSG code to preview conversion and save placement. A generated Cloud fixture passed placement and bulk Trash. Full TOMBOY intake passed locally, 23 focused backend cases passed after a legacy-record compatibility fix, and five browser cases passed.
+
+## 2026-11-09 - Faster ZIP intake and direct Review corrections live
+
+- Site v16 is live at https://stratax.terracodeanalytics.com. All four changed assets match the release package. The import worker runs build `7ff4cd36-2d85-4d4f-8948-1d43c2a5d82d` and is Ready.
+- Large ZIPs use 32 MiB resumable chunks and fall back to 8 MiB after transient failures. Review loads the selected preview on demand. A controlled 169 MiB transfer used six requests instead of 22. This measures request count, with production transfer time still unmeasured.
+- Direct Step 2 issue actions edit mappings, references and owning wells. Users can compare conflicting headings and defer a dataset. Match proposals use source identifiers, aliases, filenames and folders. Eighteen native tests, three browser cases and five association checks passed. The original TOMBOY ZIP was used locally.
+
+## 2026-11-09 - Automatic ZIP intake and import repair live
+
+- Site v15 serves the final importer at https://stratax.terracodeanalytics.com. Three deployed asset hashes match the package. API `stratax-api-import-repair-1108b` serves 100% of traffic, with import worker build `f67f947e-c962-4ac5-bd52-1ebfca07335d` Ready.
+- Hosted generated ZIP passed upload, native inspection, all review steps, partial acceptance and Data reload. The fixture recorded five retained originals, three active datasets, one pending dataset and one registered well, with zero reserved quota. The final completion navigation and pending-source correction passed in the local browser.
+- Isolated importer/API/parser **41 passed** and scientific regressions **186 passed**. Six TOMBOY LAS browser cases, two directional/keyboard cases, four revision cases and the native browser lifecycle passed. The original ZIP hash matched its pre-edit value. See `IMPORT_REPAIR_2026-11-09.md` for evidence, limits and rollback.
+
+## 2026-11-08 - Deviation/Continue diagnostics live, Site v12
+
+- Scoped cleanup removed two one-use editing helpers; recovery/package/fixtures/operational tests and originals retained. Post-cleanup syntax and isolated release whitespace passed; zero images changed. See diagnostic batch `cleanup.json`.
+- User reported continued silent failure on `#collection` after v11 and explicitly requested logs. Published only importer diagnostics/explicit validated Continue handling: Site v12, source `cdfbf418f48bb4b65e74b15e90858f5c76c3e358`, deployment `appgdep_6af0d0c7b1b88191a803a1efbbbb7eb3` succeeded at https://stratax.terracodeanalytics.com. Public audience/API/workers unchanged; v11 retained.
+- Bounded browser-session traces record click reception, handler state, file-count changes, picker cancellation, inspection and stage progression. Download diagnostics is available in the footer; console prefix `[StrataX import]`, version `import/2026-11-08.2`. Logs exclude source names/content, well names and credentials. No remote telemetry added.
+- Custom-domain verification: **3 passes**, 25 trace events, both changed deployed asset hashes match, zero page exceptions/user writes/original uploads. Local previous Continue cases **3 pass**; Collection attachment, portable registration and same-well survey assignment passed with generated LAS/XLSX. An additional mocked Cloud-copy extension timed out and remains unresolved; no end-to-end native Cloud deviation-upload claim. The reported user's exact silent failure remains unconfirmed until their diagnostic trace is available. Wider Interpretation batch remains open/unpublished.
+- Evidence: `.release/deviation-continue-20261108`; operational tests `verify-import-diagnostics.cjs` and `verify-deviation-import.cjs`. No images built/deleted.
+
+## 2026-11-08 - Urgent upload Continue hotfix live on custom domain
+
+- Scoped cleanup removed 49 verified session-only targets (one-use helpers and generated fixture artifacts); originals, recovery snapshots, receipts, release archive and operational harnesses retained. Zero images built/deleted. Post-cleanup importer/harness syntax and isolated release whitespace checks passed. Receipt: `.release/upload-step-one-20261108/cleanup.json`.
+- User interrupted the local Interpretation batch to authorize an urgent upload fix and redeployment at **https://stratax.terracodeanalytics.com**. Published **Site v11**, source `78169101cbdb966e0f0376ebee97b199df21bd85`, deployment `appgdep_6af0cd29f0608191abb8b8e0e3c914b5` succeeded. Existing public audience, domain, API and workers unchanged; v10 remains available for rollback.
+- Isolated release changes only `dist/well-importer.js` (three changed lines). Files/Review Continue reuses completed inspection instead of starting redundant readers. Mapping/layout changes still trigger inspection. Capture exceptions are handled, and errors appear/focus beside footer controls. The maintenance copy includes this fix; no unfinished scientific/UI changes were shipped.
+- Evidence: `.release/upload-step-one-20261108`. Generated LAS + attached XLSX reproduces old-code stalling with a controlled nonreturning redundant reader; small ordinary baseline transitions passed. Hotfix passes **3 local + 3 custom-domain upload checks**, **6 custom-domain recovery checks**, **8 exact deployed asset hashes**, syntax and release whitespace checks. No page exceptions, original-content uploads or real user writes; identity/project APIs are mocked. The user's exact originals/account session were not available, so a successful real account upload is not claimed. The screenshot's token-refresh/extension messages were not established as the cause.
+- Only the isolated Sites source repository was published under the redeployment request. No container images built/deleted and no Cloud image pruning; no service or worker changes. Retain source/package/receipts and original files. Users need a hard refresh and file reselection to load the new importer.
+
 ## 2026-10-30 — sequential backend implementation checkpoint; no tests or deployment
 
 - User scope: finish all16 backend engines sequentially for cost-efficient Google Cloud execution. No UI changes/enabling, testing, builds, deployment, provisioning or paid executions. This checkpoint does **not** complete the programme.

@@ -3,7 +3,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends libexpat1 l
 WORKDIR /app
 COPY requirements-worker.txt .
 RUN pip install --no-cache-dir -r requirements-worker.txt
-COPY ingestion_core.py ingestion_native.py ingestion_worker.py native_selftest.py ./
+COPY ingestion_core.py ingestion_native.py ingestion_worker.py well_ingestion.py import_recipes.py import_bundles.py import_scope.py coordinate_reference.py native_selftest.py ./
 COPY seismic_import_index.py seismic_trace_index.py seismic_reader.py seismic_indexed_reader.py ./
 COPY test-fixtures/ ./test-fixtures/
 RUN python native_selftest.py

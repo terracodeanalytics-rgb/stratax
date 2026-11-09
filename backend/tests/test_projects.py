@@ -86,3 +86,59 @@ def test_projects_block_anonymous_and_large_payloads():
     assert client.get("/api/projects/test").status_code == 401
     assert client.put("/api/projects/test", json={"padding": "a" * 530000}).status_code == 413
     assert client.put("/api/projects/test", content="{}").status_code == 415
+
+
+def test_location_preview_requires_review_for_contradictory_source_crs():
+    db = Database()
+    client = TestClient(main.app)
+    main.app.dependency_overrides[main.current_user] = lambda: {"uid": "owner"}
+    db.records['stratax_projects/owner/records/study-a'] = {
+        'project': {'name':'Study'},
+        'workspace': {'wellDrafts': [{'id':'well-a','name':'Well A','sourceCoordinates':{
+            'x':481200,'y':69280,'crs':'EPSG:26391',
+            'geographicCoordinates':{'lat':4.624668,'lng':6.793340}}}]}}
+    payload = {'crs':'EPSG:32632','points':[{'id':'well-a','x':481200,'y':69280}]}
+    try:
+        with patch.object(main, '_db', db):
+            result = client.post('/api/projects/study-a/locations/preview',json=payload)
+            assert result.status_code == 409 and 'EPSG:26391' in result.text
+            payload['crs'] = 'EPSG:26391'
+            result = client.post('/api/projects/study-a/locations/preview',json=payload)
+            assert result.status_code == 409 and '1 km' in result.text
+            payload['acknowledge_coordinate_conflict'] = True
+            result = client.post('/api/projects/study-a/locations/preview',json=payload)
+            assert result.status_code == 200, result.text
+            point = result.json()['points'][0]
+            assert abs(point['lat'] - 4.623747763469332) < 1e-8
+            assert abs(point['lng'] - 6.756528805898362) < 1e-8
+            assert point['conflicts']
+    finally:
+        main.app.dependency_overrides.clear()
+
+
+def test_stale_map_snapshot_cannot_replace_a_newer_confirmed_location():
+    db = Database()
+    client = TestClient(main.app)
+    main.app.dependency_overrides[main.current_user] = lambda: {"uid": "owner"}
+    project = {"name":"Study","storage":"cloud","status":"Active","workflows":["petrophysics"]}
+    older = {"lat":0.619539,"lng":8.845051,"confirmed":True,"confirmedAt":"2026-11-09T10:18:48Z"}
+    corrected = {"lat":4.616454,"lng":6.770548,"confirmed":True,"confirmedAt":"2026-11-09T10:23:51+00:00"}
+    path = '/api/projects/study-a'
+    db.records['stratax_projects/owner/records/study-a'] = {
+        'project':project, 'revision':11, 'workspace':{'mapWorkspace':{'locations':{'well':corrected}}}}
+    try:
+        with patch.object(main, "_db", db), patch.object(projects.firestore, "transactional", lambda f: f):
+            workspace = {'mapWorkspace':{'locations':{'well':older},'symbols':{'well':'Circle'}}}
+            result = client.put(path, json={'revision':11,'project':project,'workspace':workspace})
+            assert result.status_code == 200, result.text
+            saved = result.json()['workspace']['mapWorkspace']
+            assert saved['locations']['well'] == corrected
+            assert saved['symbols']['well'] == 'Circle'
+            result = client.put(path, json={'revision':12,'project':project,'workspace':{}})
+            assert result.json()['workspace']['mapWorkspace']['locations']['well'] == corrected
+            newer = dict(corrected, lat=4.6165, confirmedAt='2026-11-09T10:24:00Z')
+            workspace['mapWorkspace']['locations']['well'] = newer
+            result = client.put(path, json={'revision':13,'project':project,'workspace':workspace})
+            assert result.json()['workspace']['mapWorkspace']['locations']['well'] == newer
+    finally:
+        main.app.dependency_overrides.clear()

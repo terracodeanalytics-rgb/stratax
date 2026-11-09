@@ -125,3 +125,30 @@ def test_partial_commit_column_selection_and_immutable_commits():
             assert db.records[root+'/datasets/good']['activeColumns']==['column-0']
             assert client.put('/api/projects/project/imports/partial/configuration',json={'revision':2,'options':{}}).status_code==409
     finally:main.app.dependency_overrides.clear()
+
+
+def test_petrophysics_only_rejects_seismic_and_checkshot_before_transfer_and_commit():
+    db, client = setup()
+    project = 'stratax_projects/owner/records/project'
+    db.records[project]['project']['workflows'] = ['petrophysics']
+    try:
+        with patch.object(main, '_db', db), patch.object(imports_api.firestore, 'transactional', lambda f: f):
+            for family, name in [('checkshots', 'survey.txt'), ('documents', 'solid 4 checksho.xlsx'),
+                                 ('logs', 'velocity.vds')]:
+                response = client.post('/api/projects/project/imports', json={'family':family,'files':[{'name':name,'size':3}]})
+                assert response.status_code == 400, response.text
+            assert not db.records[project].get('importQuota')
+            iid='retained'
+            db.records[project+'/imports/'+iid] = {
+                'id':iid, 'revision':1, 'status':'awaiting confirmation', 'family':'mixed',
+                'assets':[{'id':'shot','name':'survey.txt','family':'checkshots'}],
+                'datasets':[{'id':'derived','sourceId':'shot','family':'checkshots'}],
+                'options':{}, 'issues':[]
+            }
+            response=client.post(f'/api/projects/project/imports/{iid}/commit',json={'revision':1,'selected_dataset_ids':['derived']})
+            assert response.status_code == 400, response.text
+            db.records[project]['project']['workflows'].append('seismic')
+            response=client.post('/api/projects/project/imports',json={'family':'checkshots','files':[{'name':'survey.txt','size':3}]})
+            assert response.status_code == 201, response.text
+    finally:
+        main.app.dependency_overrides.clear()

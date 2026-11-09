@@ -35,6 +35,21 @@ def tag(element):
     return element.tag.rsplit("}", 1)[-1].lower()
 
 
+def binary_log_headers(entries):
+    """Keep scalar source mnemonics; conflicting observations remain inspectable."""
+    aliases = {'WN': 'WELL', 'WELLNAME': 'WELL', 'WELL-NAME': 'WELL'}
+    known = {'WELL', 'WELL_ID', 'UWI', 'API', 'LAT', 'LATI', 'LATITUDE', 'LON', 'LONG', 'LONGITUDE', 'X', 'Y', 'KB', 'RKB', 'EKB', 'TD', 'STOP'}
+    values, observations = {}, []
+    for mnemonic, value, unit in entries:
+        key = aliases.get(str(mnemonic).strip().upper(), str(mnemonic).strip().upper())
+        if key not in known or value is None or not str(value).strip():
+            continue
+        observation = {'mnemonic': key, 'value': scalar(value), 'unit': str(unit or '').strip()}
+        observations.append(observation)
+        values.setdefault(key, {})[str(observation['value']).strip()] = observation
+    return {key: next(iter(items.values())) for key, items in values.items() if len(items) == 1}, observations, any(len(items) > 1 for key, items in values.items() if key in {'WELL', 'UWI', 'API'})
+
+
 def read_binary_logs(kind, path, output, options):
     from dlisio import dlis, lis
     datasets = []
@@ -58,10 +73,42 @@ def read_binary_logs(kind, path, output, options):
                             c.update(unit=str(channel.units or ""), dimensions=list(channel.dimension or []))
                     rows = ([row[name] for name in data.dtype.names] for row in data)
                     metadata = {"format": "DLIS/RP66 v1", "logicalFile": logical_index, "frame": str(frame.name), "frameKey": key, "index": str(frame.index), "channels": [{"name": str(ch.name), "unit": str(ch.units or ""), "dimensions": list(ch.dimension or [])} for ch in channels]}
-                    datasets.append(output_dataset(output, f"{Path(path).name} / {frame.name}", columns, rows, metadata))
+                    origins = [origin for origin in logical.origins if origin.origin == frame.origin]
+                    if not origins and len(logical.origins) == 1:
+                        origins = list(logical.origins)
+                    entries = [(name, getattr(origin, attribute), '') for origin in origins for name, attribute in [('WELL', 'well_name'), ('WELL_ID', 'well_id')]]
+                    for parameter in logical.parameters:
+                        parameter_values = parameter.values
+                        if parameter.origin == frame.origin and parameter_values is not None and len(parameter_values) == 1:
+                            value = scalar(parameter_values[0])
+                            while isinstance(value, list) and len(value) == 1:
+                                value = value[0]
+                            if isinstance(value, (str, int, float)):
+                                entries.append((parameter.name, value, ''))
+                    headers, observations, ambiguous = binary_log_headers(entries)
+                    metadata.update(headers=headers, identityObservations=observations, well=headers.get('WELL', {}).get('value', ''))
+                    dataset = output_dataset(output, f"{Path(path).name} / {frame.name}", columns, rows, metadata)
+                    if ambiguous:
+                        dataset['issues'].append(issue('binary_well_identity', 'Conflicting binary-log well identities require an explicit association.'))
+                    datasets.append(dataset)
     else:
         with lis.load(str(path)) as logicals:
             for logical_index, logical in enumerate(logicals):
+                entries = []
+                for records in (logical.job_identification(), logical.wellsite_data(), logical.tool_string_info()):
+                    for record in records:
+                        mnemonic, unit = '', ''
+                        for component in record.components():
+                            name, value = str(component.mnemonic).strip(), component.component
+                            if name == 'MNEM':
+                                mnemonic, unit = str(value).strip(), ''
+                            elif name == 'PUNI':
+                                unit = str(value).strip()
+                            elif name == 'VALU' and mnemonic:
+                                entries.append((mnemonic, value, unit))
+                            elif name not in ('TYPE', 'STAT', 'TUNI'):
+                                entries.append((name, value, component.units))
+                headers, observations, ambiguous = binary_log_headers(entries)
                 for dfs_index, dfs in enumerate(logical.data_format_specs()):
                     data = lis.curves(logical, dfs, strict=False)
                     columns = [column(name, "", index) for index, name in enumerate(data.dtype.names)]
@@ -70,7 +117,10 @@ def read_binary_logs(kind, path, output, options):
                         spec = next((s for s in specs if str(s.mnemonic).strip() == c["mnemonic"]), None)
                         if spec:
                             c["unit"] = str(spec.units).strip()
-                    datasets.append(output_dataset(output, f"{Path(path).name} / logical {logical_index}, DFS {dfs_index}", columns, ([row[name] for name in data.dtype.names] for row in data), {"format": "LIS79", "logicalFile": logical_index, "dataFormat": dfs_index}))
+                    dataset = output_dataset(output, f"{Path(path).name} / logical {logical_index}, DFS {dfs_index}", columns, ([row[name] for name in data.dtype.names] for row in data), {"format": "LIS79", "logicalFile": logical_index, "dataFormat": dfs_index, 'headers': headers, 'identityObservations': observations, 'well': headers.get('WELL', {}).get('value', '')})
+                    if ambiguous:
+                        dataset['issues'].append(issue('binary_well_identity', 'Conflicting LIS identity observations require an explicit association.'))
+                    datasets.append(dataset)
     if not datasets:
         raise ImportProblem("empty_binary_log", "No selected readable frame or data-format specification was found.")
     return datasets

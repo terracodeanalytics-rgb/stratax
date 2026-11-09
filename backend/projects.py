@@ -1,5 +1,6 @@
 """Owner-scoped project records and private original-file storage."""
 import json
+import math
 import os
 import re
 import tempfile
@@ -12,8 +13,38 @@ from google.cloud import firestore, storage
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 from scientific_api import firestore_value, restore_value
+from coordinate_reference import geographic_conflict
 
 MAX_FILE = 64 * 1024 * 1024
+
+
+def confirmed_at(location):
+    stamp = location.get('confirmedAt') if isinstance(location, dict) else None
+    if not isinstance(stamp, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+        return parsed if parsed.tzinfo else None
+    except ValueError:
+        return None
+
+
+def retain_newer_locations(old_workspace, workspace):
+    old_map = old_workspace.get('mapWorkspace')
+    if not isinstance(old_map, dict) or not isinstance(old_map.get('locations'), dict):
+        return
+    protected = {well: (point, confirmed_at(point)) for well, point in old_map['locations'].items()}
+    if not any(stamp for _, stamp in protected.values()):
+        return
+    new_map = workspace.get('mapWorkspace')
+    new_map = dict(new_map) if isinstance(new_map, dict) else {}
+    incoming = new_map.get('locations')
+    incoming = dict(incoming) if isinstance(incoming, dict) else {}
+    for well, (point, old_stamp) in protected.items():
+        new_stamp = confirmed_at(incoming.get(well))
+        if old_stamp and (not new_stamp or new_stamp <= old_stamp):
+            incoming[well] = point
+    workspace['mapWorkspace'] = {**new_map, 'locations': incoming}
 
 
 class ProjectWrite(BaseModel):
@@ -21,6 +52,31 @@ class ProjectWrite(BaseModel):
     revision: int = Field(ge=0)
     project: dict
     workspace: dict = Field(default_factory=dict)
+
+
+class SourceMetadataUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str | None = Field(default=None, max_length=200)
+    trashed: bool | None = None
+
+
+class SourceTrashBatch(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    source_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+class CoordinatePair(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    id: str = Field(min_length=1, max_length=100)
+    x: float
+    y: float
+
+
+class CoordinatePreview(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    crs: str = Field(pattern=r'^EPSG:[0-9]{3,7}$')
+    points: list[CoordinatePair] = Field(min_length=1, max_length=1000)
+    acknowledge_coordinate_conflict: bool = False
 
 
 def install_projects(app, database, current_user, fail, acceptance_current):
@@ -93,6 +149,7 @@ def install_projects(app, database, current_user, fail, acceptance_current):
             if (old or {}).get('seismicActiveRun') and clean['status'] != 'Active':
                 fail(409, 'seismic_run_active', 'Cancel or finish the active seismic run before archiving or removing this project.')
             workspace = dict(body.workspace)
+            retain_newer_locations((old or {}).get("workspace", {}), workspace)
             # Stored source metadata can only be added by the upload endpoint.
             workspace["files"] = (old or {}).get("workspace", {}).get("files", [])
             result = {**(old or {}), "project": clean, "workspace": workspace, "revision": body.revision + 1, "updatedAt": datetime.now(timezone.utc).isoformat()}
@@ -146,6 +203,110 @@ def install_projects(app, database, current_user, fail, acceptance_current):
         except Exception:
             await run_in_threadpool(blob.delete)
             raise
+
+    @app.post('/api/projects/{project_id}/files/{file_id}/metadata')
+    def update_source_metadata(project_id: str, file_id: str, body: SourceMetadataUpdate, user=Depends(owner)):
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', file_id):
+            fail(400, 'file_reference', 'Choose a valid retained source.')
+        if body.display_name is None and body.trashed is None:
+            fail(400, 'source_change', 'Choose a source name or Trash action.')
+        if body.display_name is not None and (not body.display_name.strip() or any(ord(c) < 32 for c in body.display_name)):
+            fail(400, 'source_name', 'Enter a name without line breaks or control characters.')
+        ref, _ = existing(user['uid'], project_id)
+
+        @firestore.transactional
+        def update(transaction):
+            record = ref.get(transaction=transaction).to_dict()
+            if not record:
+                fail(404, 'project_missing', 'This project could not be found.')
+            workspace = record.setdefault('workspace', {})
+            source = next((f for f in workspace.get('files', []) if f.get('id') == file_id), None)
+            if not source:
+                fail(404, 'file_missing', 'This source file could not be found.')
+            now = datetime.now(timezone.utc).isoformat()
+            if body.display_name is not None:
+                source['displayName'] = body.display_name.strip()
+            if body.trashed is not None:
+                source['trashed'] = body.trashed
+                source['deletedAt'] = now if body.trashed else None
+            action = 'Restored source' if body.trashed is False else 'Moved source to Trash' if body.trashed else 'Renamed source'
+            workspace.setdefault('audit', []).insert(0, {'action': action + ': ' + (source.get('displayName') or source['name']), 'time': now})
+            workspace['audit'] = workspace['audit'][:200]
+            record['revision'] += 1
+            transaction.set(ref, record)
+            return {'file': source, 'revision': record['revision']}
+
+        return update(database().transaction())
+
+    @app.post('/api/projects/{project_id}/sources/trash')
+    def trash_sources(project_id: str, body: SourceTrashBatch, user=Depends(owner)):
+        ids = set(body.source_ids)
+        if any(not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', value) for value in ids):
+            fail(400, 'file_reference', 'Choose valid retained sources.')
+        ref, _ = existing(user['uid'], project_id)
+
+        @firestore.transactional
+        def update(transaction):
+            record = ref.get(transaction=transaction).to_dict()
+            if not record:
+                fail(404, 'project_missing', 'This project could not be found.')
+            workspace = record['workspace']
+            sources = [source for source in workspace.get('files', []) if source.get('id') in ids]
+            if len(sources) != len(ids):
+                fail(409, 'source_selection_changed', 'The source list changed. Refresh and select the sources again.')
+            now = datetime.now(timezone.utc).isoformat()
+            changed = 0
+            for source in sources:
+                if not source.get('trashed'):
+                    source.update(trashed=True, deletedAt=now)
+                    changed += 1
+            if changed:
+                workspace['audit'] = [{'action': f'Moved {changed} sources to Trash', 'time': now}, *workspace.get('audit', [])][:200]
+                record['revision'] += 1
+                transaction.set(ref, record)
+            return {'trashed': changed, 'revision': record['revision']}
+
+        return update(database().transaction())
+
+    @app.post('/api/projects/{project_id}/locations/preview')
+    def preview_locations(project_id: str, body: CoordinatePreview, user=Depends(owner)):
+        from pyproj import CRS, Transformer
+        _, project = existing(user['uid'], project_id)
+        workspace = project.get('workspace', {})
+        wells = {w['id']: w for w in workspace.get('wellDrafts', [])}
+        locations = workspace.get('mapWorkspace', {}).get('locations', {})
+        try:
+            crs = CRS.from_user_input(body.crs)
+            if not (crs.is_projected or crs.is_geographic):
+                raise ValueError('Horizontal CRS required')
+            transform = Transformer.from_crs(crs, 'EPSG:4326', always_xy=True, allow_ballpark=False)
+        except Exception:
+            fail(400, 'invalid_source_crs', 'Enter the documented horizontal EPSG code for these coordinates.')
+        points = []
+        for value in body.points:
+            try:
+                lng, lat = transform.transform(value.x, value.y, errcheck=True)
+                if not (math.isfinite(lng) and math.isfinite(lat) and abs(lng) <= 180 and abs(lat) <= 85):
+                    raise ValueError('Outside the map')
+                well = wells.get(value.id, {})
+                source = (wells.get(well.get('sourceWellId'), well).get('sourceCoordinates') or {})
+                saved = locations.get(value.id, {})
+                expected = source.get('crs') or (saved.get('sourceCRS') if saved.get('coordinateOperation') else '')
+                conflicts = []
+                if expected and expected != body.crs:
+                    conflicts.append('Retained evidence identifies ' + expected + '.')
+                if source.get('conflictingCRS') or source.get('coordinateConflict'):
+                    conflicts.append('Retained coordinate sources disagree.')
+                if geographic_conflict(lng, lat, source.get('geographicCoordinates')):
+                    conflicts.append('The conversion differs from the retained geographic coordinates by more than 1 km.')
+                points.append({'id': value.id, 'lat': lat, 'lng': lng, 'sourceCRS': body.crs, 'conflicts': conflicts})
+            except Exception:
+                fail(400, 'invalid_transformed_location', 'A selected coordinate pair could not be placed. Check the values, column order and source CRS.')
+        conflict = next((p for p in points if p['conflicts']), None)
+        if conflict and not body.acknowledge_coordinate_conflict:
+            name = wells.get(conflict['id'], {}).get('name') or conflict['id']
+            fail(409, 'coordinate_source_conflict', name + ': ' + ' '.join(conflict['conflicts']) + ' Review the documented source before overriding.')
+        return {'points': points}
 
     @app.get("/api/projects/{project_id}/files/{file_id}")
     def download_file(project_id: str, file_id: str, user=Depends(owner)):
