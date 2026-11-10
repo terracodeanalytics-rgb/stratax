@@ -20,6 +20,6 @@ A cancelled import can be restarted using its retained source. The same cancelle
 
 Site v15 source is 838fff9f06746eca17874a40ad47ce6434a2214e and deployment is appgdep_6af1639bd27881918953530c9b9bcfb9. The API build is 59300583-c73d-4be2-a703-3cd417fcecb1, revision stratax-api-import-repair-1108b. The import worker build is f67f947e-c962-4ac5-bd52-1ebfca07335d. Rollback retains v14 and API stratax-api-import-repair-1108a with worker build 200a170a-a491-4725-88a6-a5ec5f0a485c.
 
-Evidence and exact receipts are in .release/import-repair-20261108. The original ZIP checksum was verified locally. Hosted QA used a generated ZIP only. Cleanup removed ten one-use local helpers and retained recovery and release artifacts. Registry cleanup removed zero images.
+Evidence and exact receipts are in .release/import-repair-20261108. The original ZIP SHA-256 still matches 3c1356b49b1cad6e03856973ec867cc7243d3e274463e73843ed69b34cfa7407. Hosted QA used a generated ZIP only. Cleanup removed ten one-use local helpers and retained recovery and release artifacts. Registry cleanup removed zero images. Root Git publication remains deferred.
 
 The isolated hosted QA account and project were removed after verification, together with four project subrecords and 42 generated object generations.

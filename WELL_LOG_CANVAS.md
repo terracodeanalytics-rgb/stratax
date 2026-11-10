@@ -2,6 +2,16 @@
 
 Interpretation is a persistent well-log board. `well-canvas-model.js` contains pure view metadata/geometry; `well-canvas.js` reads retained chunks and binds the tree, tracks and inspector. The existing method registry/API remains authoritative for calculations.
 
+## Current local workbench additions - 2026-10-31
+
+- The tree organizes wells, runs, curves and supporting evidence, plus global curve categories and shared stratigraphy. Well/run/curve/marker checkboxes redraw the active workbook and show partial parent states. Display visibility keeps imported selections and hidden styles intact.
+- Stable registry names/UWI/aliases are separate from IDs. Headers place wellheads when their coordinate reference is confirmed. The map retains active survey selection and unresolved-location review; source observations remain available.
+- Survey-backed MD/TVD/TVDSS conversion requires compatible units/datums and never extrapolates. Index rulers and curve headers remain visible during navigation. Inspector values come from retained samples; source selection bounds are converted back to their original units/reference.
+- Shared imported picks can be displayed and correlated between actual well picks with compatible references. Imported evidence is not edited as a hand-picked top, and correlation lines are not calculated geological surfaces.
+- Templates preserve multiple curves per track, ordering, scales, styles, fills and visibility. Apply to one/all workbook wells through unique confirmed curve-type/unit matches, with exact mnemonic/unit fallback for unclassified curves. Missing/ambiguous matches are reported.
+- The Data page offers full retained survey/checkshot observation tables, time-depth QC and separate derived interval velocities, with explicit active checkshot selection. MD interval velocity needs a compatible active survey conversion to TVD.
+- Changes have source-only validation. Runtime, numerical, visual, storage and performance qualification are deferred to [WELL_WORKFLOW_ACCEPTANCE.md](WELL_WORKFLOW_ACCEPTANCE.md).
+
 ## Try the six LAS files
 
 1. Open the project and Interpretation. Existing activated log datasets appear under Wells & curves. Otherwise use Add curves, classify as conventional logs, and review the actual WELL identities and references before importing.

@@ -1,5 +1,9 @@
 # Guided ingestion
 
+## Matching deviation files from a ZIP
+
+The importer matches directional surveys to well headers or LAS well identities. A directional worksheet or CSV with several wells produces separate surveys. **Map → Review pending surveys** opens the retained import when a matched survey still needs review.
+
 ## Coordinate references and placement
 
 Cloud imports read supported coordinate declarations from LAS headers and match documented survey CRS evidence to the corresponding archive wells. Map review prefills recognized references, displays retained alternate coordinates, and flags a conflicting projection or position before saving. Use **Map → Add → Review all well coordinates** to review existing pins in one place.

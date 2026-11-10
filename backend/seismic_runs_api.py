@@ -31,7 +31,7 @@ def settle(db, project_ref, run_ref, status, actual_bytes, updates=None):
         record = project_ref.get(transaction=tx).to_dict()
         runtime_ref = db.collection('stratax_seismic_runtime').document('capacity')
         runtime = runtime_ref.get(transaction=tx).to_dict() or {}
-        quota = record.setdefault('importQuota', {})
+        quota = record.setdefault(run.get('quotaField','importQuota'), {})
         quota['reservedBytes'] = max(0, quota.get('reservedBytes', 0)-run['reservation'])
         quota['derivedBytes'] = quota.get('derivedBytes', 0)+actual_bytes
         run.update(updates or {})
@@ -262,6 +262,12 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
         item, run = load_run(ref, rid)
         if not run.get('settled'):
             try:
+                if run.get('providerKind') == 'google-batch':
+                    if time.time()-run.get('lastReconcileEpoch',0) <= 30:
+                        return public_run(run)
+                    item.update(dict(lastReconcileEpoch=int(time.time())))
+                    from seismic_field_admission import reconcile_field
+                    return reconcile_field(database(),ref,item,run,provider())
                 if not run.get('execution') and time.time()-run.get('lastReconcileEpoch',0)>30:
                     item.update(dict(lastReconcileEpoch=int(time.time())))
                     discovered=discover_execution(run,f'stratax_projects/{user["uid"]}/records/{pid}/seismicRuns/{rid}')
@@ -322,6 +328,10 @@ def install_seismic_runs(app, database, owner, project, source, retained_section
             return public_run(run)
         execution = run.get('execution', '')
         try:
+            if run.get('providerKind') == 'google-batch':
+                from seismic_field_admission import cancel_field
+                cancel_field(item,run,provider())
+                return public_run(restore_value(item.get().to_dict()))
             if not execution and run.get('dispatchState')!='pending':
                 discovered=discover_execution(run,f'stratax_projects/{user["uid"]}/records/{pid}/seismicRuns/{rid}')
                 if discovered:

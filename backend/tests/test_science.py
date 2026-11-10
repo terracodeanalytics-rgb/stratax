@@ -16,6 +16,7 @@ from scientific_worker import read_inputs, write_result
 def fixture(mid):
     n=40;d=np.arange(n,dtype=float);phi=np.linspace(.1,.3,n);sw=np.linspace(.2,.6,n);t=np.linspace(0,1,n)
     spec=METHODS[mid];p={k:v["default"] for k,v in spec["parameters"].items()};units={};a={}
+    if mid in ('porosity-density','porosity-sonic','porosity-neutron'):p['porosityBasis']='total'
     for item in spec["inputs"]:
         role,dim=item["role"],item["dimension"]
         if dim.endswith('-array'):dim='array'
@@ -31,7 +32,7 @@ def fixture(mid):
     if mid=='porosity-effective':p['shalePorosity']=.1
     if mid.startswith('saturation-'):p['rw']=.08;p.update({'rsh':2} if 'rsh' in p else {})
     if mid=='permeability-regression':a['coreK']=1000*phi**2
-    if mid in ('permeability-timur','permeability-coates'):p.update(coefficient=1000,calibration='Fixture core relationship')
+    if mid in ('permeability-timur','permeability-coates'):p.update(coefficient=1000,calibration='Fixture core relationship',applicationBounds=dict(phiLow=.05,phiHigh=.5,swiLow=.1,swiHigh=.8))
     if mid=='mineral-inversion':p.update(matrix=[[1,0],[0,1]],minerals=['A','B']);a['responses']=np.column_stack([phi,1-phi])
     if mid=='nmr-partition':a['spectrum']=np.tile([.05,.1,.05],(n,1));p.update(t2=[10,50,100],coefficient=1);units['spectrum']='v/v'
     if mid in ('core-fit','simulation-compare'):
@@ -42,23 +43,30 @@ def fixture(mid):
     if mid=='pressure-gradient':p.update(depthReference='TVDSS',datum='Fixture MSL')
     if mid.startswith('predict-'):a['features']=np.column_stack([d,d**2]);a['target']=2*d+1;p['heldOutWell']='B'
     if mid=='correction-table':p.update(tool='Fixture tool/v1',citation='Authorized linear-response fixture',x=[0,100],delta=[1,2])
-    if mid=='cutoff-rules':p.update(rules=[dict(role='porosity',operator='>=',value=.2)])
+    if mid=='cutoff-rules':p.update(rules=[dict(role='porosity',operator='>=',value=.2)],maxGap=2)
     if mid=='reservoir-summary':a['reservoir']=np.ones(n);a['pay']=np.ones(n);p.update(depthReference='MD',top=0,base=39,maxGap=2)
     if mid=='seismic-attributes':a['traces']=np.tile(np.sin(np.arange(128)*.2),(20,1));p.update(sampleInterval=.002,domain='TWT')
     if mid=='domain-conversion':p.update(velocity=2000,datum='Fixture time zero');units['axis']='s'
     if mid in ('surface-interpolation','property-kriging'):
         x,y=np.meshgrid(np.arange(5.),np.arange(5.));a.update(x=x.ravel(),y=y.ravel());a['z' if mid=='surface-interpolation' else 'value']=(x+y).ravel();p.update(nx=8,ny=8)
         p.update(dict(crs='EPSG:32632',domain='Depth') if mid=='surface-interpolation' else dict(range=3,variance=1))
-    if mid=='log-upscale':p['edges']=[0,10,20,30,39]
+    if mid=='log-upscale':p.update(edges=[0,10,20,30,39],maxGap=2)
     if mid=='elastic-properties':a['vs']=np.full(n,1500.)
     if mid=='gassmann':a['kDry']=np.full(n,1e10);p.update(kMineral=3.7e10,kFluid=2.2e9)
     if mid=='synthetic-seismogram':a['vp']=2000+d*20;p.update(sampleInterval=.002,axisConfirmed=True)
-    if mid=='geomechanics-1d':p.update(surfaceStress=1e5,hydrostaticGradient=1e4,normalSonic=.00018,eatonExponent=3,poisson=.25,tectonicStress=1e5)
+    if mid=='geomechanics-1d':p.update(depthReference='TVD',surfaceStress=1e5,hydrostaticGradient=1e4,normalSonic=.00018,eatonExponent=3,poisson=.25,tectonicStress=1e5)
     if mid=='production-allocation':p.update(zero=0,slope=2,calibration='Fixture spinner table',flowUnit='m3/day')
     if mid=='trajectory-minimum-curvature':a.update(inclination=np.zeros(n),azimuth=np.zeros(n));p.update(northReference='Grid',crs='EPSG:32632',north=0,east=0,tvd=0)
     if mid=='trajectory-clearance':a['planned']=np.column_stack([d,np.zeros(n),d]);a['offset']=a['planned']+[10,0,0];p['threshold']=2;units.update(planned='m',offset='m')
     if mid=='in-place-volumes':p.update(area=1e6,netThickness=10,porosity=.2,sw=.25,fvf=1.2)
     if mid=='volume-uncertainty':p.update(distributions={k:dict(low=v,mode=v,high=v) for k,v in dict(area=1e6,netThickness=10,porosity=.2,sw=.25,fvf=1.2).items()})
+    if mid=='depth-match':p.update(anchors=[[0,1],[39,41]],sourceRun='fixture-run')
+    if mid=='align-curve':p.update(top=0,base=39,spacing=1,maxGap=2,depthReference='MD')
+    if mid=='endpoint-proposal':p.update(top=0,base=39)
+    if mid=='temperature-profile':p.update(top=0,base=39,temperatureC=20,gradientCPerM=.03,depthReference='TVD',citation='Fixture measured anchor and gradient')
+    if mid=='resistivity-temperature':a['temperature']=20+d;units['temperature']='degC';p.update(sampleResistivity=.1,sampleTemperatureC=20,constantC=21.5,citation='Fixture empirical domain only')
+    if mid=='porosity-combine':a['estimates']=np.column_stack([phi,phi+.01]);units['estimates']='v/v';p.update(weights=[.5,.5],basis='total')
+    if mid=='pickett-fit':a['rt']=.08/phi**2;p.update(waterZoneEvidence='Fixture clean water zone')
     return a,p,units
 
 
@@ -72,7 +80,7 @@ def test_every_advertised_operator_executes_bounded_fixture(mid):
 
 def test_analytical_petrophysics_and_unclipped_provenance():
     assert evaluate('shale-linear',{'gr':[0,50,100]},dict(clean=0,shale=100),{'gr':'gAPI'})['series']['vsh']==[0,.5,1]
-    r=evaluate('porosity-density',{'density':[2.32]},dict(matrix=2650,fluid=1000),{'density':'g/cm3'})
+    r=evaluate('porosity-density',{'density':[2.32]},dict(matrix=2650,fluid=1000,porosityBasis="total"),{'density':'g/cm3'})
     assert r['series']['porosity'][0]==pytest.approx(.2)
     r=evaluate('saturation-archie',dict(porosity=[.2,.2],rt=[10,0]),dict(rw=.1,a=1,m=2,n=2),dict(porosity='v/v',rt='ohm.m'))
     assert r['series']['sw'][0]==pytest.approx(.5)
@@ -144,6 +152,57 @@ def test_units_no_silent_unknown_conversion():
     assert unit_factor('length','ft')==.3048
     assert unit_factor('pressure','psi')==pytest.approx(6894.757293168)
     with pytest.raises(ScienceProblem):unit_factor('length','degrees')
+
+
+def test_geomechanics_vertical_integral_and_feet_equivalence():
+    a,p,u=fixture('geomechanics-1d')
+    a['depth']=np.array([0.,10.,30.]);a['density']=np.full(3,2400.);a['sonic']=np.full(3,.0002)
+    result=evaluate('geomechanics-1d',a,p,u)
+    assert result['summary']['depthReference']=='TVD'
+    assert result['series']['overburden']==pytest.approx(1e5+2400*9.80665*a['depth'])
+    feet=evaluate('geomechanics-1d',a|dict(depth=a['depth']/.3048),p,u|dict(depth='ft'))
+    for key in result['series']:assert feet['series'][key]==pytest.approx(result['series'][key])
+    for reference in (None,'','MD','TVDSS','Unknown'):
+        with pytest.raises(ScienceProblem,match='TVD'):
+            evaluate('geomechanics-1d',a,p|dict(depthReference=reference),u)
+
+
+def test_upscaling_excludes_gaps_and_retains_partial_support_and_units():
+    a=dict(depth=[0,1,10,11],value=[10,100,30,40]);u=dict(depth='m',value='gAPI')
+    result=evaluate('log-upscale',a,dict(edges=[0,11],maxGap=2),u)
+    assert result['series']['upscaled']==[20]
+    assert result['series']['coverage']==pytest.approx([2/11])
+    assert result['units']['upscaled']=='gAPI'
+    # A gap equal to the limit contributes support; larger gaps do not.
+    result=evaluate('log-upscale',a,dict(edges=[1,10],maxGap=9),u)
+    assert result['series']['upscaled']==[100] and result['series']['coverage']==[1]
+    result=evaluate('log-upscale',a,dict(edges=[1,10],maxGap=8),u)
+    assert result['series']['upscaled']==[None] and result['series']['coverage']==[0]
+    result=evaluate('log-upscale',dict(depth=[0,1,3,4],value=[10,None,30,40]),dict(edges=[-1,.5,3.5,5],maxGap=2),u)
+    assert result['series']['upscaled']==[10,20,30]
+    assert result['series']['coverage']==pytest.approx([1/3,1/3,1/3])
+    feet=evaluate('log-upscale',a|dict(depth=np.array(a['depth'])/.3048),dict(edges=[0,11],maxGap=2),u|dict(depth='ft'))
+    assert feet['series']['upscaled']==pytest.approx([20])
+    assert feet['series']['coverage']==pytest.approx([2/11])
+    for gap in (None,0,-1,float('nan')):
+        with pytest.raises(ScienceProblem):evaluate('log-upscale',a,dict(edges=[0,11],maxGap=gap),u)
+
+
+@pytest.mark.parametrize('mid',['predict-ridge','predict-forest'])
+def test_prediction_units_survive_complete_artifact_roundtrip(tmp_path,mid):
+    a,p,u=fixture(mid);u['target']='gAPI'
+    result=evaluate(mid,a,p,u)
+    keys=('reconstructed','empiricalLower','empiricalUpper')
+    assert all(result['units'][key]=='gAPI' for key in keys)
+    assert 'not calibrated predictive coverage' in result['summary']['intervalBasis']
+    output=tmp_path/'result';write_result(output,'result','run-unit-roundtrip',result,{}, {})
+    manifest=json.loads((output/'manifest.json').read_text());ds=manifest['datasets'][0]
+    assert [col['unit'] for col in ds['columns']]==['gAPI']*3
+    ds['manifest']='result/'+ds['manifest'].rsplit('/',1)[-1]
+    bindings={key:dict(datasetId=ds['id'],columnId=ds['columns'][i]['id'],unit='gAPI') for i,key in enumerate(keys)}
+    values,units=read_inputs(tmp_path,{ds['id']:ds},bindings)
+    assert units==dict.fromkeys(keys,'gAPI')
+    for key in keys:assert values[key]==pytest.approx(result['series'][key])
 
 
 def test_full_resolution_seismic_selection_not_decimated_preview(tmp_path):

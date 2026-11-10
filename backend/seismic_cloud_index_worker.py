@@ -8,6 +8,29 @@ import numpy as np
 
 from seismic_processing import require
 from seismic_source_io import indexed_source
+from seismic_artifact_ranges import range_checksums
+from seismic_field_artifacts import geometry_bounds
+
+
+class _ShardWriter:
+    """Append once per shard instead of recompressing it once per input trace."""
+    def __init__(self,array,maximum=1048576):
+        self.array=array
+        self.buffer=np.empty(min(maximum,array.shape[0]),dtype=array.dtype)
+        self.filled=self.written=0
+
+    def append(self,values):
+        first=0
+        while first<len(values):
+            count=min(len(values)-first,len(self.buffer)-self.filled)
+            self.buffer[self.filled:self.filled+count]=values[first:first+count]
+            self.filled+=count;first+=count
+            if self.filled==len(self.buffer):self.flush()
+
+    def flush(self):
+        if self.filled:
+            self.array[self.written:self.written+self.filled]=self.buffer[:self.filled]
+            self.written+=self.filled;self.filled=0
 
 
 def build_cloud_index(client, binding, parameters, put, *, cancelled=lambda:False,
@@ -62,29 +85,37 @@ def build_cloud_index(client, binding, parameters, put, *, cancelled=lambda:Fals
                     display_offsets[level]=boundary
                     root.create_array(f'display/{level}/offsets',data=boundary)
                     root.create_array(f'display/{level}/samples',shape=(int(boundary[-1]),),dtype='float32',
-                                      chunks=(65536,),shards=(1048576,),fill_value=np.nan)
+                                      chunks=(65536,),shards=(1048576,),fill_value=np.nan,compressors=[ZstdCodec(level=3)])
+                    root[f'display/{level}/samples'].attrs.update(displayOnly=True,analytical=False,
+                        sampleDecimation=factor,aggregation='finite-block-mean')
+                analytical_writer=_ShardWriter(root['samples']);valid_writer=_ShardWriter(root['valid'])
+                display_writers={level:_ShardWriter(root[f'display/{level}/samples']) for level in display_offsets}
                 for position,locator in enumerate(locators):
                     require(not cancelled(),'Analytical indexing cancelled during a partition.')
                     ns=locator['sampleCount'];offset=locator['byteOffset']
                     require(offset+240+ns*SAMPLE_BYTES[fmt]<=identity['size'],'Trace leaves immutable source bounds.')
                     raw=_read(stream,offset+240,ns*SAMPLE_BYTES[fmt]);values=decode_array(raw,fmt,endian)
                     a,b=int(offsets[position]),int(offsets[position+1])
-                    root['samples'][a:b]=values;root['valid'][a:b]=np.isfinite(values)
+                    analytical_writer.append(values);valid_writer.append(np.isfinite(values))
                     for level,boundary in display_offsets.items():
                         factor=2**level;n=(ns+factor-1)//factor;padded=np.full(n*factor,np.nan)
                         padded[:ns]=values;blocks=padded.reshape(n,factor);support=np.isfinite(blocks)
                         valid=support.sum(axis=1)
                         means=np.divide(np.where(support,blocks,0).sum(axis=1),valid,out=np.full(n,np.nan),where=valid>0)
-                        root[f'display/{level}/samples'][int(boundary[position]):int(boundary[position+1])]=means
+                        display_writers[level].append(means)
+                for writer in (analytical_writer,valid_writer,*display_writers.values()):writer.flush()
                 root.attrs['complete']=True
                 Path(directory,'headers.json').write_text(json.dumps(locators,allow_nan=False),encoding='utf-8')
                 for file in sorted(Path(directory).rglob('*')):
                     if file.is_file():
                         require(not cancelled(),'Analytical indexing cancelled during publication.')
                         name=file.relative_to(directory).as_posix()
-                        objects.append(put(f'analytical/{start}/{name}',file.read_bytes()))
+                        raw=file.read_bytes()
+                        reference=put(f'analytical/{start}/{name}',raw)
+                        objects.append(reference if reference.get('ranges') else reference|dict(ranges=range_checksums(raw)))
             part=put(f'analytical/{start}/partition.json',json.dumps(dict(firstTrace=start,traceCount=len(ids),
-                sampleCount=int(offsets[-1]),objects=objects),allow_nan=False).encode())
+                sampleCount=int(offsets[-1]),objects=objects,headerBounds=geometry_bounds(locators),
+                geometryReviewed=False),allow_nan=False).encode())
             state['partitions'].append(part);state['nextTrace']=start+len(ids)
             checkpoint(dict(state,completedPartitions=len(state['partitions'])))
             progress(dict(completedTraces=state['nextTrace']-first,totalTraces=count))

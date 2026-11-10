@@ -10,7 +10,7 @@ from google.cloud import firestore
 from ingestion_core import column, output_dataset
 from scientific_api import fingerprint, settle_run, restore_value
 from scientific_catalog import ARTIFACT_BUDGET, MAX_ROWS, MAX_CELLS, METHODS
-from scientific_core import ScienceProblem, evaluate, require, unit_factor, clean
+from scientific_core import ScienceProblem, evaluate, require, unit_factor, clean, require_geomechanics_tvd, retained_selection, validate_preparation_sources
 
 logger = logging.getLogger("stratax-science")
 
@@ -114,7 +114,13 @@ def write_result(output, prefix, rid, result, sources, configuration):
     datasets=[]
     for count,items in groups.items():
         if not count:continue
+        index_key="depth" if any(key=="depth" for key,_ in items) else "cellTop" if result["method"]=="log-upscale" and any(key=="cellTop" for key,_ in items) else None
+        if configuration.get("scope") or configuration.get("verifiedIndexReference"):
+            items=sorted(items,key=lambda item:item[0]!=index_key)
         cols=[column(key,result["units"].get(key,"unconfirmed"),i) for i,(key,_) in enumerate(items)]
+        for col,(key,values) in zip(cols,items):
+            col.update(result.get("seriesMetadata",{}).get(key,{}))
+            if any(isinstance(value,list) for value in values if value is not None):col["valueType"]="array"
         rows=([values[index] for _,values in items] for index in range(count))
         ds=output_dataset(output,"Calculation "+rid+" · "+str(count)+" rows",cols,rows,
                           metadata=dict(scientificMethod=result["method"],methodVersion=result["methodVersion"]))
@@ -122,9 +128,9 @@ def write_result(output, prefix, rid, result, sources, configuration):
         # IDs are unique across runs even when result shape/names repeat.
         original_id=ds["id"];ds["id"]="sci-"+rid[4:20]+"-"+str(len(datasets))
         ds.update(well=next(iter({s.get("well","") for s in sources.values()}),"") if len({s.get("well","") for s in sources.values()})==1 else "",family="derived",references={"userConfirmedInputs":True},mapping={})
-        if any(key == "depth" for key,_ in items) and configuration.get("scope"):
-            ds["indexColumnId"] = cols[next(i for i,(key,_) in enumerate(items) if key == "depth")]["id"]
-            ds["references"].update(depthReference=configuration["scope"]["reference"], depthUnit="m")
+        if index_key and (configuration.get("scope") or configuration.get("verifiedIndexReference")):
+            ds["indexColumnId"] = cols[next(i for i,(key,_) in enumerate(items) if key == index_key)]["id"]
+            ds["references"].update(depthReference=configuration.get("verifiedIndexReference") or configuration["scope"]["reference"], depthUnit="m")
         (output/(original_id+".json")).write_text(json.dumps(ds,allow_nan=False),encoding="utf-8")
         datasets.append(ds)
     preview={key:values[:min(2000,len(values))] if not values or not isinstance(values[0],list) else [row[:512] for row in values[:256]] for key,values in result["series"].items()}
@@ -150,7 +156,7 @@ def scoped_inputs(inputs, units, selection):
     units.pop("__canvas_index",None)
     depth=np.asarray(raw,dtype=float)*unit_factor("length",selection["unit"])
     mask=np.ones(len(depth),dtype=bool)
-    if selection.get("top") is not None:mask &= np.isfinite(depth)&(depth>=selection["top"])&(depth<=selection["base"])
+    if selection.get("top") is not None:mask &= np.isfinite(depth)&(depth>=selection["top"])&((depth<selection["base"]) if selection.get("halfOpen") else (depth<=selection["base"]))
     if selection.get("rowRanges") is not None:
         rows=np.zeros(len(depth),bool)
         for item in selection["rowRanges"]:
@@ -162,6 +168,31 @@ def scoped_inputs(inputs, units, selection):
         require(len(values)==len(depth),"Canvas interval inputs do not have a common stored row index.","scope_alignment")
         inputs[role]=np.asarray(values)[mask].tolist()
     return inputs,units,depth[mask]
+
+
+def alignment_indices(snapshots):
+    """Require retained, confirmed depth indices; a row-alignment checkbox is insufficient."""
+    result={}
+    for did,source in snapshots.items():
+        index=source.get("indexColumnId")
+        if not index and (source.get("mapping") or {}).get("index") not in (None,""):
+            index="column-"+str(source["mapping"]["index"])
+        column=next((c for c in (source.get("columns") or []) if c["id"]==index),None)
+        require(column and (source.get("references") or {}).get("depthReference") in ("MD","TVD","TVDSS"),"Multi-dataset calculations need confirmed retained depth indices. Align and review curves explicitly first.","alignment_required")
+        result["__alignment_"+did]=dict(datasetId=did,columnId=index,unit=column.get("effectiveUnit") or column.get("unit"))
+    return result
+
+
+def verify_alignment(inputs, units, indices, snapshots):
+    import numpy as np
+    axis,reference=None,None
+    for role,binding in indices.items():
+        values=np.asarray(inputs.pop(role),float)*unit_factor("length",units.pop(role))
+        ref=snapshots[binding["datasetId"]]["references"]["depthReference"]
+        require(values.ndim==1 and len(values)>1 and np.all(np.isfinite(values)) and np.all(np.diff(values)>0),"Retained scalar depth indices must increase without gaps in their coordinates. Prepare and review alignment first.","alignment_required")
+        if axis is not None:require(reference==ref and axis.shape==values.shape and np.allclose(axis,values,rtol=0,atol=1e-8),"These datasets have different depth axes. Equal row counts do not authorize a join; align and review them explicitly.","alignment_required")
+        axis,reference=values,ref
+    return axis,reference
 
 
 def run():
@@ -179,14 +210,25 @@ def run():
     status,message,extra="failed",None,None
     try:
         require(record["status"]!="cancelling","Calculation cancelled.","cancelled")
-        ref.update(dict(status="running"))
+        ref.update(dict(status="running",dispatchUnconfirmed=False,message="Processing reviewed scientific inputs."))
         def cancelled():return ref.get().to_dict().get("status")=="cancelling"
         for did,source in record["inputSnapshots"].items():
             latest=project.collection("datasets").document(did).get().to_dict()
             require(latest and latest.get("active") and fingerprint(latest)==source["fingerprint"],"An input version changed. Submit a new calculation.","stale_inputs")
             prefix=f"owners/{uid}/projects/{pid}/"
             require(source["manifest"].startswith(prefix),"Input artifact leaves the authenticated project.","unsafe_artifact")
+        for did,expected in record.get("inputFingerprints",{}).items():
+            latest=project.collection("datasets").document(did).get().to_dict()
+            require(latest and latest.get("active") and fingerprint(latest)==expected,"An upstream source changed. Recalculate affected checkpoints.","stale_inputs")
+        if record["method"]=="workflow-segment":
+            from scientific_workflow_worker import execute_segment
+            extra=execute_segment(record,project_root,output,relative_prefix,cancelled,lambda value:ref.update(dict(progress=value)))
+            require(not cancelled(),"Calculation cancelled.","cancelled")
+            status="completed"
+            return
         extra_geometry=None
+        verified_axis=None
+        index=None
         if record["method"]=="seismic-attributes":
             binding=record["configuration"]["bindings"]["traces"];ds=record["inputSnapshots"][binding["datasetId"]]
             require(ds.get("family")=="seismic","Select an imported seismic dataset with an immutable original.")
@@ -196,18 +238,46 @@ def run():
             raw=Path(os.environ.get("RAW_MOUNT","/raw"))/"owners"/uid/"projects"/pid/"originals"/source_id
             import tempfile
             with tempfile.TemporaryDirectory() as scratch:
-                linked=Path(scratch)/("source"+Path(original["name"]).suffix.lower());linked.symlink_to(raw)
+                linked=Path(scratch)/("source"+Path(original["name"]).suffix.lower())
+                try:linked.symlink_to(raw)
+                except OSError:
+                    # Windows local qualification may not have symlink privileges.
+                    # A hard link retains identical immutable bytes without a copy.
+                    linked.hardlink_to(raw)
                 source_import=project.collection("imports").document(ds["importId"]).get().to_dict()
                 traces,extra_geometry=seismic_section(linked,record["parameters"],source_import.get("options",{}),cancelled)
             inputs={"traces":traces};units={"traces":binding["unit"]}
         else:
             bindings=dict(record["configuration"]["bindings"])
             selection=record["configuration"].get("scope")
+            validate_preparation_sources(record["method"],record["parameters"],bindings,record["inputSnapshots"],selection)
+            selection=selection or retained_selection(record["inputSnapshots"],bindings)
+            if selection:record["configuration"]["verifiedIndexReference"]=selection["reference"]
             if selection:bindings["__canvas_index"]={k:selection[k] for k in ("datasetId","columnId","unit")}
+            indices=alignment_indices(record["inputSnapshots"]) if len(record["inputSnapshots"])>1 and record["method"]!="trajectory-clearance" else {}
+            bindings.update(indices)
             inputs,units=read_inputs(project_root,{k:dict(v,manifest=v["manifest"].removeprefix(f"owners/{uid}/projects/{pid}/")) for k,v in record["inputSnapshots"].items()},bindings,cancelled)
+            if indices:
+                verified_axis,reference=verify_alignment(inputs,units,indices,record["inputSnapshots"])
+                record["configuration"]["verifiedIndexReference"]=reference
             inputs,units,index=scoped_inputs(inputs,units,selection)
         require(not cancelled(),"Calculation cancelled.","cancelled")
-        result=evaluate(record["method"],inputs,record["parameters"],units)
+        if record["method"]=="geomechanics-1d":
+            binding=record["configuration"]["bindings"]["depth"]
+            source=record["inputSnapshots"][binding["datasetId"]]
+            require_geomechanics_tvd((source.get("references") or {}).get("depthReference"),record["parameters"])
+            scope=record["configuration"].get("scope")
+            require(not scope or scope["reference"]=="TVD","Geomechanics requires a TVD canvas scope.","depth_reference")
+            record["configuration"]["verifiedIndexReference"]="TVD"
+        from scientific_evaluation import validate_bindings, retain_semantics
+        metadata=validate_bindings(record["method"],record["parameters"],record["configuration"]["bindings"],record["inputSnapshots"])
+        result=retain_semantics(evaluate(record["method"],inputs,record["parameters"],units),metadata)
+        if not extra_geometry and index is not None and "depth" not in result["series"] and any(len(v)==len(index) for v in result["series"].values()):
+            result["series"]={"depth":clean(index),**result["series"]};result["units"]["depth"]="m"
+        if verified_axis is not None:
+            if any(len(values)==len(verified_axis) for values in result["series"].values()):
+                result["series"]={"depth":clean(verified_axis),**result["series"]};result["units"]["depth"]="m"
+            result["summary"]["alignmentEvidence"]=dict(reference=reference,operation="Retained depth axes agree within 1e-8 m conversion tolerance; no resampling or extrapolation",indices=indices)
         if not extra_geometry and record["configuration"].get("scope"):
             if any(len(values)==len(index) for values in result["series"].values()):
                 if "depth" not in result["series"]:result["series"]={"depth":clean(index),**result["series"]}

@@ -503,7 +503,10 @@ def validate_mapping(dataset, family, options):
     dataset["mapping"] = mapping
     raw_well = dataset.get('metadata', {}).get('well', '')
     dataset["well"] = options.get('wellBindings', {}).get(raw_well) or options.get('well') or raw_well
-    if dataset.get('metadata', {}).get('rowWell') and raw_well not in options.get('wellBindings', {}):
+    if family=='deviation' and options.get('requireSurveyOwner') and not options.get('well') and not options.get('wellBindings',{}).get(raw_well):
+        if not dataset.get('metadata',{}).get('rowWell'):
+            notes.append(issue('well_match_required','Choose the owning well for this deviation survey in Review or Match.','blocking'))
+    if dataset.get('metadata', {}).get('rowWell') and not options.get('wellBindings', {}).get(raw_well):
         notes.append(issue('well_match_required', 'Review the well association for ' + raw_well + '.', 'blocking'))
     return dataset
 

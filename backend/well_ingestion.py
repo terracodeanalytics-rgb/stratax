@@ -59,7 +59,8 @@ def decorate(dataset, output, options):
     source = options.get('assetId') or dataset.get('sourceId') or dataset['id']
     headers = dataset.get('metadata', {}).get('headers', {})
     value = lambda *names: next((headers[n].get('value') for n in names if n in headers), None)
-    owner = next((w for w in options.get('_knownWells', []) if w['id'] == options.get('well')), None)
+    owner_id = dataset.get('well') if dataset.get('metadata', {}).get('rowWell') else options.get('well')
+    owner = next((w for w in options.get('_knownWells', []) if w['id'] == owner_id), None)
     actual_name = value('WELL')
     same_uwi=bool(owner and owner.get('uwi') and str(value('UWI','API') or '').strip()==str(owner['uwi']).strip())
     if owner and actual_name and not same_uwi and str(actual_name).strip() not in [owner.get('name', owner['id']), *owner.get('aliases', [])]:
@@ -90,12 +91,16 @@ def decorate(dataset, output, options):
         if action.get('action') == 'skip':
             continue
         name = str(mapped(row, mapping, 'well') or (dataset.get('metadata', {}).get('wellName') or dataset.get('metadata', {}).get('well') if dataset.get('metadata', {}).get('rowWell') else None) or value('WELL') or options.get('wellName') or dataset.get('well') or '').strip()
-        if same_uwi:name=owner.get('name',name)
+        if same_uwi or owner and dataset.get('metadata', {}).get('rowWell'):
+            name=owner.get('name',name)
         if not name:
             if family == 'well_headers':
                 dataset['issues'].append({'code':'well_identity', 'severity':'blocking', 'row':index, 'message':f'Header row {index+1} has no well name. Map its identifier or explicitly skip the row.'})
             continue
-        identifier = action.get('well') or options.get('wellBindings', {}).get(name) or (dataset.get('well') if dataset.get('metadata', {}).get('rowWell') else options.get('well') if family != 'well_headers' else None) or ('well-' + str(source) + '-' + (str(index) if family == 'well_headers' else hashlib.sha256(name.encode()).hexdigest()[:10]))
+        if dataset.get('metadata', {}).get('rowWell'):
+            identifier = dataset['well']
+        else:
+            identifier = action.get('well') or options.get('wellBindings', {}).get(name) or (options.get('well') if family != 'well_headers' else None) or ('well-' + str(source) + '-' + (str(index) if family == 'well_headers' else hashlib.sha256(name.encode()).hexdigest()[:10]))
         if family != 'well_headers' and not options.get('well') and not dataset.get('metadata', {}).get('rowWell'):
             field = options.get('matching', {}).get('field', 'name')
             raw_identity = str(value('UWI', 'API') or '') if field == 'uwi' else name
@@ -116,6 +121,8 @@ def decorate(dataset, output, options):
         x = x if x is not None else value('X', 'XCOORD', 'EAST')
         y = y if y is not None else value('Y', 'YCOORD', 'NORTH')
         uwi = str(mapped(row, mapping, 'uwi') or dataset.get('metadata', {}).get('rowUwi') or value('UWI', 'API') or '')
+        if owner and dataset.get('metadata', {}).get('rowWell'):
+            uwi = owner.get('uwi') or uwi
         proposal = options.get('coordinateProposals', {}).get(uwi, {})
         header_crs = declared_crs(value('EPSG', 'CRS', 'COORDSYS', 'PROJECTION'))
         crs = declared_crs(refs.get('crs')) or refs.get('crs') or header_crs or proposal.get('crs', '')

@@ -221,7 +221,7 @@ function confirmReadyImport(record,project,pendingIds,{onBack,onCommitted}={}){
   }finally{busy=false;submit.disabled=false;submit.textContent='Confirm import';}
  };
 }
-async function reviewImport(id,pendingIds=[],options={}){
+export async function reviewImport(id,pendingIds=[],options={}){
  const project=host.getProject(),uid=session.user?.uid;let record=context().imports.find(r=>r.id===id);if(project.storage==='cloud'){try{record=await api(`/api/projects/${project.id}/imports/${id}`);if(host.getProject()?.id!==project.id||session.user?.uid!==uid)return;rememberImport(host.getState(),record);}catch(error){host.toast('Refresh Import history or inspect its retained original again. '+error.message);return;}}if(!record){host.toast('This pending inspection is missing. Open Import history or select the retained source and choose Inspect.');return;}if(options.readyOnly){
   if(options.revision!==undefined&&record.revision!==options.revision){host.toast('This inspection changed. Review the latest version in Import history.');return;}
   return confirmReadyImport(record,project,pendingIds,options);

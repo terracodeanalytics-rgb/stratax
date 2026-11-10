@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import sys
+import pytest
 from pathlib import Path
 from unittest.mock import Mock,patch
 
@@ -36,6 +37,41 @@ class Database:
 
 
 def config(**changes):return dict(revision=0,method='shale-linear',bindings=dict(gr=dict(datasetId='source',columnId='column-0',unit='gAPI',confirmed=True)),parameters=dict(clean=0,shale=100))|changes
+
+
+def test_geomechanics_admission_requires_retained_tvd_and_matching_scope():
+    from test_science import fixture
+    db=Database();source=db.records[ROOT+'/datasets/source']
+    source.update(columns=[dict(id='depth',unit='m'),dict(id='density',unit='kg/m3'),dict(id='sonic',unit='s/m')],indexColumnId='depth',references=dict(depthReference='TVD'))
+    _,parameters,_=fixture('geomechanics-1d')
+    body=config(method='geomechanics-1d',parameters=parameters,bindings={role:dict(datasetId='source',columnId=role,unit=unit,confirmed=True) for role,unit in [('depth','m'),('density','kg/m3'),('sonic','s/m')]})
+    main.app.dependency_overrides[main.current_user]=lambda:dict(uid='owner')
+    try:
+        with TestClient(main.app) as client,patch.object(main,'_db',db):
+            url='/api/projects/project/science/validate'
+            assert client.post(url,json=body).status_code==200
+            for reference in ('MD','TVDSS','Unconfirmed',None):
+                source['references']['depthReference']=reference
+                response=client.post(url,json=body)
+                assert response.status_code==400 and response.json()['code']=='depth_reference'
+            source['references']['depthReference']='TVD'
+            for reference in ('MD','TVDSS',None):
+                response=client.post(url,json=body|dict(parameters=parameters|dict(depthReference=reference)))
+                assert response.status_code==400
+            response=client.post(url,json=body|dict(scope=dict(datasetId='source',columnId='depth',unit='m',reference='MD')))
+            assert response.status_code==400 and response.json()['code']=='depth_reference'
+    finally:main.app.dependency_overrides.clear()
+
+
+def test_legacy_upscaling_and_geomechanics_configs_need_explicit_new_parameters():
+    from test_science import fixture
+    for method,key in [('log-upscale','maxGap'),('geomechanics-1d','depthReference')]:
+        _,parameters,_=fixture(method);del parameters[key]
+        with pytest.raises(Exception) as error:science.validate_parameters(method,parameters,main.fail)
+        assert error.value.status_code==400 and key in error.value.detail['message']
+    for gap in (0,-1):
+        with pytest.raises(Exception) as error:science.validate_parameters('log-upscale',dict(edges=[0,1],maxGap=gap),main.fail)
+        assert error.value.status_code==400
 
 
 def test_configuration_revision_authorization_units_and_alignment():
@@ -104,9 +140,10 @@ def test_review_stale_inputs_and_independent_result_activation():
 
 def test_canvas_scope_rejects_invalid_and_cross_project_indices():
     db=Database();main.app.dependency_overrides[main.current_user]=lambda:dict(uid='owner');client=TestClient(main.app)
+    db.records[ROOT+'/datasets/source']['columns'].append(dict(id='column-1',unit='ft'))
     try:
         with patch.object(main,'_db',db),patch.object(science.firestore,'transactional',lambda f:f):
-            body=config(scope=dict(datasetId='source',columnId='column-0',unit='ft',reference='Unconfirmed',top=0,base=100,rowRanges=[[0,1]]))
+            body=config(scope=dict(datasetId='source',columnId='column-1',unit='ft',reference='Unconfirmed',top=0,base=100,rowRanges=[[0,1]]))
             saved=client.put('/api/projects/project/science/configurations/scoped',json=body).json()
             assert saved['scope']['rowRanges']==[dict(start=0,end=1)]
             assert client.post('/api/projects/project/science/validate',json=body).status_code==200

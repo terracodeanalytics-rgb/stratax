@@ -207,3 +207,53 @@ def test_inflight_worker_settlement_and_retry(tmp_path,mode):
     assert hashlib.sha256(retained.read_bytes()).hexdigest()==retained_hash
     assert result['datasets'][0]['manifest']!=str(retained.relative_to(derived)).replace('\\','/')
     assert db.records[root]['importQuota']['reservedBytes']==0
+
+
+def test_zip_survey_rows_match_las_wells_without_header_workbook(tmp_path):
+    from import_bundles import classify, prepare_assets
+    from openpyxl import Workbook
+
+    sources = {}
+    for key, name, uwi in [('one','TMB-01','000101'), ('six','TMB-6','000106')]:
+        path = tmp_path / (name+'.las')
+        path.write_text(f'~Version\nVERS. 2.0 :LAS\nWRAP. NO :Wrap\n~Well\nWELL. {name} :Name\nUWI. {uwi} :UWI\n~Curve\nDEPT.M :Depth\nGR.GAPI :Gamma\n~ASCII\n0 10\n1 20\n')
+        sources[key]=path
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append(['Well','UWI','MD (m)','Inclination (deg)','AZIMGN (deg)'])
+    for row in [('TMB-06','000106',0,0,0),('TMB-01','000101',0,0,0),
+                ('TMB-06','000106',10,5,20),('TMB-01','000101',15,6,35),
+                ('Unmatched','000999',0,0,0),('Unmatched','000999',10,5,20)]:
+        worksheet.append(row)
+    sources['table']=tmp_path/'Stations.xlsx'
+    workbook.save(sources['table'])
+    sources['asc']=tmp_path/'Directional Survey TMB-01.asc'
+    sources['asc'].write_text('UWI: 000106\nMeasr. Depth Deviation\n0 0 0\n10 5 20\n')
+    sources['csv']=tmp_path/'stations.csv'
+    sources['csv'].write_text('Well,MD (m),Inclination (deg),AZIMGN (deg)\nTMB-06,0,0,0\nTMB-06,10,5,20\n')
+    assert classify(sources['table'])==classify(sources['csv'])=='deviation'
+    assets=[{'id':key,'name':path.name,'family':classify(path),'archive':{'rootId':'zip','path':path.name}}
+            for key,path in sources.items()]
+    data={'assets':assets,'options':{'perAsset':{key:{'autoPrepare':True} for key in sources}}}
+    wells=prepare_assets(sources,data,[])
+    settings=data['options']['perAsset']
+    assert len(wells)==2
+    owners={well['uwi']:well['id'] for well in wells}
+    assert settings['asc']['well']==owners['000106']
+    for key in ('table','csv'):
+        datasets=parse(sources[key],tmp_path/key,'deviation',{**settings[key],'_knownWells':wells})
+        linked={d['metadata']['well']:d for d in datasets}
+        expected={'000101':owners['000101'],'000106':owners['000106']} if key=='table' else {'TMB-06':owners['000106']}
+        for raw,owner in expected.items():
+            d=linked[raw]
+            assert d['well']==owner and d['rowCount']==2
+            assert d['wellRecords'][0]['uwi']==('000106' if key=='csv' else raw)
+            assert d['references']['northReference']=='Grid north'
+            assert not any(i['severity']=='blocking' for i in d['issues'])
+        if key=='table':
+            assert any(i['code']=='well_match_required' and i['severity']=='blocking' for i in linked['000999']['issues'])
+    sources['asc'].write_text('UWI: 999999\nMeasr. Depth Deviation\n0 0 0\n10 5 20\n')
+    settings['asc']={'autoPrepare':True}
+    prepare_assets(sources,data,wells)
+    unresolved=parse(sources['asc'],tmp_path/'unresolved','deviation',settings['asc'])[0]
+    assert any(i['code']=='well_match_required' and i['severity']=='blocking' for i in unresolved['issues'])

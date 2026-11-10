@@ -7,6 +7,7 @@ import os
 
 def engine_catalog():
     definitions = [
+        ("well-ties", ["numpy", "scipy", "pyproj"], [2,3], "tie", "reviewed deviated-well composites, constrained calibration, wavelets and anchored misties"),
         ("kirchhoff", ["numpy", "scipy"], [2, 3], "imaging", "homogeneous or supplied one-way tables"),
         ("surface-multiple-prediction", ["numpy", "scipy"], [2, 3], "marine", "complete collocated common surface grid"),
         ("structure-attributes", ["numpy", "scipy"], [3], "attributes", "physical-coordinate structure tensors"),
@@ -38,4 +39,8 @@ def engine_catalog():
                            missingLocalDependencies=missing,dimensions=dimensions,route=f"tools/{route}",scope=scope,
                            execution='approved-private-job' if commissioned else 'local-runtime',
                            fieldScaleQualified=False,testingStatus='pending',fullProgrammeImplemented=False))
+    local_implementation={'cloud-analytical-index':'source-reviewed','slices':'source-reviewed','well-ties':'source-reviewed'}
+    for engine in result:
+        engine.update(implementationStatus=local_implementation.get(engine['id'],'completion-pass-pending'),
+            configuredExecution=engine['jobAvailable'],deploymentStatus='qualification-pending',scientificTestingStatus='not-run')
     return dict(engineVersion="stratax-seismic/2.1", engines=result)

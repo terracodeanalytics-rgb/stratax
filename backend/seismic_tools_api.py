@@ -49,9 +49,9 @@ def _pack_array(arr):
     return dict(shape=list(value.shape), values=np.where(np.isfinite(value), value, None).reshape(-1).tolist())
 
 
-def install_seismic_tools(app, owner, project, fail, *, cancelled=lambda:False, progress=lambda value:None):
+def install_seismic_tools(app, owner, project, fail, *, cancelled=lambda:False, progress=lambda value:None, worker_execution=False, checkpoint=lambda value:None, resumed=None):
     def pack(value):
-        if isinstance(value,np.ndarray):return _pack_array(value)
+        if isinstance(value,np.ndarray):return value if worker_execution else _pack_array(value)
         if isinstance(value,dict):return {key:pack(item) for key,item in value.items()}
         if isinstance(value,list):return [pack(item) for item in value]
         if isinstance(value,np.generic):return value.item()
@@ -91,6 +91,9 @@ def install_seismic_tools(app, owner, project, fail, *, cancelled=lambda:False, 
         project(user["uid"], pid)
         try:
             kind = body.get("kind")
+            if kind in ('indexed','physical'):
+                from seismic_physical_slices import indexed_view,physical_view
+                return pack(indexed_view(body['view'],body) if kind=='indexed' else physical_view(body))
             volume = _finite_matrix(body.get("volume"), "volume", ndim=3,allow_missing=True)
             mask = body.get("mask")
             if kind == "inline":
@@ -129,6 +132,10 @@ def install_seismic_tools(app, owner, project, fail, *, cancelled=lambda:False, 
         project(user["uid"], pid)
         try:
             op = body.get("operation")
+            if op in ('workflow','calibrate','time-depth-edit','wavelet-estimate','wavelet-assess','extract-composite','multiwell-qc','align','mistie-network','export'):
+                if not worker_execution:fail(409,'approved_job_required','Submit this scientific operation through a reviewed engine estimate.')
+                from seismic_tie_workflow import tie_operation
+                return pack(tie_operation(body,cancelled=cancelled,checkpoint=checkpoint,resumed=resumed))
             if op in ('wavelet-import','wavelet-create','wavelet-phase'):
                 from seismic_wavelets import wavelet_operation
                 return pack(wavelet_operation(body))

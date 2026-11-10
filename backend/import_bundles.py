@@ -1,5 +1,6 @@
 """Bounded native ZIP intake using existing retained-source/import records."""
 import copy
+import csv
 import hashlib
 import json
 import os
@@ -11,7 +12,7 @@ from pathlib import Path, PurePosixPath
 
 from ingestion_core import ImportProblem, digest, las_header
 from coordinate_reference import declared_crs
-from import_recipes import checkshot_references, normalized, suggested_mapping, table_variants
+from import_recipes import checkshot_references, normalized, suggested_mapping, survey_references, survey_well_column, table_variants
 
 MAX_EXPANDED=1024**3
 MAX_MEMBERS=99
@@ -28,13 +29,21 @@ def classify(path, archive_path=''):
         from openpyxl import load_workbook
         book=load_workbook(path,read_only=True,data_only=True,keep_links=False)
         try:
-            for sheet in book:
-                names=next(sheet.iter_rows(values_only=True),())
-                if {'well','uwi'}<=set(suggested_mapping(names,'well_headers')):return 'well_headers'
-                if {'depth','time'}<=set(suggested_mapping(names,'checkshots')):return 'checkshots'
+            headings=[next(sheet.iter_rows(values_only=True),()) for sheet in book]
+            if any({'md','inclination','azimuth'}<=suggested_mapping(names,'deviation').keys() for names in headings):
+                return 'deviation'
+            if any({'well','uwi'}<=suggested_mapping(names,'well_headers').keys() for names in headings):
+                return 'well_headers'
+            if any({'depth','time'}<=suggested_mapping(names,'checkshots').keys() for names in headings):
+                return 'checkshots'
         finally:book.close()
     with path.open('rb') as source:head=source.read(16384).decode('utf-8-sig',errors='replace')
     if checkshot_name(PurePosixPath(name).name) or re.search(r'^TDP[345]\b',head,re.M) or re.search(r'\b(?:depth|tvd|md)\b[^\n]*\b(?:twt|owt)\b',head,re.I):return 'checkshots'
+    if suffix in ('.csv','.tsv'):
+        line=next((line for line in head.splitlines() if line.strip()),'')
+        names=next(csv.reader([line],delimiter='\t' if suffix=='.tsv' else ','),[])
+        if {'md','inclination','azimuth'}<=suggested_mapping(names,'deviation').keys():
+            return 'deviation'
     if re.search(r'^UWI\s*:',head,re.M|re.I) and re.search(r'^Measr\.\s+Depth\s+Deviation',head,re.M|re.I) or re.search(r'directional|deviation|surveys?',name):return 'deviation'
     if re.search(r'well.?header',name):return 'well_headers'
     for family, pattern in (
@@ -59,6 +68,20 @@ def well_matches(value, wells, *, uwi_only=False, embedded=False):
         labels=[well.get('uwi')] if uwi_only else [well.get('uwi'),well.get('name'),*(well.get('aliases') or [])]
         if any(normalized(label) in keys and (not embedded or len(normalized(label))>=3) for label in labels if label):matches.append(well)
     return matches
+
+def padded_well_name(value):
+    label=normalized(re.sub(r'[_ -]plan$','',str(value or ''),flags=re.I))
+    return re.sub(r'([a-z])0+(?=\d)',r'\1',label)
+
+
+def survey_row_matches(identity, known):
+    exact=well_matches(identity,known,uwi_only=True) or well_matches(identity,known)
+    if exact:
+        return exact
+    label=padded_well_name(identity)
+    return [well for well in known if label and any(padded_well_name(alias)==label
+            for alias in [well.get('name'),*(well.get('aliases') or [])])]
+
 
 def propose_owner(uwi, name, path, archive, known):
     for label, candidates in (
@@ -245,18 +268,41 @@ def prepare_assets(paths, data, known_wells):
             references.setdefault('depthReference','MD');options.setdefault('matching',{'field':'uwi','exact':True})
             proposals=coordinate_sources.get((asset.get('archive',{}).get('rootId'),normalized(uwi)),{})
             if len(proposals)==1:options['coordinateProposals']={uwi:next(iter(proposals.values()))}
+            if asset.get('archive') and not options.get('well') and options.get('deriveWellHeader') is not False:
+                matches=well_matches(uwi,known,uwi_only=True) if uwi else well_matches(name,known)
+                if not matches and (uwi or name):
+                    identity='well-'+hashlib.sha256((uwi or 'LAS well '+normalized(name)).encode()).hexdigest()[:24]
+                    well={'id':identity,'name':name or uwi,'uwi':uwi,'aliases':[]}
+                    known.append(well)
+                    matches=[well]
+                if len(matches)==1:
+                    well=matches[0]
+                    options.update(well=well['id'],wellName=well['name'])
+                    well['aliases']=list(dict.fromkeys([*(well.get('aliases') or []),path.stem]))
         elif family in ('deviation','checkshots'):
             variants=tables.get(asset['id']) or table_variants(path,family,options)
             if variants:
-                if len(variants)==1:uwi=variants[0]['metadata'].get('uwi') or variants[0].get('sheet','')
+                if len(variants)==1:uwi=variants[0]['metadata'].get('uwi') or ''
                 for variant in variants:
                     sheet=variant.get('sheet');identity=variant['metadata'].get('uwi') or sheet
                     owner=well_matches(identity,known)
                     if sheet and len(owner)==1:
                         settings_for_sheet=options.setdefault('sheetSettings',{}).setdefault(sheet,{})
                         settings_for_sheet.setdefault('well',owner[0]['id']);settings_for_sheet.setdefault('wellName',owner[0]['name'])
-                    column=variant['mapping'].get('uwi',variant['mapping'].get('well'))
-                    if column is not None:names.extend(str(row[int(column)]) for row in variant['rows'] if row[int(column)] is not None)
+                    column=survey_well_column(variant['mapping'])
+                    if column is not None:
+                        identities={str(row[int(column)]) for row in variant['rows'] if len(row)>int(column) and row[int(column)] is not None}
+                        names.extend(identities)
+                        if family=='deviation':
+                            scope=options.setdefault('sheetSettings',{}).setdefault(sheet,{}) if sheet else options
+                            bindings=scope.setdefault('wellBindings',{})
+                            for raw in identities:
+                                matches=survey_row_matches(raw,known)
+                                if len(matches)==1:bindings.setdefault(raw,matches[0]['id'])
+                    if family=='deviation':
+                        scope=options.setdefault('sheetSettings',{}).setdefault(sheet,{}) if sheet else options
+                        for role,value in survey_references(variant['names'],variant['mapping']).items():
+                            if role not in options.get('references',{}):scope.setdefault('references',{}).setdefault(role,value)
                 mapping=variants[0]['mapping'] if len(variants)==1 else {}
                 references={}
                 if family=='checkshots' and len(variants)==1:
@@ -290,7 +336,15 @@ def prepare_assets(paths, data, known_wells):
                         if companion_evidence.get('depthReference')=='MD':references.setdefault('depthReference','MD')
                         if 'feet' in companion_evidence.get('depthUnitDescription','').lower():references.setdefault('depthUnit','ft')
         if family in ('well_headers','documents','seismic','surfaces','spatial','models'):continue
-        owner,reason=propose_owner(uwi,name,path,asset.get('archive') or {},known)
+        archive=asset.get('archive') or {}
+        owner,reason=propose_owner(uwi,name,path,archive,known)
+        if family=='deviation' and uwi and not well_matches(uwi,known,uwi_only=True):
+            owner,reason=None,'Source UWI requires a reviewed well association'
+        if family=='deviation' and not uwi and not owner and reason.startswith('Choose'):
+            matches=survey_row_matches(re.sub(r'(?i)(?:directional|deviation|survey|trajectory)s?[_ -]*','',path.stem).strip(' _-'),known)
+            if len(matches)==1:owner,reason=matches[0],'Survey filename and well alias'
+        if family=='deviation' and archive:
+            options['requireSurveyOwner']=True
         if owner and not names:
             if not options.get('well'):
                 options.update(well=owner['id'],wellName=owner['name'])

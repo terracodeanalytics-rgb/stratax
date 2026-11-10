@@ -1,5 +1,6 @@
 """Evidence-backed interchange proposals. Originals are never modified."""
 import copy
+import csv
 import hashlib
 import itertools
 import re
@@ -25,7 +26,7 @@ def normalized(value):
 
 def split_header(value):
     text=str(value or '').strip()
-    match=re.fullmatch(r'(.+?)\s*[\[(]\s*(m|ft|feet|metres|meters|ms|s|seconds)\s*[\])]',text,re.I)
+    match=re.fullmatch(r'(.+?)\s*[\[(]\s*(m|ft|feet|metres|meters|ms|s|seconds|deg|degrees|rad|radians)\s*[\])]',text,re.I)
     if not match:return normalized(text),''
     units={'feet':'ft','metres':'m','meters':'m','seconds':'s'}
     unit=match[2].lower()
@@ -53,6 +54,34 @@ def suggested_mapping(names, family):
         matches = [i for i,name in enumerate(names) if split_header(name)[0] in ALIASES.get(role, ())]
         if len(matches) == 1: result[role] = str(matches[0])
     return result
+
+def survey_well_column(mapping):
+    return mapping.get('uwi') if mapping.get('uwi') is not None else mapping.get('well')
+
+
+def survey_references(names, mapping):
+    references = {}
+    if 'md' in mapping:
+        _, unit = split_header(names[int(mapping['md'])])
+        references['depthReference'] = 'MD'
+        if unit in ('ft', 'm'):
+            references['depthUnit'] = unit
+    units = [split_header(names[int(mapping[role])])[1] for role in ('inclination', 'azimuth') if role in mapping]
+    angles = {'deg': 'degrees', 'degrees': 'degrees', 'rad': 'radians', 'radians': 'radians'}
+    if len(units) == 2 and units[0] in angles and units[1] in angles and angles[units[0]] == angles[units[1]]:
+        references['angleUnit'] = angles[units[0]]
+    if 'azimuth' in mapping:
+        label, _ = split_header(names[int(mapping['azimuth'])])
+        if label in ('azimgn', 'azimtn'):
+            references['northReference'] = 'Grid north' if label == 'azimgn' else 'True north'
+    return references
+
+
+def table_measurements(measurements, mapping, number):
+    identifiers = {int(mapping[role]) for role in ('well','uwi') if role in mapping}
+    return [[str(v).strip() if i in identifiers and v is not None else number(v) for i,v in enumerate(row)]
+            for _, row in measurements]
+
 
 def canonical_options(options, family):
     value = copy.deepcopy(options or {})
@@ -131,10 +160,22 @@ def table_variants(path, family, options):
                     recognized=(family=='deviation' and all(k in mapping for k in ('md','inclination','azimuth')) or family=='well_headers' and 'well' in mapping and 'uwi' in mapping or family=='checkshots' and 'depth' in mapping and 'time' in mapping)
                     if recognized:
                         measurements=[(index,row) for index,row in enumerate(iterator,2) if any(v is not None for v in row)]
-                        rows=[[number(v) for v in row[:len(names)]] for _,row in measurements]
+                        rows=table_measurements([(index,row[:len(names)]) for index,row in measurements],mapping,number)
                         variants.append({'names':names,'rows':rows,'sheet':name,'mapping':mapping,'metadata':{'format':'Excel','sheet':name,'sheets':book.sheetnames,'sourceRecipe':'reviewed-table/1','companionEvidence':companion,'sourceRowSegments':source_segments([index for index,_ in measurements])}})
             finally:book.close()
         return variants or None
+    if family=='deviation' and suffix in ('.csv','.tsv') and path.stat().st_size<=16*1024**2 and not options.get('noHeader') and not options.get('widths'):
+        with path.open(encoding=options.get('encoding') or 'utf-8-sig',newline='') as source:
+            delimiter=options.get('delimiter') or ('\t' if suffix=='.tsv' else ',')
+            if len(delimiter)!=1:return None
+            reader=csv.reader(source,delimiter=delimiter)
+            for _ in range(max(0,int(options.get('headerRow') or 1)-1)):next(reader,None)
+            names=next(reader,[])
+            mapping=suggested_mapping(names,'deviation')
+            if {'md','inclination','azimuth'}<=mapping.keys():
+                measurements=[(index,row) for index,row in enumerate(reader,reader.line_num+1) if any(str(v).strip() for v in row)]
+                rows=table_measurements(measurements,mapping,number)
+                return [{'names':names,'rows':rows,'mapping':mapping,'metadata':{'format':'Delimited directional survey','sourceRecipe':'reviewed-table/1','sourceRowSegments':source_segments([index for index,_ in measurements])}}]
     if suffix not in ('.asc','.txt','.dev','.survey'):return None
     if path.stat().st_size>16*1024**2:return None
     text=path.read_text(encoding=options.get('encoding','utf-8-sig'),errors='replace');source_lines=[(index,s.strip()) for index,s in enumerate(text.splitlines(),1) if s.strip()];lines=[s for _,s in source_lines]
@@ -150,13 +191,33 @@ def table_variants(path, family, options):
         return [{'names':['Source column 1','Source column 2'],'rows':rows,'mapping':{},'metadata':{'format':'OpenWorks TDP','sourceRecipe':'openworks-tdp/1','uwi':identity,'sourceRowSegments':source_segments([index for index,line in source_lines if re.match(r'^TDP5\s+',line)]),'originalHeaderLines':lines[:4]}}]
     return None
 
+def survey_groups(variant, mapping):
+    from ingestion_core import ImportProblem
+    index = survey_well_column(mapping)
+    if index is None or not str(index).isdigit():
+        return [('', variant['rows'], variant['metadata'])]
+    groups = {}
+    physical_rows = {logical+i:physical+i for logical,physical,length in variant['metadata'].get('sourceRowSegments',[]) for i in range(length)}
+    for logical,row in enumerate(variant['rows']):
+        identity = str(row[int(index)] or '').strip() if int(index)<len(row) else ''
+        if identity not in groups and len(groups)>=100:
+            raise ImportProblem('well_groups','Split surveys into at most 100 wells per file.')
+        groups.setdefault(identity,[]).append((logical,row))
+    return [(identity,[row for _,row in items],{
+        **variant['metadata'],'well':identity,'rowWell':True,
+        'rowUwi':identity if index==mapping.get('uwi') else '',
+        'sourceRowSegments':source_segments([physical_rows.get(i,i+1) for i,_ in items])})
+        for identity,items in groups.items()]
+
+
 def parse_variants(path, output, family, options):
     from ingestion_core import output_dataset,column,issue
     variants=table_variants(path,family,options)
     if variants is None:return None
     result=[]
     for variant in variants:
-        settings=canonical_options(options,family);settings.update(settings.get('sheetSettings',{}).get(variant.get('sheet'),{}))
+        settings=canonical_options(options,family);sheet=settings.get('sheetSettings',{}).get(variant.get('sheet'),{})
+        settings.update({**sheet,'wellBindings':{**settings.get('wellBindings',{}),**sheet.get('wellBindings',{})},'references':{**settings.get('references',{}),**sheet.get('references',{})}})
         settings['mapping']={**variant['mapping'],**settings.get('mapping',{})}
         settings=canonical_options(settings,family)
         if family=='checkshots':
@@ -166,17 +227,25 @@ def parse_variants(path, output, family, options):
                 if settings['mapping'].get(role)==variant['mapping'].get(role):
                     for key in keys:
                         if key in explicit:settings.setdefault('references',{}).setdefault(key,explicit[key])
-        metadata={**variant['metadata'],'mapping':settings['mapping'],'sourceRowRanges':settings.get('rowRanges'),'logicalRowCount':len(variant['rows']),'sourceRowOrigin':{'kind':'logical-measurement-rows','zeroBased':True,'headerLines':2 if variant['metadata'].get('sourceRecipe')=='openworks-directional/1' else 1}}
-        mixed=mixed_survey_blocks(variant['rows']) if family=='deviation' else None
-        notes=[]
-        if mixed:
-            metadata['surveyBlockProposal']={**mixed,'blocks':[{'range':pair,'rows':variant['rows'][pair[0]:pair[1]],'columns':variant['names']} for pair in mixed['ranges']]}
-            if not settings.get('rowRanges') or not settings.get('rowSelectionReviewed') or settings.get('references',{}).get('depthUnit') not in ('m','ft'):
-                notes.append(issue('survey_blocks_review','This survey contains matching station blocks with metre/feet scaling. Select and review the authoritative block and its units.','blocking'))
-        rows=selected_rows(variant['rows'],settings.get('rowRanges'))
-        dataset=output_dataset(output,Path(path).name+(' · '+variant['sheet'] if variant.get('sheet') else ''),[column(name,'',i) for i,name in enumerate(variant['names'])],rows,metadata,notes)
-        dataset['_recipeOptions']=settings
-        result.append(dataset)
+        groups=survey_groups(variant,settings['mapping']) if family=='deviation' else [('',variant['rows'],variant['metadata'])]
+        if family=='deviation' and len(groups)==1 and groups[0][0] and settings.get('well') and not settings.get('autoPrepare'):
+            settings['wellBindings'].setdefault(groups[0][0],settings['well'])
+        if len(groups)>1 and settings.get('rowRanges'):
+            raise ImportProblem('row_selection','Review station blocks per well in separate source sheets.')
+        for identity,source_rows,source_metadata in groups:
+            metadata={**source_metadata,'mapping':settings['mapping'],'sourceRowRanges':settings.get('rowRanges'),'logicalRowCount':len(source_rows),'sourceRowOrigin':{'kind':'logical-measurement-rows','zeroBased':True,'headerLines':2 if source_metadata.get('sourceRecipe')=='openworks-directional/1' else 1}}
+            mixed=mixed_survey_blocks(source_rows) if family=='deviation' else None
+            notes=[]
+            if mixed:
+                metadata['surveyBlockProposal']={**mixed,'blocks':[{'range':pair,'rows':source_rows[pair[0]:pair[1]],'columns':variant['names']} for pair in mixed['ranges']]}
+                if not settings.get('rowRanges') or not settings.get('rowSelectionReviewed') or settings.get('references',{}).get('depthUnit') not in ('m','ft'):
+                    notes.append(issue('survey_blocks_review','This survey contains matching station blocks with metre/feet scaling. Select and review the authoritative block and its units.','blocking'))
+            rows=selected_rows(source_rows,settings.get('rowRanges'))
+            name=Path(path).name+(' · '+variant['sheet'] if variant.get('sheet') else '')
+            if len(groups)>1:name+=' · '+(identity or 'Unassigned well')
+            dataset=output_dataset(output,name,[column(name,split_header(name)[1],i) for i,name in enumerate(variant['names'])],rows,metadata,notes)
+            dataset['_recipeOptions']=settings
+            result.append(dataset)
     return result
 
 def profile_signature(dataset, output):

@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+let app;
+(async()=>{app=await require('./local-science-browser.cjs').start({env:{EVALUATION_FIXTURE:'1'}});const scenario=app.data.scenarios.find(s=>s.method==='reservoir-summary'),runs=[];
+ for(const [i,gap]of [.5,2].entries()){
+  const w=scenario.window,bindings=Object.fromEntries(Object.entries(w.bindings).map(([role,binding])=>[role,{...binding,confirmed:true}])),configuration=await app.science('/configurations/comparison-'+i,{revision:0,method:scenario.method,bindings,parameters:{...w.parameters,maxGap:gap},notes:'Identically named controlled scenario',scope:w.scope},'PUT');
+  const queued=await app.science('/runs',{configurationId:configuration.id,revision:configuration.revision,idempotencyKey:'comparison-'+i}),run=await app.science('/runs/'+queued.id);assert.equal(run.status,'completed',run.message);
+  await app.science('/runs/'+run.id+'/review',{revision:run.revision,decision:i?'reject':'accept',comment:'Controlled evidence comparison, not field approval'});runs.push(run.id);
+  if(!i)await app.control({action:'stale',datasetId:scenario.source.id});
+ }
+ const {page}=await app.createPage(),coverage=await require('./interpretation-control-coverage.cjs').install(page,'.release/interpretation-buttons-20261108/evidence-controls.json');await page.reload();await coverage.start('Scenario comparison retains distinct selected run evidence');
+ await page.locator('[data-pp-tab=Reports]').click();await page.locator('[data-pp-action=scenarios]:visible').click();for(const id of runs)await page.locator(`#pp-scenarios [name=run][value="${id}"]`).check();await page.locator('#pp-scenarios button').click();await page.getByRole('heading',{name:'Scenario comparison',exact:true}).waitFor();for(const summary of await page.locator('#dialog details>summary').all())await summary.click();const text=await page.locator('#dialog').innerText();const receipt={runs,text,pageErrors:app.errors,realCloudExecutions:0};fs.writeFileSync('.release/interpretation-buttons-20261108/scenario-evidence-observed.json',JSON.stringify(receipt,null,2));
+ for(const id of runs)assert.ok(text.includes(id),'Comparison must identify each selected run even when notes match');assert.match(text,/accepted/);assert.match(text,/rejected/);assert.match(text,/stale/);assert.match(text,/controlled-revised-source-version/);assert.match(text,/generated-reservoir-summary/);assert.match(text,/depthCoverage/);assert.match(text,/maxGap/);coverage.pass();coverage.save();assert.deepEqual(app.errors,[]);console.log(JSON.stringify({passed:1,runs,pageErrors:app.errors}));
+})().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{if(app)await app.close();});
