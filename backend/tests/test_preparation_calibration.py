@@ -43,6 +43,8 @@ def test_conditioning_analytical_values_and_originals(method,values,parameters,e
 def test_conditioning_interpolation_shift_borehole_and_depth_rejections():
     result=evaluate('qc-interpolate',dict(depth=[0,1,2,10,11],curve=[1,None,3,None,5]),dict(maxGap=3),dict(depth='m',curve='gAPI'))
     assert result['series']['proposed']==[1,2,3,None,5]
+    assert result['summary']['filledSamples']==1
+    assert result['summary']['remainingMissingSamples']==1
     result=evaluate('qc-shift',dict(depth=[0,10],curve=[1,2]),dict(shift=2),dict(depth='ft',curve='gAPI'))
     close(result['series']['depth'],[2,5.048])
     result=evaluate('qc-borehole',dict(depth=[0,1,2],curve=[.2/.0254,.23/.0254,None]),dict(bitSize=.2,tolerance=.0254),dict(depth='m',curve='in'))

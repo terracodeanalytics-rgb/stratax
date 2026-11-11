@@ -11,7 +11,8 @@ const {start}=require('./local-science-browser.cjs');
   const well={id:'crs-well',name:'CRS fixture',sourceCoordinates:{x:481200,y:69280,crs:'EPSG:26391',
    crsEvidence:{sourceName:'Survey metadata fixture'},geographicCoordinates:{lat:4.624668,lng:6.793340}}};
   const setup=await app.request(base,{revision:before.revision,project:{...before.project,status:'Active',workflows:['petrophysics']},
-   workspace:{...before.workspace,wellDrafts:[well],mapWorkspace:{locations:{}}}},'PUT');
+   workspace:{...before.workspace,wellDrafts:[well,{id:'offset-well',name:'Offset fixture'}],
+    mapWorkspace:{locations:{'offset-well':{lat:4.63,lng:6.756529,confirmed:true,crs:'EPSG:4326'}}}}},'PUT');
   assert.equal(setup.status,200,JSON.stringify(setup.value));
   Object.assign(app.data.project,setup.value.project,{revision:setup.value.revision});
   ({page}=await app.createPage());
@@ -46,8 +47,16 @@ const {start}=require('./local-science-browser.cjs');
   await page.locator('[data-map-command=refresh]').click();
   await page.getByText('4.620000, 6.756529').waitFor();
   assert.equal((await app.request(base)).value.workspace.mapWorkspace.locations['crs-well'].lat,4.62);
+  await page.locator('.mw-inspector [data-map-well-menu="crs-well"]').click();
+  await page.getByRole('menuitem',{name:'Measure from here'}).click();
+  await page.locator('[data-map-point="offset-well"]').hover();
+  assert.match(await page.locator('#mw-measure-status').innerText(),/1112\.0 m \(preview\)/);
+  await page.locator('[data-map-point="offset-well"]').click();
+  assert.match(await page.locator('#mw-measure-status').innerText(),/1112\.0 m$/);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#mw-measure-status').count(),0);
   assert.deepEqual(app.errors,[]);
-  const result={passed:5,newerRemotePinDisplayed:true,documentedCrsPrefilled:true,wrongCrsBlocked:true,geographicConflictReviewed:true,confirmedLocationSaved:true};
+  const result={passed:6,newerRemotePinDisplayed:true,documentedCrsPrefilled:true,wrongCrsBlocked:true,geographicConflictReviewed:true,confirmedLocationSaved:true,measurementPreviewAndCancel:true};
   fs.writeFileSync('.release/map-persistence-20261109/browser.json',JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));
  }catch(error){

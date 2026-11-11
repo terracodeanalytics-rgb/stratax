@@ -1,7 +1,7 @@
 import {applyImportedEvidence} from './well-data.js';
 import {workspaceModal} from './petrophysics-ribbon.js';
-import {migrateWorkspace,ribbonView,historyView,bindPetrophysics} from './petrophysics-workspace.js';
-import {configureWellCanvas,wellBrowserView,wellCanvasView,wellComparisonView,loadWellDataset,wellInspectorView,bindWellCanvas,canvasContext,addAcceptedResults,showProposal,openCanvasAction} from './well-canvas.js';
+import {migrateWorkspace,ribbonView,historyView,bindPetrophysics,studyWorkflowView} from './petrophysics-workspace.js';
+import {configureWellCanvas,wellBrowserView,wellCanvasView,wellComparisonView,loadWellDataset,focusCanvasInterval,wellInspectorView,bindWellCanvas,canvasContext,addAcceptedResults,showProposal,openCanvasAction} from './well-canvas.js';
 import {modules} from './catalog.js';
 import {methods as localMethods} from './science-methods.js';
 import {api,session,API_ORIGIN} from './auth.js';
@@ -16,7 +16,7 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const groups=[['sources','Sources','data',['files','wells','documents','trajectories','digitize']],['logs','Logs','logs',['logs']],['qc','QA/QC','shield',['qc']],['qualitative','Qualitative interpretation','eye',['lithology','fluids']],['quantitative','Quantitative interpretation','settings',['shale','porosity','saturation','permeability','mineralogy']],['advanced','Advanced interpretation','layers',['nmr','core','height','images','pressure','reconstruct','corrections']],['cutoffs','Cutoffs','decisions',['cutoffs']],['summaries','Reservoir summaries','reports',['summaries']],['modeling','Modeling','models',['seismic','structure','properties','rockphysics']],['engineering','Engineering','pin',['geomechanics','production','planning','simulation']],['decisions','Decisions','decisions',['volumes','opportunities','uncertainty']]];
 const routes=new Set(['interpretation','qualitative','quantitative','models','decisions',...modules.filter(m=>['Interpretation','Qualitative','Quantitative','Advanced','Modeling','Engineering','Decisions'].includes(m.group)).map(m=>m.id),'trajectories']);
 export const isInterpretationRoute=route=>route!=='seismic'&&routes.has(route);
-export function configureInterpretation(context){host={...context,modal:(...args)=>workspaceModal(context,...args)};configureWellCanvas({host,getProject:project,project,state,datasets,openMethod:(id,recipe)=>{const m=methods.find(m=>m.id===id);if(!m)throw new Error('This recipe method is unavailable for the current workflows.');openTool(m.tool,id);if(recipe){Object.assign(selection(),{parameters:structuredClone(recipe.parameters),notes:recipe.notes||''});for(const binding of Object.values(selection().bindings||{}))binding.confirmed=false;save();host.render();}},chooseMethod,reviewRun:id=>{const w=state().windows.find(w=>w.runId===id);if(!w)throw new Error('Open this calculation from Run history to review it.');reviewResult(w);},inspectDataset:async d=>{const tool='source-view';openTool(tool,null,false);const w=selection();if(w){w.datasetId=d.id;state().board.focus='analysis';await loadPreview(w);}else host.render();}});}
+export function configureInterpretation(context){host={...context,modal:(...args)=>workspaceModal(context,...args)};configureWellCanvas({host,getProject:project,project,state,datasets,inspectRun,openMethod:(id,recipe)=>{const m=methods.find(m=>m.id===id);if(!m)throw new Error('This recipe method is unavailable for the current workflows.');openTool(m.tool,id);if(recipe){Object.assign(selection(),{parameters:structuredClone(recipe.parameters),notes:recipe.notes||''});for(const binding of Object.values(selection().bindings||{}))binding.confirmed=false;save();host.render();}},chooseMethod,reviewRun:id=>{const w=state().windows.find(w=>w.runId===id);if(!w)throw new Error('Open this calculation from Run history to review it.');reviewResult(w);},inspectDataset:async d=>{const tool='source-view';openTool(tool,null,false);const w=selection();if(w){w.datasetId=d.id;state().board.focus='analysis';await loadPreview(w);}else host.render();}});}
 const project=()=>host.getProject();
 const state=()=>{const s=host.getState();s.interpretation||={schemaVersion:1,windows:[],selected:null,browser:true,inspector:true,grid:true,annotations:[],cursor:null};return migrateWorkspace(s.interpretation);};
 const datasets=()=>{const stored=host.getState().ingestion?.datasets?.filter(d=>d.active!==false)||[];return [...stored,...(state().proposals||[]).filter(d=>!stored.some(a=>a.id===d.id))];};
@@ -34,6 +34,7 @@ export function interpretationView(route){
  const s=state(),w=selection();
  return `<section class="iw" aria-label="Interpretation canvas"><header class="iw-heading"><div><div class="study-kicker">INTERPRETATION STUDIO</div><h1>${esc(project().name)}</h1><p>${project().storage==='cloud'?'Cloud calculations Â· immutable input versions':'Local content stays on this device Â· Cloud copy required for calculations'}</p></div><div class="actions"><button id="iw-refresh">${host.icon('clock')}Refresh</button><button id="iw-toggle-inspector" aria-expanded="${s.inspector}">${s.inspector?'Hide':'Show'} properties</button></div></header>
  ${ribbonView(s,host.icon,methods.filter(visibleMethod))}
+ ${studyWorkflowView(s)}
  ${error?`<div class="iw-error" role="alert">${esc(error)}</div>`:''}
  <div class="iw-body ${s.browser?'':'iw-no-browser'} ${s.inspector?'':'iw-no-inspector'}">${s.browser?wellBrowserView():''}${wellComparisonView(s.windows.filter(v=>!v.closed&&v.id===s.selected).map(windowView).join(''))}${s.inspector?(s.board?.focus==='analysis'?inspector(w):wellInspectorView()):''}</div>
  <div class="iw-bottom"><span>${datasets().length} active datasets Â· ${remote.runs.length} recent runs</span><button id="iw-history">Run history</button>${project().storage!=='cloud'?'<button id="iw-cloud-copy">Create Cloud copyâ€¦</button>':''}</div>${historyView(s,remote)}</section>`;
@@ -72,7 +73,22 @@ function pickettPlot(r){
  const p=r.preview||{},points=(p.porosity||[]).map((phi,i)=>({phi,rt:p.observedRt?.[i],fit:p.fittedRt?.[i],depth:p.depth?.[i]})).filter(p=>p.phi>0&&p.rt>0&&numeric(p.phi)&&numeric(p.rt)),xr=extent(points.flatMap(p=>[Math.log10(p.rt),p.fit>0?Math.log10(p.fit):null])),yr=extent(points.map(p=>Math.log10(p.phi)));if(!xr||!yr)return '<p>No supported positive pairs in this preview.</p>';const x=v=>65+(Math.log10(v)-xr[0])/(xr[1]-xr[0])*510,y=v=>250-(Math.log10(v)-yr[0])/(yr[1]-yr[0])*215;const sorted=points.filter(p=>p.fit>0).sort((a,b)=>a.phi-b.phi);
  return `<p class="iw-plot-notice">Logâ€“log Pickett view Â· ${points.length} preview pairs / ${r.summary.pairs} fitted pairs Â· select a point to link its retained depth. Fit identifies m and aÂ·Rw; it cannot separate a and Rw without independent evidence.</p><svg viewBox="0 0 600 300" class="iw-result-chart" role="img" aria-label="Pickett porosity and resistivity with fitted clean water line"><path d="M65,30V250H575" fill="none" stroke="#6d7d7a"/><path d="${sorted.map((p,i)=>(i?'L':'M')+x(p.fit).toFixed(3)+','+y(p.phi).toFixed(3)).join('')}" fill="none" stroke="#b78540" stroke-width="2"/>${points.map(p=>`<circle cx="${x(p.rt)}" cy="${y(p.phi)}" r="2.8" fill="#087c73" opacity=".6" ${numeric(p.depth)?`data-iw-pickett-depth="${p.depth}" tabindex="0" role="button" aria-label="Select depth ${p.depth} metres"`:''}><title>Porosity ${p.phi} v/v Â· Rt ${p.rt} ohm.m${numeric(p.depth)?' Â· '+p.depth+' m':''}</title></circle>`).join('')}<text x="160" y="285">Resistivity ohm.m Â· logarithmic</text><text transform="translate(18 225) rotate(-90)">Porosity v/v Â· logarithmic</text><text x="65" y="265">${Math.pow(10,xr[0]).toPrecision(3)}</text><text x="520" y="265">${Math.pow(10,xr[1]).toPrecision(3)}</text></svg>`;
 }
-function resultView(w,r){const array=Object.values(r.preview||{}).find(v=>Array.isArray(v?.[0]));return `<div class="iw-result-summary"><strong>${esc(methods.find(m=>m.id===r.method)?.name||r.method)}</strong><small>${esc(r.reviewState||'completed')}${r.stale?' · stale source evidence':''} · ${esc(r.previewNotice)} Â· Not scientifically approved</small></div>${r.datasets?.some(d=>d.indexColumnId&&d.columns.some((c,i)=>c.id!==d.indexColumnId&&c.valueType!=='array'&&!d.preview?.some(row=>Array.isArray(row[i]))))?`<button data-iw-proposal="${esc(w.runId)}">Compare full result curves on canvas</button>`:""}${r.method==='pickett-fit'?pickettPlot(r):array?arrayPlot(array):linePlot(r.preview||{})}<dl class="iw-metrics">${Object.entries(r.summary||{}).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(typeof v==='object'?JSON.stringify(v):v)}</dd></div>`).join('')}</dl>${(r.warnings||[]).map(v=>`<p class="iw-warning">${esc(v)}</p>`).join('')}<details><summary>Method and provenance</summary><p>${esc(r.methodVersion)}</p>${r.reference?`<a href="${esc(r.reference)}" target="_blank" rel="noopener">Method reference</a>`:'<p>Individual method references are retained in the checkpoint evidence.</p>'}<pre>${esc(JSON.stringify(r.provenance,null,2))}</pre></details>`;}
+function summaryIntervals(result){
+ const entries=result?.method==='reservoir-summary'?[result]:(result?.steps||[]).filter(step=>step.method==='reservoir-summary');
+ return entries.map(entry=>{
+  const summary=entry.summary||{},config=entry.provenance?.configuration||{},parameters=config.parameters||entry.parameters||{};
+  return {summary,well:config.wellId||datasets().find(d=>d.id===config.bindings?.depth?.datasetId)?.well,zone:config.zoneId,top:summary.topM??parameters.top,base:summary.baseM??parameters.base};
+ });
+}
+function summaryTable(w,rows){
+ const number=(v,digits=2)=>Number.isFinite(v)?v.toFixed(digits):'—';
+ const columns=['Well / interval','Gross (m)','Net reservoir (m)','Net pay (m)','NTG','Avg. porosity','Avg. Sw','Avg. permeability (mD)','Depth coverage'];
+ return `<div class="table-wrap"><table class="iw-zonal-summary"><thead><tr>${columns.map(name=>`<th scope="col">${name}</th>`).join('')}</tr></thead><tbody>${rows.map(({summary:q,well,zone,top,base},index)=>{
+  const name=well&&Number.isFinite(top)&&Number.isFinite(base)?`<button data-iw-summary-interval="${esc(w.runId)}" data-summary-row="${index}">${esc(well)}${zone?' · '+esc(zone):''} · ${number(top)}–${number(base)} m ${esc(q.depthReference)}</button>`:'Reviewed interval';
+  return `<tr><td>${name}</td>${[q.grossM,q.netM,q.payM,q.ntg,q.porosityWeighted,q.swWeighted,q.kWeighted].map((v,i)=>`<td>${number(v,i>=3&&i<=5?3:2)}</td>`).join('')}<td>${number(q.depthCoverage*100,1)}%</td></tr>`;
+ }).join('')}</tbody></table></div><p class="sub">Property averages are thickness weighted over valid pay samples. NTG uses gross interval thickness.</p>`;
+}
+function resultView(w,r){const intervals=summaryIntervals(r),array=Object.values(r.preview||{}).find(v=>Array.isArray(v?.[0]));return `<div class="iw-result-summary"><strong>${esc(methods.find(m=>m.id===r.method)?.name||r.method)}</strong><small>${esc(r.reviewState||'completed')}${r.stale?' · stale source evidence':''} · ${esc(r.previewNotice)} Â· Not scientifically approved</small></div>${r.datasets?.some(d=>d.indexColumnId&&d.columns.some((c,i)=>c.id!==d.indexColumnId&&c.valueType!=='array'&&!d.preview?.some(row=>Array.isArray(row[i]))))?`<button data-iw-proposal="${esc(w.runId)}">Compare full result curves on canvas</button>`:""}${intervals.length?summaryTable(w,intervals):r.method==='pickett-fit'?pickettPlot(r):array?arrayPlot(array):linePlot(r.preview||{})}<dl class="iw-metrics">${Object.entries(r.summary||{}).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(typeof v==='object'?JSON.stringify(v):v)}</dd></div>`).join('')}</dl>${(r.warnings||[]).map(v=>`<p class="iw-warning">${esc(v)}</p>`).join('')}<details><summary>Method and provenance</summary><p>${esc(r.methodVersion)}</p>${r.reference?`<a href="${esc(r.reference)}" target="_blank" rel="noopener">Method reference</a>`:'<p>Individual method references are retained in the checkpoint evidence.</p>'}<pre>${esc(JSON.stringify(r.provenance,null,2))}</pre></details>`;}
 
 function inspector(w){
  if(!w)return '<aside class="iw-inspector"><header><strong>Properties</strong></header><div class="iw-inspector-empty">Select a canvas view to configure its inputs and review results.</div></aside>';
@@ -95,7 +111,14 @@ function openTool(tool,methodId=null,redraw=true){
 
  const target=tool==='trajectories'?'planning':tool;
  const spec=methods.find(m=>m.id===methodId)||methods.find(m=>m.tool===target&&visibleMethod(m));
- const existing=state().windows.findLast(v=>v.tool===target&&v.method===(spec?.id||'')&&(!linked||v.datasetId===linked.dataset.id));if(existing){existing.closed=false;state().selected=existing.id;if(state().board)state().board.focus='analysis';state().inspector=true;save();if(redraw)host.render();return;}const s=state(),w={id:crypto.randomUUID(),tool:target,method:spec?.id||'',parameters:{},bindings:{},x:24+(s.windows.length%4)*24,y:24+(s.windows.length%4)*28,width:560,height:450};if(linked&&spec){w.datasetId=linked.dataset.id;w.scope=spec.inputs.length&&!['seismic','structure','properties','planning','simulation'].includes(spec.tool)?linked.scope:null;w.bindings=suggestBindings(spec,linked);if(spec.id==='depth-match')w.parameters.sourceRun=linked.dataset.id;}s.windows.push(w);if(s.board)s.board.focus='analysis';s.selected=w.id;s.inspector=true;save();if(redraw)host.render();
+ const scope=linked&&spec?.inputs.length&&!['seismic','structure','properties','planning','simulation'].includes(spec.tool)?linked.scope:null;
+ const exactSelection=spec&&/^(qc|shale|porosity|saturation|permeability)-/.test(spec.id);
+ const existing=state().windows.findLast(v=>{
+  if(v.tool!==target||v.method!==(spec?.id||'')||linked&&v.datasetId!==linked.dataset.id)return false;
+  if(!linked||!exactSelection)return true;
+  if(JSON.stringify(v.scope||null)!==JSON.stringify(scope))return false;
+  return !spec.inputs.some(input=>input.role==='curve')||v.bindings?.curve?.columnId===linked.curve?.columnId;
+ });if(existing){existing.closed=false;state().selected=existing.id;if(state().board)state().board.focus='analysis';state().inspector=true;save();if(redraw)host.render();return;}const s=state(),w={id:crypto.randomUUID(),tool:target,method:spec?.id||'',parameters:{},bindings:{},x:24+(s.windows.length%4)*24,y:24+(s.windows.length%4)*28,width:560,height:450};if(linked&&spec){w.datasetId=linked.dataset.id;w.scope=scope;w.bindings=suggestBindings(spec,linked);if(spec.id==='depth-match')w.parameters.sourceRun=linked.dataset.id;}s.windows.push(w);if(s.board)s.board.focus='analysis';s.selected=w.id;s.inspector=true;save();if(redraw)host.render();
 }
 async function refresh(){
  const p=project(),generation=requestGeneration;if(!p||loading)return;loading=true;
@@ -139,7 +162,7 @@ async function inspectRun(id,{review=false}={}){const run=await api(`/api/projec
 function history(){host.modal('Calculation history',`<div class="iw-history">${remote.runs.map(r=>`<button data-iw-history-run="${r.id}"><strong>${esc(methods.find(m=>m.id===r.method)?.name||r.method)}</strong><span>${esc(r.status)}${r.stale?' Â· stale inputs':''}</span><small>${esc(new Date(r.createdAt).toLocaleString())}</small></button>`).join('')||'<p>No calculations have run in this project.</p>'}</div>`);document.querySelectorAll('[data-iw-history-run]').forEach(b=>b.onclick=async()=>{try{$('#dialog').close();await inspectRun(b.dataset.iwHistoryRun);}catch(e){host.toast(e.message);}});}
 
 export function bindInterpretation(){
- const root=$('.iw');if(!root)return;bindWellCanvas();bindPetrophysics({host,root,state,project,remote,methods,openTool,openCanvasAction,datasets,canvasContext,refresh,pickMethods,loadDataset:loadWellDataset,inspectRun:id=>inspectRun(id,{review:true})});bindingsController?.abort();bindingsController=new AbortController();const signal=bindingsController.signal;
+ const root=$('.iw');if(!root)return;bindWellCanvas();bindPetrophysics({host,root,state,project,remote,methods,openTool,openCanvasAction,datasets,canvasContext,refresh,pickMethods,chooseMethod,loadDataset:loadWellDataset,summaryIntervals,inspectRun:id=>inspectRun(id,{review:true})});bindingsController?.abort();bindingsController=new AbortController();const signal=bindingsController.signal;
  const safe=fn=>async e=>{try{await fn(e);}catch(error){host.toast(error.message);}};
  const toggle=key=>{state()[key]=!state()[key];save();host.render();};
  $('#iw-toggle-inspector').onclick=()=>toggle('inspector');$('#iw-inspector-close')?.addEventListener('click',()=>toggle('inspector'));$('#iw-toggle-browser')?.addEventListener('click',()=>toggle('browser'));$('#iw-browser-close')?.addEventListener('click',()=>toggle('browser'));$('#iw-grid')?.addEventListener('click',()=>toggle('grid'));$('#iw-refresh').onclick=()=>refresh();$('#iw-add-source')?.addEventListener('click',()=>host.openImporter());$('#iw-history').onclick=history;$('#iw-cloud-copy')?.addEventListener('click',()=>cloudCopy());
@@ -165,6 +188,10 @@ export function bindInterpretation(){
   $('#iw-load-evidence')?.addEventListener('click',safe(async()=>{collect(w,form);await loadPreview(w);}));$('#iw-run')?.addEventListener('click',safe(async e=>{e.target.disabled=true;try{collect(w,form);await runCalculation(w);}finally{if(e.target.isConnected)e.target.disabled=false;}}));
   $('#iw-open-result')?.addEventListener('click',safe(()=>openResult(w)));$('#iw-review-result')?.addEventListener('click',()=>reviewResult(w));$('#iw-cancel-run')?.addEventListener('click',safe(async()=>{await api(`/api/projects/${project().id}/science/runs/${w.runId}/cancel`,{method:'POST',body:{}});await refresh();}));$('#iw-add-annotation')?.addEventListener('click',()=>addAnnotation(w));
  }
+ root.querySelectorAll('[data-iw-summary-interval]').forEach(button=>button.onclick=safe(()=>{
+  const interval=summaryIntervals(results.get(button.dataset.iwSummaryInterval))[Number(button.dataset.summaryRow)];
+  if(interval)focusCanvasInterval(interval.well,interval.top,interval.base,interval.summary.depthReference);
+ }));
  root.querySelectorAll('[data-iw-proposal]').forEach(b=>b.onclick=safe(()=>showProposal(b.dataset.iwProposal,results.get(b.dataset.iwProposal))));
  root.querySelectorAll('[data-iw-remove-annotation]').forEach(b=>b.onclick=()=>{state().annotations=state().annotations.filter(a=>a.id!==b.dataset.iwRemoveAnnotation);save();host.render();});
  root.querySelectorAll('[data-iw-export]').forEach(b=>b.onclick=()=>{const svg=root.querySelector(`[data-iw-chart="${b.dataset.iwExport}"]`);if(svg)host.download('StrataX-log-view.svg',new Blob(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340">'+svg.innerHTML+'</svg>'],{type:'image/svg+xml'}));});
@@ -175,7 +202,43 @@ export function bindInterpretation(){
 function cloudCopy(){return openCloudCopy(host,'interpretation');}
 
 function suggestBindings(spec,linked){const roles={depth:['DEPT','DEPTH','MD','TVD','TVDSS'],md:['DEPT','DEPTH','MD'],gr:['GR','GAM','GAMMA'],density:['RHOB','DEN','RHOZ'],neutron:['NPHI','TNPH'],slowness:['DT','DTC','AC'],porosity:['PHI','PHIT','PHIE'],total:['PHIT','PHI'],vsh:['VSH','VCL'],rt:['RT','ILD','RDEP','LLD'],sw:['SW'],k:['K','PERM'],inclination:['INC','INCL'],azimuth:['AZ','AZI']};const bindings={};for(const input of spec.inputs){let column=null;if(['curve','x','core','response'].includes(input.role))column=linked.dataset.columns.find(c=>c.id===linked.curve?.columnId);else if(['depth','md'].includes(input.role))column=linked.dataset.columns.find(c=>c.id===linked.scope?.columnId);else {const matches=linked.dataset.columns.filter(c=>(roles[input.role]||[]).includes(c.mnemonic.toUpperCase()));if(matches.length===1)column=matches[0];}bindings[input.role]={datasetId:linked.dataset.id,columnId:column?.id||'',unit:column?.effectiveUnit||column?.unit||'',confirmed:false,porosityBasis:column?.porosityBasis||null};}return bindings;}
-function chooseMethod(){host.modal('Calculate from canvas selection',`<p>Choose a supported method. Suggested mappings and units must still be confirmed before processing.</p><div class="wb-method-picker">${methods.filter(visibleMethod).filter(m=>m.tool!=='logs').map(m=>`<button data-wb-method-choice="${m.id}"><strong>${esc(m.name)}</strong><small>${esc(moduleName(m.tool))}</small></button>`).join('')}</div>`);document.querySelectorAll('[data-wb-method-choice]').forEach(b=>b.onclick=()=>{const m=methods.find(m=>m.id===b.dataset.wbMethodChoice);$('#dialog').close();openTool(m.tool,m.id);});}
+function assignCurves(){
+ const properties=$('#iw-properties');
+ const mappings=Array.from(properties?.querySelectorAll('.iw-binding')||[]);
+ if(!mappings.length)return;
+ host.modal('Assign input curves','<div id="iw-curve-assignments"></div><div class="actions"><button id="iw-finish-assignments" class="primary">Continue to Properties</button></div>');
+ const dialog=$('#dialog'),container=$('#iw-curve-assignments');
+ for(const original of mappings){
+  const group=original.cloneNode(true),fields=Array.from(group.querySelectorAll('select,input'));
+  const originalFields=Array.from(original.querySelectorAll('select,input'));
+  fields.forEach((field,i)=>{const source=originalFields[i];field.value=source.value;if(field.type==='checkbox')field.checked=source.checked;});
+  const field=key=>fields.find(input=>input.name.endsWith(':'+key));
+  field('datasetId').onchange=()=>{
+   const d=datasets().find(item=>item.id===field('datasetId').value);
+   field('columnId').replaceChildren(new Option('Select column',''),...(d?.columns||[]).filter(c=>!d.activeColumns||d.activeColumns.includes(c.id)).map(c=>new Option(c.mnemonic+' · '+(c.effectiveUnit||c.unit||'unit unknown'),c.id)));
+   field('columnId').onchange();
+  };
+  field('columnId').onchange=()=>{
+   const c=datasets().find(d=>d.id===field('datasetId').value)?.columns.find(c=>c.id===field('columnId').value);
+   field('unit').value=c?.effectiveUnit||c?.unit||'';field('porosityBasis').value=c?.porosityBasis||'';field('confirmed').checked=false;
+  };
+  field('unit').oninput=field('porosityBasis').onchange=()=>{field('confirmed').checked=false;};
+  container.append(group);
+ }
+ $('#iw-finish-assignments').onclick=()=>{
+  const w=selection(),bindings={};
+  for(const input of container.querySelectorAll('[name^="binding:"]')){
+   const [,role,key]=input.name.split(':');
+   bindings[role]||={};
+   if(input.type==='checkbox')bindings[role][key]=input.checked;
+   else if(key!=='porosityBasis'||input.value)bindings[role][key]=input.value.trim();
+  }
+  if(JSON.stringify(w.bindings)!==JSON.stringify(bindings)){delete w.runId;w.alignmentConfirmed=false;}
+  w.bindings=bindings;save();dialog.close();host.render();
+  $('.iw-inspector [name="method"]')?.focus();
+ };
+}
+function chooseMethod(group){host.modal(group==='qc'?'Condition this curve':group==='quantitative'?'Choose a petrophysics calculation':'Calculate from canvas selection',`<p>Choose a supported method. Suggested mappings and units must still be confirmed before processing.</p><div class="wb-method-picker">${methods.filter(visibleMethod).filter(m=>group==='qc'?['qc-smooth','qc-interpolate','qc-normalize','qc-despike'].includes(m.id):group==='quantitative'?/^(shale|porosity|saturation|permeability)-/.test(m.id):m.tool!=='logs').map(m=>`<button data-wb-method-choice="${m.id}"><strong>${esc(m.name)}</strong><small>${esc(moduleName(m.tool))}</small></button>`).join('')}</div>`);document.querySelectorAll('[data-wb-method-choice]').forEach(b=>b.onclick=()=>{const m=methods.find(m=>m.id===b.dataset.wbMethodChoice);$('#dialog').close();openTool(m.tool,m.id);if(group==='quantitative')assignCurves();});}
 
 function pickMethods(tool='all'){
  const choices=groups.map(g=>({...{id:g[0],name:g[1]},tools:toolsFor(g).filter(t=>tool==='all'||t===tool)})).filter(g=>g.tools.length);

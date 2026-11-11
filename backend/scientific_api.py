@@ -102,6 +102,62 @@ def fingerprint(dataset):
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
+def cutoff_zones_changed(record, parameters, well):
+    overrides = parameters.get("zones")
+    if not isinstance(overrides, list):
+        return False
+    workbook = (record.get("workspace") or {}).get("interpretation") or {}
+    zones = workbook.get("zones") if isinstance(workbook, dict) else None
+    saved = {z["id"]: z for z in (zones if isinstance(zones, list) else []) if isinstance(z, dict) and isinstance(z.get("id"), str)}
+    for override in overrides:
+        if not isinstance(override, dict) or not override.get("zoneId"):
+            continue
+        zone_id = override["zoneId"]
+        zone = saved.get(zone_id) if isinstance(zone_id, str) else None
+        expected = (well, parameters.get("depthReference"), override.get("top"), override.get("base"))
+        if not zone or tuple(zone.get(key) for key in ("wellId", "reference", "top", "base")) != expected:
+            return True
+    return False
+
+
+def run_zones_changed(project, run, transaction=None, parents=None, definitions=None, record=None):
+    parent_id = run.get("configuration", {}).get("workflowRunId")
+    if not parent_id:
+        if run.get("method") != "cutoff-rules":
+            return False
+        parameters = restore_value(run.get("parameters", {}))
+        zones = parameters.get("zones")
+        if not isinstance(zones, list) or not any(isinstance(zone, dict) and zone.get("zoneId") for zone in zones):
+            return False
+        if record is None:
+            record = project.get(transaction=transaction).to_dict() or {}
+        binding = run.get("configuration", {}).get("bindings", {}).get("depth", {})
+        dataset = project.collection("datasets").document(binding["datasetId"]).get(transaction=transaction).to_dict() if binding.get("datasetId") else None
+        return cutoff_zones_changed(record, parameters, (dataset or {}).get("well"))
+    if parents is not None and parent_id in parents:
+        parent = parents[parent_id]
+    else:
+        parent = restore_value(project.collection("scienceWorkflowRuns").document(parent_id).get(transaction=transaction).to_dict())
+        if parents is not None:
+            parents[parent_id] = parent
+    from scientific_workflows import workflow_zones_changed
+    return workflow_zones_changed(project, parent, transaction, definitions)
+
+
+def input_zones_changed(project, sources, transaction=None, cache=None, **context):
+    cache = {} if cache is None else cache
+    for source in sources:
+        rid = (source or {}).get("scientificRunId")
+        if not rid:
+            continue
+        if rid not in cache:
+            producer = restore_value(project.collection("scienceRuns").document(rid).get(transaction=transaction).to_dict())
+            cache[rid] = bool(producer and run_zones_changed(project, producer, transaction, **context))
+        if cache[rid]:
+            return True
+    return False
+
+
 def lineage_fingerprints(project, dataset, transaction, fail):
     pending=[dataset];seen=set();fingerprints={}
     while pending:
@@ -112,6 +168,8 @@ def lineage_fingerprints(project, dataset, transaction, fail):
         run=project.collection("scienceRuns").document(rid).get(transaction=transaction).to_dict()
         if not run or run.get("status")!="accepted":
             fail(409,"unaccepted_source","A calculated input has no accepted scientific run in this project.")
+        if run_zones_changed(project, run, transaction):
+            fail(409,"stale_zones","A saved zone changed. Recalculate the affected input before using it.")
         for did,expected in run.get("inputFingerprints",{}).items():
             source=project.collection("datasets").document(did).get(transaction=transaction).to_dict()
             if not source or not source.get("active") or fingerprint(source)!=expected:
@@ -228,6 +286,8 @@ def install_science(app, database, current_user, fail, acceptance_current):
             reference=(source.get("references") or {}).get("depthReference")
             if reference not in ("MD","TVD","TVDSS") or reference!=parameters["depthReference"]:
                 fail(400,"depth_reference","Confirm a source depth reference matching the cutoff/summary parameters; no implicit MD/TVD conversion is made.")
+            if body.method == "cutoff-rules" and cutoff_zones_changed(record, parameters, source.get("well")):
+                fail(409,"stale_zones","A saved zone changed. Reopen cutoff rules and review the current interval.")
         if len(snapshots) > 1 and not body.alignmentConfirmed:
             fail(400, "alignment_required", "Confirm common row alignment after an explicit join/resampling before combining datasets.")
         if body.scope:
@@ -302,8 +362,12 @@ def install_science(app, database, current_user, fail, acceptance_current):
         configs = [restore_value(d.to_dict()) for d in pr.collection("scienceConfigurations").limit(200).stream()]
         runs = [public(restore_value(d.to_dict())) for d in pr.collection("scienceRuns").order_by("createdAt", direction=firestore.Query.DESCENDING).limit(100).stream()]
         sources = {d.id: d.to_dict() for d in pr.collection("datasets").limit(1000).stream()}
+        parents, definitions, zone_cache = {}, {}, {}
         for run in runs:
             run["stale"] = any(sources.get(key, {}).get("active") is not True or fingerprint(sources.get(key, {})) != value for key, value in run.get("inputFingerprints", {}).items())
+            context = dict(parents=parents, definitions=definitions, record=record)
+            if run_zones_changed(pr, run, **context) or input_zones_changed(pr, (sources.get(key) for key in run.get("inputFingerprints", {})), cache=zone_cache, **context):
+                run.update(stale=True, staleReason="Saved zone evidence changed.")
         return dict(configurations=configs, runs=runs)
 
     @app.get("/api/projects/{pid}/science/calibrations")
@@ -419,6 +483,8 @@ def install_science(app, database, current_user, fail, acceptance_current):
             except Exception: pass
         sources = {key: pr.collection("datasets").document(key).get().to_dict() for key in run.get("inputFingerprints", {})}
         run["stale"] = any(not sources[key] or sources[key].get("active") is not True or fingerprint(sources[key]) != value for key, value in run.get("inputFingerprints", {}).items())
+        if run_zones_changed(pr, run) or input_zones_changed(pr, sources.values()):
+            run.update(stale=True, staleReason="Saved zone evidence changed.")
         return public(run)
 
     @app.post("/api/projects/{pid}/science/runs/{rid}/cancel")
@@ -477,11 +543,18 @@ def install_science(app, database, current_user, fail, acceptance_current):
             if current["revision"]!=body.revision or current["status"]!="completed":fail(409,"review_conflict","Reload the completed result before reviewing it.")
             if body.decision=="accept" and any(not sources[key] or not sources[key].get("active") or fingerprint(sources[key])!=value for key,value in current.get("inputFingerprints",{}).items()):
                 fail(409,"stale_inputs","An input version changed. Recalculate before activating this result.")
+            if body.decision == "accept" and not parent_ref and run_zones_changed(pr, current, tx, record=record):
+                fail(409,"stale_zones","A saved zone changed. Recalculate using the current interval.")
+            if body.decision == "accept" and input_zones_changed(pr, sources.values(), tx, record=record):
+                fail(409,"stale_zones","A saved zone changed. Recalculate affected inputs before accepting this result.")
             datasets=manifest.get("datasets",[])
             if old_ref and (not old or len(datasets)!=1 or body.decision!="accept"):fail(400,"replacement_invalid","Replacement requires one result dataset and an existing version.")
             if parent_ref:
                 if not parent or parent.get("activeRunId")!=rid:
                     fail(409,"workflow_conflict","This checkpoint is no longer the active review. Reload run history.")
+                from scientific_workflows import workflow_zones_changed
+                if body.decision == "accept" and workflow_zones_changed(pr, parent, tx):
+                    fail(409,"stale_zones","A saved zone changed. Run the checkpoint again using the updated intervals.")
                 parent.setdefault("checkpoints",[]).append(dict(checkpoint=current["configuration"]["checkpoint"],runId=rid,decision=body.decision,comment=body.comment,reviewedAt=now()))
                 parent.update(revision=parent["revision"]+1,status="rejected")
                 if body.decision=="accept":

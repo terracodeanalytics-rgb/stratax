@@ -113,10 +113,43 @@ def effective_parameters(definition, step):
     return values, origins
 
 
+def workflow_zones_changed(pr, run, transaction=None, definitions=None):
+    """Compare the zones used by a frozen run with the current saved definition."""
+    if not run or not run.get("workflowId"):
+        return False
+    frozen = run.get("definition", {})
+    zone_ids = {step["zoneId"] for step in frozen.get("steps", []) if step.get("zoneId")}
+    if not zone_ids:
+        return False
+    wid = run["workflowId"]
+    if definitions is not None and wid in definitions:
+        current = definitions[wid]
+    else:
+        from scientific_api import restore_value
+        current = restore_value(pr.collection("scienceWorkflows").document(wid).get(transaction=transaction).to_dict())
+        if definitions is not None:
+            definitions[wid] = current
+    if not current or current.get("revision") == frozen.get("revision"):
+        return False
+
+    def evidence(definition):
+        return {
+            zone["id"]: (
+                tuple(zone.get(key) for key in ("wellId", "reference", "top", "base")),
+                definition.get("zoneParameters", {}).get(zone["id"], {}),
+            )
+            for zone in definition.get("zones", []) if zone["id"] in zone_ids
+        }
+
+    return evidence(frozen) != evidence(current)
+
+
 def prepare_segment(pr, parent_ref, expected_revision, tx, record, validate, Configuration, fail, restore, fingerprint):
     parent = restore(parent_ref.get(transaction=tx).to_dict())
     if not parent or parent["revision"] != expected_revision or parent["status"] not in ("ready", "failed", "cancelled"):
         fail(409, "workflow_conflict", "Reload the workflow run before starting this checkpoint.")
+    if workflow_zones_changed(pr, parent, tx):
+        fail(409, "stale_zones", "A saved zone changed. Start a new study run to review the updated intervals.")
     stage = CHECKPOINTS[parent["checkpointIndex"]]
     definition = parent["definition"]
     steps = [dict(s) for s in definition["steps"] if s["checkpoint"] == stage]
@@ -242,9 +275,11 @@ def install_workflows(app, database, owner, project, valid, fail, start, get_run
         if not run: fail(404, "workflow_missing", "This workflow run is unavailable in the current project.")
         return pr, ref, run
 
-    def mark_stale(pr,run,sources=None):
+    def mark_stale(pr,run,sources=None,definitions=None):
         from scientific_api import fingerprint
-        run["stale"]=False
+        run["stale"]=workflow_zones_changed(pr,run,definitions=definitions)
+        if run["stale"]:
+            run["staleReason"]="Saved zone evidence changed."
         for did,expected in run.get("inputFingerprints",{}).items():
             source=sources.get(did) if sources is not None else pr.collection("datasets").document(did).get().to_dict()
             if not source or not source.get("active") or fingerprint(source)!=expected:
@@ -330,7 +365,8 @@ def install_workflows(app, database, owner, project, valid, fail, start, get_run
     def runs(pid: str, user=Depends(owner)):
         pr, _ = project(user["uid"], pid)
         sources={d.id:d.to_dict() for d in pr.collection("datasets").limit(1000).stream()}
-        return dict(runs=[mark_stale(pr,restore(d.to_dict()),sources) for d in pr.collection("scienceWorkflowRuns").order_by("createdAt", direction=firestore.Query.DESCENDING).limit(100).stream()])
+        definitions={}
+        return dict(runs=[mark_stale(pr,restore(d.to_dict()),sources,definitions) for d in pr.collection("scienceWorkflowRuns").order_by("createdAt", direction=firestore.Query.DESCENDING).limit(100).stream()])
 
     @app.get("/api/projects/{pid}/science/workflow-runs/{rid}")
     def status(pid: str, rid: str, user=Depends(owner)):

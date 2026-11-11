@@ -1,5 +1,27 @@
 # StrataX handoff
 
+## 2026-11-11 - Guided petrophysics production release
+
+- Custom-domain Site v24 source `ca87e9659d9c3eab42d890a6fee12a2260a1a1e5`; API build `0ec21777-82b6-4910-add7-581de3801629`, revision `stratax-api-petrophysics-1111`; scientific worker build `d30b2ac9-3d87-40fa-b744-e93807beb811`. Import worker remains on the automatic ZIP build.
+- Rollback is Site v23, API revision `stratax-api-automatic-zip-1110` and scientific worker digest `sha256:4bb45cab1fad12693f70fbd3b775cb7602c5a37be3e4299c17d230e6d953cad0`. All reviewed API and scientific worker images were registry-tagged and retained.
+- `.release/petrophysics-live-20261111/candidate-qa.json` records authenticated Cloud checks and cleanup. `.release/interpretation-buttons-20261108/button-matrix.json` tracks control evidence. Continue coverage of the remaining individual placements and handlers before claiming complete Interpretation verification.
+
+## 2026-11-11 - Guided petrophysics implementation handoff
+
+- Run `node scripts/verify-petrophysics-study.cjs` for guided navigation, reload, saved crossplot evidence and two computed cutoffs. Run `node scripts/verify-map-crs.cjs` for map measurement and `node scripts/verify-interpretation-lifecycle.cjs` for checkpoint review, stale zone/source handling and the zonal export. The browser harness requires loopback access.
+- `node scripts/verify-interpretation-lifecycle.cjs --from-zip` covers the combined two-well, two-zone calculation and export acceptance using the retained ZIP datasets. The saved receipt is `.release/zip-study-min/lifecycle-browser.json`. The cutoff scenario comparison and map pointer checks have separate browser fixtures.
+
+## 2026-11-10 - Automatic ZIP deployment handoff
+
+- See `.release/automatic-zip-20261110/deployment-receipt.json`, `candidate-qa.json`, `live-assets.json` and `hosted-replay/browser.json`. Candidate QA cleaned 25 generated object generations, seven documents and the disposable identity. Two generated local replay targets were removed. Ten recently reviewed tagged API and worker images were retained.
+- Rollback is Site v22, API revision `stratax-api-map-persistence-1109` and worker build `1a7054cd-93b5-4ba7-b488-be7a3e956e0d`. The STRATAX GitHub repository was not pushed. The Sites source commit for v23 is `a98624f0bfd715f66b0ebcda3ed7546427c10d9c`.
+
+## 2026-11-10 - Automatic ZIP local handoff
+
+- Run `node scripts/verify-automatic-zip.cjs` for the actual local API and worker with generated ZIPs and fake Cloud storage. Add `--benchmark` for the guided and automatic comparison. The focused Python suite is `backend/tests/test_automatic_zip.py` with the adjacent import suites. Browser and benchmark receipts are under `.release/automatic-zip-20261110`. Cleanup removed 26 generated ZIP and fixture targets and retained the receipts and harnesses.
+- Future rollout order is the import worker, API and frontend with automatic mode off, then enable `STRATAX_AUTOMATIC_ZIP=1` on the API for candidate verification. Existing hosted release is recorded below. Git publication requires an explicit request.
+- The separate `backend/Dockerfile.import-assist` pins Qwen3-4B-Instruct-2507 Q4_K_M and llama.cpp b6096. Once provisioning is authorized, build and smoke-test it as an authenticated private Cloud Run service in the STRATAX project. Grant invocation to the import worker identity and give the inference identity no project storage roles. Set the service origin on the worker and start in shadow mode. Benchmark the actual model against labeled files for additional correct matches, incorrect placements and latency before enabling verified mode.
+
 ## 2026-11-10 - Git snapshot handoff
 
 - Git contains the project source, verification harnesses and living notes. Release receipts, recovery copies, local data and the separate Sites checkout stay in local ignored paths. The snapshot session found no verified cleanup candidates.

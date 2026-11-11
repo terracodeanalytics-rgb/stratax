@@ -36,6 +36,29 @@ def test_saturation_nonzero_shale(model):
 def cutoff(depth,minimum=0):
     return evaluate('cutoff-rules',dict(depth=depth,vsh=[.1]*len(depth),porosity=[.2]*len(depth),sw=[.5]*len(depth),k=[10]*len(depth)),dict(rules=[dict(role='porosity',operator='>=',value=.2)],combine='AND',zones=[],minimumBed=minimum,maxGap=2,depthReference='MD'),dict(depth='m',vsh='v/v',porosity='v/v',sw='v/v',k='mD'))
 
+
+def test_cutoff_rejects_overlapping_overrides_between_sample_depths():
+    from test_science import fixture
+    inputs, parameters, units = fixture('cutoff-rules')
+    parameters['zones'] = [
+        dict(top=0.1, base=0.5, rules=parameters['rules']),
+        dict(top=0.3, base=0.8, rules=parameters['rules']),
+    ]
+    with pytest.raises(ScienceProblem, match='Zonal overrides must not overlap'):
+        evaluate('cutoff-rules', inputs, parameters, units)
+
+
+def test_cutoff_requires_the_saved_well_zone_and_bounds():
+    from scientific_api import cutoff_zones_changed
+    saved = dict(id='Z1', wellId='A', reference='MD', top=1, base=5)
+    record = dict(workspace=dict(interpretation=dict(zones=[saved])))
+    parameters = dict(depthReference='MD', zones=[dict(zoneId='Z1', top=1, base=5)])
+    assert not cutoff_zones_changed(record, parameters, 'A')
+    assert cutoff_zones_changed(record, parameters, 'B')
+    saved['base'] = 6
+    assert cutoff_zones_changed(record, parameters, 'A')
+    assert not cutoff_zones_changed(record, dict(zones=[dict(top=1, base=5)]), 'A')
+
 def test_minimum_bed_does_not_bridge_gap():
     assert cutoff([0,1,10,11],0)['units']['depth']=='m'
     assert cutoff([0,1,10,11],2)['series']['qualified']==[0,0,0,0]
@@ -47,6 +70,8 @@ def summary(phi):
 
 def test_summary_analytical():
     s=summary([.2]*4)['summary'];close([s[k] for k in ['netM','payM','ntg','phiH','hcph','khMdM']],[2,2,2/11,.4,.2,20])
+    assert s['baseM']-s['topM']==s['ntgDenominatorM']==11
+    assert s['porosityWeighted']==pytest.approx(.2)
 
 def test_invalid_porosity_excluded_and_counted():
     s=summary([1.2,.2,.2,.2])['summary'];close([s['phiH'],s['hcph'],s['porosityCoverageM']],[.2,.1,1]);assert s['invalidDomainRows']['porosity']==1

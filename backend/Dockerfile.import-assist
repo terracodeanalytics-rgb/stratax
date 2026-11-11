@@ -1,0 +1,4 @@
+FROM ghcr.io/ggml-org/llama.cpp:server-b6096
+ADD --chmod=0444 https://huggingface.co/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF/resolve/28a1a6dd3ca60543391ff7bab2cbe0dde6c1ef03/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf /model/qwen.gguf
+EXPOSE 8080
+CMD ["--host", "0.0.0.0", "--port", "8080", "--model", "/model/qwen.gguf", "--alias", "Qwen3-4B-Instruct-2507", "--ctx-size", "8192", "--parallel", "1", "--log-disable"]

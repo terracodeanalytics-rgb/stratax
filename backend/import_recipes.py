@@ -164,7 +164,8 @@ def table_variants(path, family, options):
                         variants.append({'names':names,'rows':rows,'sheet':name,'mapping':mapping,'metadata':{'format':'Excel','sheet':name,'sheets':book.sheetnames,'sourceRecipe':'reviewed-table/1','companionEvidence':companion,'sourceRowSegments':source_segments([index for index,_ in measurements])}})
             finally:book.close()
         return variants or None
-    if family=='deviation' and suffix in ('.csv','.tsv') and path.stat().st_size<=16*1024**2 and not options.get('noHeader') and not options.get('widths'):
+    delimited_survey = suffix in ('.csv','.tsv') or suffix in ('.dat','.txt','.asc') and options.get('delimiter') in (',','\t',';','|')
+    if family=='deviation' and delimited_survey and path.stat().st_size<=16*1024**2 and not options.get('noHeader') and not options.get('widths'):
         with path.open(encoding=options.get('encoding') or 'utf-8-sig',newline='') as source:
             delimiter=options.get('delimiter') or ('\t' if suffix=='.tsv' else ',')
             if len(delimiter)!=1:return None

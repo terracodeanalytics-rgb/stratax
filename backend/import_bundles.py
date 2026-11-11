@@ -19,7 +19,7 @@ MAX_MEMBERS=99
 from import_scope import SEISMIC_SUFFIXES, checkshot_name, evidence_family, workflow_allows
 EXECUTABLE=re.compile(r'\.(exe|dll|com|bat|cmd|ps1|sh|js|mjs|vbs|html?|lnk)$',re.I)
 
-def classify(path, archive_path=''):
+def classify(path, archive_path='', *, content_first=False):
     path=Path(path);suffix=path.suffix.lower();name=(archive_path or path.name).lower()
     if suffix in ('.las','.dlis','.lis'):return 'logs'
     if suffix in SEISMIC_SUFFIXES:return 'seismic'
@@ -27,23 +27,35 @@ def classify(path, archive_path=''):
     if suffix=='.zip':return 'documents'
     if suffix=='.xlsx':
         from openpyxl import load_workbook
-        book=load_workbook(path,read_only=True,data_only=True,keep_links=False)
-        try:
-            headings=[next(sheet.iter_rows(values_only=True),()) for sheet in book]
-            if any({'md','inclination','azimuth'}<=suggested_mapping(names,'deviation').keys() for names in headings):
-                return 'deviation'
-            if any({'well','uwi'}<=suggested_mapping(names,'well_headers').keys() for names in headings):
-                return 'well_headers'
-            if any({'depth','time'}<=suggested_mapping(names,'checkshots').keys() for names in headings):
-                return 'checkshots'
-        finally:book.close()
+        with path.open('rb') as source:
+            book=load_workbook(source,read_only=True,data_only=True,keep_links=False)
+            try:
+                headings=[next(sheet.iter_rows(values_only=True),()) for sheet in book]
+                if any({'md','inclination','azimuth'}<=suggested_mapping(names,'deviation').keys() for names in headings):
+                    return 'deviation'
+                if any({'well','uwi'}<=suggested_mapping(names,'well_headers').keys() for names in headings):
+                    return 'well_headers'
+                if any({'depth','time'}<=suggested_mapping(names,'checkshots').keys() for names in headings):
+                    return 'checkshots'
+            finally:book.close()
     with path.open('rb') as source:head=source.read(16384).decode('utf-8-sig',errors='replace')
-    if checkshot_name(PurePosixPath(name).name) or re.search(r'^TDP[345]\b',head,re.M) or re.search(r'\b(?:depth|tvd|md)\b[^\n]*\b(?:twt|owt)\b',head,re.I):return 'checkshots'
+    if not content_first and checkshot_name(PurePosixPath(name).name):return 'checkshots'
+    if re.search(r'^TDP[345]\b',head,re.M) or re.search(r'\b(?:depth|tvd|md)\b[^\n]*\b(?:twt|owt)\b',head,re.I):return 'checkshots'
     if suffix in ('.csv','.tsv'):
         line=next((line for line in head.splitlines() if line.strip()),'')
         names=next(csv.reader([line],delimiter='\t' if suffix=='.tsv' else ','),[])
         if {'md','inclination','azimuth'}<=suggested_mapping(names,'deviation').keys():
             return 'deviation'
+        if content_first and {'well','uwi'}<=suggested_mapping(names,'well_headers').keys():
+            return 'well_headers'
+    if content_first:
+        from ingestion_core import detect
+        try:kind=detect(path)
+        except ImportProblem:return 'documents'
+        families={'las':'logs','dlis':'logs','lis':'logs','segy':'seismic','su':'seismic',
+                  'geotiff':'spatial','geojson':'spatial','gpkg':'spatial','shapefile':'spatial','kml':'spatial',
+                  'surface':'surfaces','gocad':'surfaces','resqml':'models','eclipse':'models','grdecl':'models'}
+        if kind in families:return families[kind]
     if re.search(r'^UWI\s*:',head,re.M|re.I) and re.search(r'^Measr\.\s+Depth\s+Deviation',head,re.M|re.I) or re.search(r'directional|deviation|surveys?',name):return 'deviation'
     if re.search(r'well.?header',name):return 'well_headers'
     for family, pattern in (
@@ -143,18 +155,23 @@ def expand_zip(path, destination, root_id, cancelled=lambda:False, progress=lamb
 def retain_bundle_members(project, ref, data, raw_root, dispatch, cancelled, progress, db):
     """Reserve, stream and attach children atomically under the existing owner scope."""
     from google.cloud import firestore,storage
+    automatic=data.get('mode')=='automatic_zip'
     roots=[a for a in data['assets'] if data.get('options',{}).get('perAsset',{}).get(a.get('clientId',a['id']),{}).get('nativeArchive')]
     if not roots:return data
     for root in roots:
         if root.get('archiveExpanded'):continue
         with tempfile.TemporaryDirectory() as scratch:
             workflows=project.get().to_dict().get('project',{}).get('workflows',[])
-            members=list(expand_zip(Path(raw_root)/root['id'],scratch,root['id'],cancelled,progress,skip_seismic=not workflow_allows('seismic',workflows),skip_checkshots=not workflow_allows('checkshots',workflows)))
+            members=list(expand_zip(Path(raw_root)/root['id'],scratch,root['id'],cancelled,progress,skip_seismic=not workflow_allows('seismic',workflows),skip_checkshots=not automatic and not workflow_allows('checkshots',workflows)))
             needed=[]
             for member in members:
                 if member['excluded']:
                     continue
-                family=classify(member['localPath'],member['path'])
+                try:
+                    family=classify(member['localPath'],member['path'],content_first=automatic)
+                except Exception:
+                    if not automatic:raise
+                    family='documents'  # A malformed member is isolated by the reader.
                 if not workflow_allows(family,workflows):
                     member.update(excluded=True,code='workflow_skipped',reason=family.capitalize()+' skipped for the enabled project workflows.')
                     continue
@@ -195,7 +212,8 @@ def retain_bundle_members(project, ref, data, raw_root, dispatch, cancelled, pro
                 current=ref.get(transaction=tx).to_dict()
                 if current.get('dispatchToken')!=dispatch or current.get('status')!='inspecting':return
                 for a in current['assets']:
-                    if a['id']==root['id']:a['archiveExpanded']=True
+                    if a['id']==root['id']:
+                        a.update(archiveExpanded=True,sha256=root_checksum)
                 current.setdefault('options',{}).setdefault('perAsset',{}).setdefault(root.get('clientId',root['id']),{})['retainOnly']=True
                 current['archiveEntries']=[{k:v for k,v in m.items() if k!='localPath'} for m in members]
                 tx.set(ref,current)
@@ -270,6 +288,11 @@ def prepare_assets(paths, data, known_wells):
             if len(proposals)==1:options['coordinateProposals']={uwi:next(iter(proposals.values()))}
             if asset.get('archive') and not options.get('well') and options.get('deriveWellHeader') is not False:
                 matches=well_matches(uwi,known,uwi_only=True) if uwi else well_matches(name,known)
+                if data.get('mode')=='automatic_zip':
+                    filename_matches=well_matches(path.stem,known,embedded=True)
+                    named_matches=well_matches(name,known)
+                    if len(matches)>1 or (uwi and len(named_matches)==1 and named_matches[0] not in matches and (matches or named_matches[0].get('uwi'))) or (len(matches)==len(filename_matches)==1 and matches!=filename_matches):
+                        asset['automaticIdentityConflict']=True
                 if not matches and (uwi or name):
                     identity='well-'+hashlib.sha256((uwi or 'LAS well '+normalized(name)).encode()).hexdigest()[:24]
                     well={'id':identity,'name':name or uwi,'uwi':uwi,'aliases':[]}

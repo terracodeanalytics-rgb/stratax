@@ -26,3 +26,12 @@
 .ie-issue-help>summary{cursor:pointer;font-size:10px!important;text-decoration:underline}
 .source-bulk-actions{justify-content:flex-end;flex-wrap:wrap}
 .source-bulk-actions [role=status]{margin-right:auto}
+[data-zip-task] progress{display:block;width:100%;height:12px;accent-color:var(--accent,#087c73)}
+[data-zip-task] [data-zip-detail]{margin:12px 0 4px}
+[data-zip-task] .actions{margin-top:18px}
+#dialog:has(.native-mapping-layout) {width:min(1120px, calc(100vw - 32px));max-width:none;}
+.native-mapping-layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;}
+.native-mapping-evidence {min-width:0;overflow:auto;max-height:65vh;}
+.native-mapping-evidence h3 {margin-top:0;}
+.native-mapping-layout #native-mapping {min-width:0;}
+@media (max-width:760px) {.native-mapping-layout {grid-template-columns:minmax(0,1fr);}.native-mapping-evidence {max-height:42vh;}}

@@ -74,8 +74,29 @@ def install(app,db,artifacts):
     @app.put('/__fixture/upload/{name:path}')
     async def upload(name:str,request:Request):
         target=(raw/name).resolve();assert target.is_relative_to(raw.resolve())
-        content=await request.body();target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(content)
-        return JSONResponse(dict(size=len(content)),headers={'Access-Control-Allow-Origin':'*'})
+        content=await request.body()
+        headers={'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'Range'}
+        span=request.headers.get('Content-Range','')
+        offset=target.stat().st_size if target.exists() else 0
+        if span.startswith('bytes */'):
+            if offset and offset==int(span.split('/')[-1]):return Response(status_code=200,headers=headers)
+            if offset:headers['Range']=f'bytes=0-{offset-1}'
+            return Response(status_code=308,headers=headers)
+        target.parent.mkdir(parents=True,exist_ok=True)
+        if span.startswith('bytes '):
+            start,end,total=map(int,span[6:].replace('/','-').split('-'))
+            assert start==offset and len(content)==end-start+1
+            rate=int(os.environ.get('FIXTURE_UPLOAD_BPS','0'))
+            if rate:
+                import asyncio
+                await asyncio.sleep(len(content)/rate)
+            with target.open('ab') as output:output.write(content)
+            if end+1<total:
+                headers['Range']=f'bytes=0-{end}'
+                return Response(status_code=308,headers=headers)
+        else:
+            target.write_bytes(content)
+        return JSONResponse(dict(size=len(content)),headers=headers)
     @app.options('/__fixture/upload/{name:path}')
     def preflight(name:str):return Response(status_code=204,headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'PUT,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Content-Range'})
     @app.middleware('http')

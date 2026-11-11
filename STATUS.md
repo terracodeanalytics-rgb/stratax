@@ -1,5 +1,28 @@
 # StrataX status
 
+## 2026-11-11 - Guided petrophysics live on the custom domain
+
+- Site v24 deployment `appgdep_6af4299423d88191965dfc84ed0886ee` serves `https://stratax.terracodeanalytics.com`. The guided workflow asset hash matches the release. Cloud Run API `stratax-api-petrophysics-1111` is healthy at 100% traffic. The scientific worker uses build `d30b2ac9-3d87-40fa-b744-e93807beb811`.
+- The authenticated Cloud candidate passed 23 checks including ZIP activation, smoothing, source lineage and derived curve review. Cleanup removed 32 generated object versions, 10 documents and the disposable identity. The local two-well, two-zone study matched independent export totals. The custom-domain frontend passed a guided browser replay using fixture data and a local API and worker. Broad browser cases passed after correcting the outdated log-view route assertion, and a focused well-edge resize check passed. The control ledger still has unverified placements and handler groups.
+
+## 2026-11-11 - Guided petrophysics workspace in local development
+
+- Added a seven-stage workflow entry, well handoffs from Data and Map, field-grid pointer and measurement controls, curve-assignment popup, conditioning shortcuts, and cutoff setup beside Properties. Added zonal result tables and backend QC sample counts and summary denominator metadata.
+- Browser checks passed for the seven stages, keyboard focus in calculation dialogs, curve assignment, reload, map-to-log handoff, a saved crossplot sample, and shared-depth comparison of two worker-calculated cutoff scenarios. Six map checks, three calculation result-state checks and twelve lifecycle checks passed. The combined two-well, two-zone study ran from ZIP import through the export of four independently checked intervals, then verified that a saved zone edit flagged the export source as stale. Evidence is in `.release/zip-study-min/lifecycle-browser.json`.
+
+## 2026-11-10 - One-step Cloud ZIP import live
+
+- Site v23 serves **Data → Upload ZIP** at https://stratax.terracodeanalytics.com. Deployment `appgdep_6af31570b810819192e1453e32b4a759` succeeded and all six changed asset hashes match. API `stratax-api-automatic-zip-1110` is healthy at 100% traffic and import worker build `924e8e13-30f0-4276-a0ed-64bc12152e52` is Ready.
+- Thirty-one focused Python checks and 16 authenticated candidate checks passed. A generated ZIP exercised actual Cloud Storage and the native worker. Three datasets activated, two items stayed pending and both generated wells persisted. The hosted frontend passed the one-step and retained-group review replay against mocked Cloud services. Fresh API and worker ERROR query returned zero.
+- The model service remains pending qualification. Automatic ZIP is enabled and model assistance is off.
+
+## 2026-11-10 - One-step Cloud ZIP import verified locally
+
+- Cloud Data offers **Upload ZIP** when `STRATAX_AUTOMATIC_ZIP=1`. One selection starts preparation, resumable upload, inspection and server-side activation. The results list accepted datasets, specific review items and excluded members.
+- Chromium imported three validated datasets for two wells from a mixed ZIP, held two review items, and resolved one well group from the retained CSV. The already-active group remained a single dataset. Thirty-one focused Python cases passed, with four longer worker cases deselected.
+- The local 36 MiB fixture completed in 10.0 s versus 15.0 s at the faster simulated rate and 21.6 s versus 22.4 s at the slower rate. Smaller results varied. Transfer chunk sizes retain the existing defaults. Receipts are in `.release/automatic-zip-20261110`.
+- Model routing was exercised with controlled replies, including malformed mapping and timeout cases. The pinned Qwen runtime image and real-model quality and latency gates are pending.
+
 ## 2026-11-10 - Git snapshot of current source
 
 - This snapshot captures the November 9 import and map updates alongside the local Interpretation, petrophysics and seismic work. The latest recorded production release is Site v22 with API `stratax-api-map-persistence-1109` and import worker build `1a7054cd-93b5-4ba7-b488-be7a3e956e0d`.

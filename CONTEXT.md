@@ -1,5 +1,25 @@
 # StrataX context
 
+## 2026-11-11 - Current petrophysics deployment
+
+- Public custom domain uses Site v24 and Cloud Run API `stratax-api-petrophysics-1111` in `project-9afac/us-central1`. The scientific worker and API use catalog `stratax-science/1.3`. The existing automatic ZIP import worker remains active with model assistance off. The private Workbench Site is separate from the public custom-domain Site.
+
+## 2026-11-11 - Guided petrophysics contract
+
+- The guided entry reuses the existing Interpretation state, methods, and report actions. Data and Map open the selected well by retained well identity. Field-grid measurement uses confirmed WGS84 locations or the last station of an active referenced survey, labeled as a survey end.
+- Crossplot observations store the well, retained dataset, depth reference, curve IDs and original row ranges. Summary rows are read from the existing result manifest, and the worker records the interval and gross thickness denominator.
+- Cutoff comparison aligns preview flags on a shared depth scale for scenarios with the same well and depth reference. Named cutoff overrides record the saved workbook zone ID and bounds, and stale checks cover dependent results. Saved workflow zone changes block acceptance or continuation from the older definition.
+
+## 2026-11-10 - Current automatic ZIP release
+
+- Site v23 and Cloud Run API `stratax-api-automatic-zip-1110` are live with `STRATAX_AUTOMATIC_ZIP=1`. Import worker build `924e8e13-30f0-4276-a0ed-64bc12152e52` has `STRATAX_ZIP_ASSIST=off`. API and worker overlays were built from the previously running images in `project-9afac/us-central1`.
+
+## 2026-11-10 - Automatic Cloud ZIP contract
+
+- The import API owns the immutable automatic choice until an explicit mapping edit moves an uncommitted record to guided review. The worker activates eligible datasets in the inspection completion transaction using shared registration logic. Follow-up commits use retained source identity and logical groups to protect previously activated evidence.
+- Browser filtering excludes recognized out-of-workflow seismic members and records the transfer manifest. Checkshot names alone cannot exclude an ambiguous member. Unspecified log curve units and unconfirmed map references remain visible on imported evidence while scientific and map eligibility continue to require the relevant evidence.
+- Worker setting `STRATAX_ZIP_ASSIST` defaults to `off`. `shadow` records proposals and `verified` permits parser-verified routing. `STRATAX_ZIP_ASSIST_URL` is the private service origin. The worker sends bounded excerpts with a Google ID token and a 12 s wait budget. Native validation controls activation.
+
 ## 2026-11-10 - Git source and deployed release
 
 - The Git snapshot on `codex/interpretation-canvas-science` includes local scientific and seismic work with open verification. Use the dated deployment receipts to identify hosted source. The v22 receipt is `.release/deviation-zip-20261109/deployment-receipt.json`.

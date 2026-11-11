@@ -4,11 +4,13 @@ import logging
 import os
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 
 from google.cloud import firestore, storage
 from ingestion_core import ImportProblem, digest, parse, validate_mapping, set_cancel_check, set_progress_callback
 from import_scope import evidence_family, workflow_allows
+from import_activation import accepted_groups, activate_datasets, automatic_result, automatic_selection, source_group_overlaps
 
 logger = logging.getLogger("stratax-import")
 
@@ -26,6 +28,13 @@ def run():
     data = ref.get().to_dict()
     if not data or data.get("dispatchToken") != dispatch or data["status"] != "inspecting":
         return
+    automatic = data.get('mode') == 'automatic_zip'
+    parent_id = data.get('options', {}).get('parentImportId')
+    parent_ref = project.collection('imports').document(parent_id) if parent_id else None
+    parent = parent_ref.get().to_dict() if parent_ref else None
+    automatic_followup = bool(parent and parent.get('mode') == 'automatic_zip')
+    content_first = automatic or automatic_followup
+    model_suggestions, inference_ms = {}, 0
     def settle_remaining(actual_bytes):
         @firestore.transactional
         def settle(transaction):
@@ -56,8 +65,18 @@ def run():
         return True
 
     if not capacity(db.transaction()):
-        ref.update({"status": "failed", "issues": [{"code": "worker_capacity", "severity": "blocking", "message": "Both parser slots are in use. Your originals are retained; retry shortly."}]})
-        project.update({"parserLease": {}})
+        @firestore.transactional
+        def reject_capacity(transaction):
+            current = ref.get(transaction=transaction).to_dict()
+            record = project.get(transaction=transaction).to_dict()
+            if current.get('dispatchToken') != dispatch:
+                return
+            if current.get('status') == 'inspecting':
+                transaction.update(ref, {'status':'failed', 'issues':[{'code':'worker_capacity','severity':'blocking',
+                    'message':'Both parser slots are in use. Your originals are retained; retry shortly.'}]})
+            if record.get('parserLease', {}).get('id') == iid:
+                transaction.update(project, {'parserLease':{}})
+        reject_capacity(db.transaction())
         settle_remaining(0)
         return
     prefix = f"owners/{uid}/projects/{pid}/imports/{iid}/{dispatch}"
@@ -109,12 +128,21 @@ def run():
     try:
         publish_progress('starting')
         from import_bundles import classify, retain_bundle_members, prepare_assets
+        expand_started = time.monotonic()
         data=retain_bundle_members(project,ref,data,raw_root,dispatch,cancelled,lambda **values:publish_progress(values.pop('phase'),force=False,**values),db)
+        expand_ms = round((time.monotonic()-expand_started)*1000)
         project_data=project.get().to_dict()
         enabled=project_data.get('project',{}).get('workflows',[])
         trashed={source['id'] for source in project_data.get('workspace',{}).get('files',[]) if source.get('trashed')}
+        def asset_family(asset):
+            family = asset.get('family', data['family'])
+            return family if content_first else evidence_family(family, asset['name'])
+        for asset in data['assets']:
+            if automatic and not workflow_allows(asset_family(asset), enabled):
+                issues.append({'code':'workflow_skipped','severity':'warning','sourceId':asset['id'],
+                               'source':asset['name'],'message':'Source skipped for the enabled project workflows.'})
         data['assets']=[asset for asset in data['assets'] if asset['id'] not in trashed
-                        and workflow_allows(evidence_family(asset.get('family',data['family']),asset['name']),enabled)]
+                        and workflow_allows(asset_family(asset),enabled)]
         with tempfile.TemporaryDirectory() as scratch:
             paths, companions, counts, scopes = {}, {}, {}, {}
             for asset in data['assets']:
@@ -145,7 +173,7 @@ def run():
                     if path.suffix.lower() not in ('.xlsx','.txt','.asc','.csv','.tsv','.dat'):
                         continue
                     try:
-                        detected=classify(path,asset.get('archive',{}).get('path',''))
+                        detected=classify(path,asset.get('archive',{}).get('path',''),content_first=content_first)
                     except Exception:
                         continue  # The selected parser reports malformed sources.
                     if detected=='checkshots':
@@ -154,6 +182,12 @@ def run():
                                        'source':asset['name'],'message':'Checkshot skipped for the enabled project workflows.'})
                 data['assets']=[asset for asset in data['assets'] if asset['id'] not in excluded_ids]
             known_wells=prepare_assets(paths,data,known_wells)
+            if automatic:
+                from import_assist import assist
+                model_suggestions, inference_ms = assist(data, paths, known_wells, enabled, publish_progress, cancelled)
+                if any(suggestion['applied'] for suggestion in model_suggestions.values()):
+                    known_wells=prepare_assets(paths,data,known_wells)
+            parsing_started = time.monotonic()
             for index, asset in enumerate(data['assets']):
                 current = ref.get().to_dict()
                 if current.get('status') == 'cancelled' or current.get('dispatchToken') != dispatch:
@@ -162,7 +196,7 @@ def run():
                 asset_rows.clear()
                 path = paths[asset.get('clientId', asset['id'])]
                 publish_progress('hashing', asset)
-                checksum = fingerprints.get(asset['id']) or digest(path)
+                checksum = fingerprints.get(asset['id']) or (asset.get('sha256') if automatic and (asset.get('archive') or asset.get('archiveExpanded')) else None) or digest(path)
                 fingerprints[asset['id']] = checksum
                 settings = {**data.get('options', {}).get('perFile', {}).get(asset['name'], {}), **data.get('options', {}).get('perAsset', {}).get(asset.get('clientId',asset['id']), {})}
                 if settings.get('retainOnly'):
@@ -211,21 +245,41 @@ def run():
                     for original in datasets:
                         if options.get('archive'):
                             original.setdefault('metadata', {})['archive'] = options['archive']
+                        route = model_suggestions.get(asset['id'])
+                        if route and not original['issues']:
+                            links = route['verifiedCompanionIds'] if original.get('well') == route['wellId'] else []
+                            if links or route['verifiedRun']:
+                                original.setdefault('metadata', {})['importRouting'] = {
+                                    'companionSourceIds':links, 'sourceRun':route['verifiedRun'], 'headerRow':route['evidenceRow']
+                                }
                         original.update(sourceId=asset["id"], sourceSha256=checksum, importId=iid)
                         original_id = original["id"]
                         manifest = out_prefix + "/" + original_id + ".json"
-                        # Rewrite the complete reviewed manifest after mapping validation.
-                        (output / (original_id + ".json")).write_text(json.dumps(original, allow_nan=False), encoding="utf-8")
                         did = "ds-" + dispatch[:12] + "-" + asset["id"][:10] + "-" + str(len(summaries))
                         if len(summaries) >= 100:
                             raise ImportProblem('dataset_limit', 'Select fewer logical files or frames per import; this import supports up to 100 datasets.')
                         summaries.append({"id": did, "name": original["name"], "family": family, "assetKey": asset.get("clientId", asset["id"]), "sourceId": asset["id"], "sourceSha256": checksum, "manifest": manifest, "rowCount": original["rowCount"], "columns": original["columns"][:200], "columnCount": len(original['columns']), "status": original["status"], "issues": original["issues"][:40], "well": original["well"], "references": original["references"], "mapping": original["mapping"], "parserVersion": original["parserVersion"], "schemaVersion": 1, "active":False})
                         summaries[-1].update(wellRecords=original.get('wellRecords',[]),markerPicks=original.get('markerPicks',[]),surveyMethod=original.get('surveyMethod','angles'))
+                        if automatic:
+                            from import_assist import DOCUMENTS
+                            if family == 'documents' and suffix not in DOCUMENTS and original.get('metadata', {}).get('format') not in ('PDF', 'DOCX', 'JPEG', 'PNG', 'GIF', 'BMP', 'TIFF'):
+                                note = {'code':'unclassified_source','severity':'blocking',
+                                        'message':'Choose a data category for this source or export it in a supported format.'}
+                                original['issues'].append(note)
+                                if note not in summaries[-1]['issues']:
+                                    summaries[-1]['issues'].append(note)
+                            if asset.get('automaticIdentityConflict'):
+                                note = {'code':'well_identity_conflict','severity':'blocking',
+                                        'message':'The source header and other well identifiers disagree. Confirm the owning well.'}
+                                original['issues'].append(note)
+                                summaries[-1]['issues'].append(note)
                         if family!='seismic':
-                            summaries[-1]['metadata']={k:v for k,v in original.get('metadata',{}).items() if k in ('format','well','wellName','rowUwi','rowWell','surveyMethod','archive','sheet','sheets','sourceRecipe','surveyBlockProposal','sourceRowRanges','profileSignature','uwi','sourceRowOrigin','logicalRowCount','proposalSources')}
+                            summaries[-1]['metadata']={k:v for k,v in original.get('metadata',{}).items() if k in ('format','well','wellName','rowUwi','rowWell','surveyMethod','archive','sheet','sheets','sourceRecipe','surveyBlockProposal','sourceRowRanges','profileSignature','uwi','sourceRowOrigin','logicalRowCount','proposalSources','importRouting')}
                         if family=='seismic':
                             summaries[-1]['metadata']={k:v for k,v in original.get('metadata',{}).items() if k in ('format','traceCount','sampleCount','sampleCountRange','sampleInterval','sampleIntervalRange','sampleOriginRange','endian','headerBytes','inlineRange','crosslineRange')}
                             summaries[-1]['metadata']['traceIndexAvailable']=bool(original.get('metadata',{}).get('traceIndex'))
+                        # Keep retained previews and issue summaries in sync.
+                        (output / (original_id + ".json")).write_text(json.dumps(original, allow_nan=False), encoding="utf-8")
                         issues.extend({**note, "source": asset["name"], 'sourceId':asset['id'], 'datasetId':did} for note in original["issues"])
                     derived_bytes += sum(p.stat().st_size for p in output.glob("*") if p.is_file())
                 except ImportProblem as error:
@@ -257,17 +311,26 @@ def run():
                 manifest_data=json.loads(manifest_path.read_text(encoding='utf-8'));manifest_data['issues'].append(note)
                 manifest_path.write_text(json.dumps(manifest_data,allow_nan=False),encoding='utf-8')
 
-        publish_progress('finalizing')
+        publish_progress('activating' if automatic else 'finalizing')
+        activation_started = time.monotonic()
         derived_root = Path(os.environ.get('DERIVED_MOUNT', '/derived')) / prefix
         derived_bytes = sum(p.stat().st_size for p in derived_root.rglob('*') if p.is_file()) if derived_root.exists() else 0
         @firestore.transactional
         def finish(transaction):
             current = ref.get(transaction=transaction).to_dict()
             record = project.get(transaction=transaction).to_dict()
-            if current.get("status") == "cancelled" or current.get("dispatchToken") != dispatch:
+            if current.get("status") != "inspecting" or current.get("dispatchToken") != dispatch:
                 return
             from well_ingestion import cross_well_issues
-            final_issues = [*issues, *cross_well_issues(record.get('workspace', {}), summaries)]
+            datasets = json.loads(json.dumps(summaries))
+            excluded_ids = set()
+            if automatic_followup:
+                latest_parent = parent_ref.get(transaction=transaction).to_dict()
+                accepted = accepted_groups(latest_parent or parent)
+                excluded_ids = {d['id'] for d in datasets if any(source_group_overlaps(d, prior) for prior in accepted)}
+                datasets = [d for d in datasets if d['id'] not in excluded_ids]
+            final_issues = [i for i in issues if i.get('datasetId') not in excluded_ids]
+            final_issues.extend(cross_well_issues(record.get('workspace', {}), datasets))
             if len(final_issues) > 149:
                 final_issues = sorted(final_issues, key=lambda note: note['severity'] != 'blocking')[:148] + [{'code': 'issue_limit', 'severity': 'blocking', 'message': 'Inspection found more than 149 issues. Review smaller batches before activation; all originals remain retained.'}]
             quota = record.setdefault("importQuota", {})
@@ -277,31 +340,67 @@ def run():
             quota["derivedBytes"] = quota.get("derivedBytes", 0) + derived_bytes
             quota['reservedBytes'] = max(0, quota.get('reservedBytes', 0) - current.get('artifactReservation', 0))
             current['artifactReservation'] = 0
+            detected_families = {asset['id']: asset['family'] for asset in data['assets']}
             for asset in current["assets"]:
                 if asset["id"] in fingerprints:
                     asset["sha256"] = fingerprints[asset["id"]]
+                if automatic and asset['id'] in detected_families:
+                    asset['family'] = detected_families[asset['id']]
             for source in record.get("workspace", {}).get("files", []):
                 if source["id"] in fingerprints:
                     source["sha256"] = fingerprints[source["id"]]
             record["parserLease"] = {}
             record["revision"] += 1
-            current.update(inspectionWells=inspection_wells,reuseAssetIds=[],options=data.get('options',{}),datasets=summaries, issues=final_issues[:150], timings={'inspectMs': round((time.monotonic()-inspect_started)*1000)}, status="retained/unresolved" if any(i["severity"] == "blocking" for i in final_issues) else "awaiting confirmation", revision=current["revision"]+1, derivedBytes=derived_bytes)
+            current.update(inspectionWells=inspection_wells,reuseAssetIds=[],options=data.get('options',{}),datasets=datasets, issues=final_issues[:150], timings={'inspectMs': round((activation_started-inspect_started)*1000)}, status="retained/unresolved" if any(i["severity"] == "blocking" for i in final_issues) else "awaiting confirmation", revision=current["revision"]+1, derivedBytes=derived_bytes)
+            if automatic:
+                if any(i.get('code') == 'derived_quota' for i in final_issues) and not any(i.get('code') == 'derived_quota' for i in current['issues']):
+                    current['issues'][-1] = final_issues[-1]
+                selected = automatic_selection(current, record)
+                if selected:
+                    activate_datasets(transaction, project, ref, current, record, selected, {},
+                                      bump_project=False, write_records=False)
+                current['automaticResult'] = automatic_result(current)
+                if current['automaticResult']['pending']:
+                    current['status'] = 'retained/unresolved'
+                elif not any(i['severity']=='blocking' for i in current['issues']):
+                    current['status'] = 'ready'
+                current['modelSuggestions'] = model_suggestions
+                inspect_ms=current['timings']['inspectMs']
+                current['timings'].update(inferenceMs=inference_ms, expandMs=expand_ms,
+                                          parsingMs=round((activation_started-parsing_started)*1000),
+                                          activationMs=round((time.monotonic()-activation_started)*1000))
+                if current.get('startedAt'):
+                    started=datetime.fromisoformat(current['startedAt']).timestamp()
+                    current['timings']['workerStartupMs']=max(0,round((time.time()-started)*1000)-inspect_ms-current['timings']['activationMs'])
+                current['progress'] = {'phase':'done', 'completedAssets':len(completed_asset_keys),
+                                       'totalAssets':len(data['assets']), 'updatedAt':time.time()}
             transaction.set(project, record)
             transaction.set(ref, current)
         finish(db.transaction())
     except Exception as error:
         logger.error(json.dumps({"event": "import_failed", "kind": type(error).__name__, "import_id": iid}))
-        if ref.get().to_dict().get("status") != "cancelled":
-            ref.update({"status": "failed", "issues": [{"code": "inspection_failed", "severity": "blocking", "message": "Inspection did not finish. Your originals are retained; retry inspection."}]})
+        @firestore.transactional
+        def mark_failed(transaction):
+            current = ref.get(transaction=transaction).to_dict()
+            if current.get('status') != 'inspecting' or current.get('dispatchToken') != dispatch:
+                return
+            code, message = (error.code, str(error)) if isinstance(error, ImportProblem) else (
+                'inspection_failed', 'Inspection did not finish. Your originals are retained; retry inspection.')
+            transaction.update(ref, {'status':'failed','issues':[{'code':code,'severity':'blocking','message':message}]})
+        mark_failed(db.transaction())
     finally:
         set_progress_callback(None)
         derived_root = Path(os.environ.get('DERIVED_MOUNT','/derived')) / prefix
         actual = sum(p.stat().st_size for p in derived_root.rglob('*') if p.is_file()) if derived_root.exists() else 0
         settle_remaining(actual)
         capacity(db.transaction(), False)
-        record = project.get().to_dict()
-        if record.get("parserLease", {}).get("id") == iid:
-            project.update({"parserLease": {}})
+        @firestore.transactional
+        def release_lease(transaction):
+            current = ref.get(transaction=transaction).to_dict()
+            record = project.get(transaction=transaction).to_dict()
+            if current.get('dispatchToken') == dispatch and record.get('parserLease', {}).get('id') == iid:
+                transaction.update(project, {'parserLease':{}})
+        release_lease(db.transaction())
 
 
 if __name__ == "__main__":

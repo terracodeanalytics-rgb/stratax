@@ -16,3 +16,17 @@
 .iw .wb-track-resize{top:88px;bottom:28px;right:0;width:6px}.pp-group-compact[open]>div{max-height:calc(100dvh - 160px);overflow:auto}
 
 .pp-dialog{max-height:calc((100dvh - 32px) / var(--pp-dialog-zoom,1))!important;max-width:calc((100vw - 32px) / var(--pp-dialog-zoom,1))!important}
+
+.pp-study-workflow{flex:none;border-bottom:1px solid #dbe5df;background:#f5f9f6;padding:6px 14px;font-size:12px}
+.pp-study-workflow summary{cursor:pointer;width:fit-content;font-weight:650;color:#214f42}
+.pp-study-workflow nav,.pp-study-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.pp-study-workflow button{padding:4px 8px;font-size:12px}
+.pp-study-workflow button[aria-pressed=true]{background:#e1f1e9;color:#124e3d;border-color:#79ab96}
+
+.pp-inline-cutoffs{padding:10px;border-bottom:1px solid #dbe5df}
+.pp-inline-cutoffs .pp-step-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.pp-inline-cutoffs .pp-step-fields input,.pp-inline-cutoffs .pp-step-fields select{width:100%;min-width:0}
+.pp-cutoff-comparison > div {display:flex;gap:12px;overflow-x:auto;}
+.pp-cutoff-comparison figure {width:140px;flex:0 0 140px;margin:0;}
+.pp-cutoff-comparison figcaption {min-height:3em;font-size:12px;overflow-wrap:anywhere;}
+.pp-cutoff-comparison svg {display:block;width:100%;height:220px;background:#f5faf7;}

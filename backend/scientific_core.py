@@ -234,6 +234,8 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
                 bit=number(p,"bitSize",positive=True); tol=number(p,"tolerance",low=0)
                 out["washoutFlag"]=np.where(np.isfinite(x),(x-bit)>tol,np.nan).astype(float)
             summary["changedSamples"] = int(np.sum(~np.isclose(x,y,equal_nan=True)))
+            summary["filledSamples"] = int(np.count_nonzero(~np.isfinite(x) & np.isfinite(y)))
+            summary["remainingMissingSamples"] = int(np.count_nonzero(~np.isfinite(y)))
             out.update(depth=d, original=x, proposed=y, difference=y-x)
             output_units.update(depth="m", original="m" if operation=="borehole" else units["curve"], proposed="m" if operation=="borehole" else units["curve"], difference="m" if operation=="borehole" else units["curve"])
         elif m == "crossplot":
@@ -362,16 +364,22 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
             require(p["depthReference"] in ("MD","TVD","TVDSS"),"Confirm the cutoff depth reference.");summary["depthReference"]=p["depthReference"]
             d=a["depth"];increasing(d);require(p["combine"] in ("AND","OR"),"Choose AND or OR.");rules=p["rules"];require(isinstance(rules,list) and 0<len(rules)<=20,"Define at least one cutoff rule.");ops={"<":np.less,"<=":np.less_equal,">":np.greater,">=":np.greater_equal}
             def mask_for(items):
+                require(isinstance(items,list) and 0<len(items)<=20,"Each zone needs between one and twenty cutoff rules.")
                 tests=[];valid=np.ones(len(d),bool)
                 for rule in items:
                     require(isinstance(rule,dict) and rule.get("role") in ("vsh","porosity","sw","k") and rule.get("operator") in ops and type(rule.get("value")) in (int,float) and math.isfinite(rule["value"]),"Check cutoff roles, operators and finite thresholds.")
                     x=a[rule["role"]];valid&=np.isfinite(x);tests.append(ops[rule["operator"]](x,rule["value"]))
-                require(tests,"Each zone needs at least one rule.")
                 result=(np.logical_and.reduce(tests) if p["combine"]=="AND" else np.logical_or.reduce(tests)).astype(float);result[~valid]=np.nan;return result
             mask=mask_for(rules);zones=p["zones"];require(isinstance(zones,list) and len(zones)<=100,"Check zone definitions.")
-            occupied=np.zeros(len(d),bool)
+            zone_intervals=[]
             for zone in zones:
-                top,base=number(zone,"top"),number(zone,"base");require(base>top,"Zone base must exceed top.");inside=(d>=top)&(d<base);require(not np.any(occupied&inside),"Zonal overrides must not overlap.");occupied|=inside;mask[inside]=mask_for(zone["rules"])[inside]
+                require(isinstance(zone,dict),"Use a top, base and rules for each zonal override.")
+                top,base=number(zone,"top"),number(zone,"base")
+                require(base>top,"Zone base must exceed top.")
+                require(not any(start<base and top<end for start,end in zone_intervals),"Zonal overrides must not overlap.")
+                zone_intervals.append((top,base))
+                inside=(d>=top)&(d<base)
+                mask[inside]=mask_for(zone.get("rules",[]))[inside]
             bed=number(p,"minimumBed",low=0)
             gap=number(p,"maxGap",positive=True)
             widths=thickness(d,d[0],d[-1],gap)
@@ -385,7 +393,7 @@ def evaluate(method_id, raw_inputs, parameters=None, units=None):
         elif m == "reservoir-summary":
             text(p,"depthReference");require(p["depthReference"] in ("MD","TVD","TVDSS"),"Confirm the summary depth basis.");top,base,gap=number(p,"top"),number(p,"base"),number(p,"maxGap",positive=True);w=thickness(a["depth"],top,base,gap);gross=base-top
             reservoir=a["reservoir"];pay=a["pay"];require(np.all(np.isin(reservoir[np.isfinite(reservoir)],[0,1])) and np.all(np.isin(pay[np.isfinite(pay)],[0,1])),"Reservoir and pay inputs must be reviewed binary masks.");require(not np.any((pay==1)&(reservoir!=1)),"Pay must be a subset of reservoir.")
-            net=float(np.sum(w*(reservoir==1)));pay_h=float(np.sum(w*(pay==1)));summary.update(grossM=gross,netM=net,payM=pay_h,ntg=net/gross,depthCoverage=float(w.sum()/gross),reservoirMaskCoverageM=float(w[np.isfinite(reservoir)].sum()),payMaskCoverageM=float(w[np.isfinite(pay)].sum()),depthReference=p["depthReference"],support="Left-station values on bounded half-open sample intervals")
+            net=float(np.sum(w*(reservoir==1)));pay_h=float(np.sum(w*(pay==1)));summary.update(topM=top,baseM=base,grossM=gross,netM=net,payM=pay_h,ntg=net/gross,ntgDenominatorM=gross,propertyAverageBasis="Thickness-weighted over valid pay samples",depthCoverage=float(w.sum()/gross),reservoirMaskCoverageM=float(w[np.isfinite(reservoir)].sum()),payMaskCoverageM=float(w[np.isfinite(pay)].sum()),depthReference=p["depthReference"],support="Left-station values on bounded half-open sample intervals")
             valid=np.isfinite(a["porosity"])&np.isfinite(a["sw"]);summary["phiH"]=float(np.sum(w[valid]*(pay[valid]==1)*a["porosity"][valid]));summary["hcph"]=float(np.sum(w[valid]*(pay[valid]==1)*a["porosity"][valid]*(1-a["sw"][valid])))
             for role in ("porosity","sw","k"):
                 ok=np.isfinite(a[role])&(pay==1);covered=float(w[ok].sum());summary[role+"CoverageM"]=covered;summary[role+"Weighted"]=float(np.sum(w[ok]*a[role][ok])/covered) if covered else None

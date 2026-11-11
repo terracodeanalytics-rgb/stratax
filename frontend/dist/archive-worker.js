@@ -20,14 +20,21 @@ async function prepareTransfer(data){
    if(path.startsWith('/')||/^[a-z]:/i.test(path)||/[\u0000-\u001f]/.test(path)||path.split('/').includes('..'))throw new Error('The ZIP contains an unsafe path.');
    const family=excludedFamily(path,data);
    if(!entry.directory&&family)notes.push({path,code:'workflow_skipped',message:family+' excluded from the upload.'});
+   if(entries.length===1||entries.length%25===0)postMessage({type:'progress',scanned:entries.length,excluded:notes.length});
   }
-  if(!notes.length)return {file:data.file,notes};
+  postMessage({type:'progress',scanned:entries.length,excluded:notes.length,packing:notes.length>0});
+  let fingerprint;
+  if(data.identify){
+   const directory=JSON.stringify(entries.map(e=>[e.filename,String(e.uncompressedSize),String(e.compressedSize),String(e.signature)]));
+   fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(directory))),v=>v.toString(16).padStart(2,'0')).join('');
+  }
+  if(!notes.length)return {file:data.file,notes,fingerprint};
   const keep=entry=>!excludedFamily(entry.filename.replace(/\\/g,'/'),data);
   if(!entries.some(entry=>!entry.directory&&keep(entry)))throw new Error('No files match this project’s workflows.');
   const writer=new zip.ZipWriter(new zip.BlobWriter('application/zip'));
   await writer.appendZip(new zip.BlobReader(data.file),{filter:keep});
   const blob=await writer.close();
-  return {file:new File([blob],data.file.name,{type:'application/zip',lastModified:data.file.lastModified}),notes};
+  return {file:new File([blob],data.file.name,{type:'application/zip',lastModified:data.file.lastModified}),notes,fingerprint};
  }finally{await reader.close();}
 }
 onmessage=async({data})=>{

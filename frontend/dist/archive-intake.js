@@ -1,12 +1,12 @@
 export function filterCloudArchive(file,options){
  return readArchive(file,{...options,transferOnly:true});
 }
-export function readArchive(file,{password='',signal,onProgress,maxExpandedBytes=1024**3,maxFiles=99,skipSeismic=false,skipCheckshots=false,transferOnly=false}={}){
+export function readArchive(file,{password='',signal,onProgress,maxExpandedBytes=1024**3,maxFiles=99,skipSeismic=false,skipCheckshots=false,transferOnly=false,identify=false}={}){
  if(signal?.aborted)return Promise.reject(new DOMException('Cancelled','AbortError'));
  return new Promise((resolve,reject)=>{
   const worker=new Worker('./archive-worker.js'),finish=()=>{clearTimeout(timer);worker.terminate();signal?.removeEventListener('abort',stop);},stop=()=>{finish();reject(new DOMException('Archive reading cancelled','AbortError'));},timer=setTimeout(()=>{finish();reject(new Error('ZIP reading exceeded two minutes. Split the archive into smaller batches.'));},120000);
   signal?.addEventListener('abort',stop,{once:true});worker.onerror=()=>{finish();reject(new Error('The ZIP reader could not run. Extract the files and add them directly.'));};
-  worker.onmessage=({data})=>{if(data.type==='progress')onProgress?.(data);if(data.type==='result'){finish();if(data.error)reject(new Error(data.error));else resolve(data);}};worker.postMessage({file,password,maxExpandedBytes,maxFiles,skipSeismic,skipCheckshots,transferOnly});
+  worker.onmessage=({data})=>{if(data.type==='progress')onProgress?.(data);if(data.type==='result'){finish();if(data.error)reject(new Error(data.error));else resolve(data);}};worker.postMessage({file,password,maxExpandedBytes,maxFiles,skipSeismic,skipCheckshots,transferOnly,identify});
  });
 }
 
