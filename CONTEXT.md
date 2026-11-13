@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-13 - Header-first well import
+
+- Guided import offers a header-first picker. Included headers define the well identity for deviation matching. Cloud transfers confirm the header originals before starting other transfers. Successful imports allow a fresh batch in the same project.
+
 ## 2026-11-11 - Current petrophysics deployment
 
 - Public custom domain uses Site v24 and Cloud Run API `stratax-api-petrophysics-1111` in `project-9afac/us-central1`. The scientific worker and API use catalog `stratax-science/1.3`. The existing automatic ZIP import worker remains active with model assistance off. The private Workbench Site is separate from the public custom-domain Site.

@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-13 - Header-first well import
+
+- Site v25 source is 26e34fa5e65e16cff35e11783e7081f388281ea6. Rollback is v24. The browser replay is in .release/well-header-20261113/browser.cjs. The release only changed frontend assets. No deployment images were created or removed.
+
 ## 2026-11-11 - Guided petrophysics production release
 
 - Custom-domain Site v24 source `ca87e9659d9c3eab42d890a6fee12a2260a1a1e5`; API build `0ec21777-82b6-4910-add7-581de3801629`, revision `stratax-api-petrophysics-1111`; scientific worker build `d30b2ac9-3d87-40fa-b744-e93807beb811`. Import worker remains on the automatic ZIP build.

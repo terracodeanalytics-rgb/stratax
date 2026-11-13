@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-13 - Header-first well import
+
+- Site v25 is live on stratax.terracodeanalytics.com (deployment appgdep_6af78249f73881918dc83c5709bfbdc5). Continue uses a single form submission. Chromium registered two separate wells and attached each survey to its uploaded header through the final review.
+
 ## 2026-11-11 - Guided petrophysics live on the custom domain
 
 - Site v24 deployment `appgdep_6af4299423d88191965dfc84ed0886ee` serves `https://stratax.terracodeanalytics.com`. The guided workflow asset hash matches the release. Cloud Run API `stratax-api-petrophysics-1111` is healthy at 100% traffic. The scientific worker uses build `d30b2ac9-3d87-40fa-b744-e93807beb811`.
