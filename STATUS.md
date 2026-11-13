@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-13 - Map locations from matched well headers
+
+- Map filters to wells with uploaded data and a matching active well header. The CRS and coordinate review forms were removed. Focused checks passed for matched, header-only, upload-only and inactive records.
+
 ## 2026-11-13 - Automatic well map placement
 
 - Site v26 deployment appgdep_6af7860b9a7481918355de27828919da serves the automatic map placement update. Both changed assets match the public domain. Header EPSG extraction passed the consistent and mixed-code cases.

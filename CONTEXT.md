@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-13 - Map locations from matched well headers
+
+- Map matches by registered well ID, then unique UWI, then unique compatible well name. It uses the matched header coordinates and reads retained per-row EPSG values when necessary.
+
 ## 2026-11-13 - Automatic well map placement
 
 - Map automatically places referenced coordinates from active evidence using the Cloud preview transform or the existing portable converter. Missing CRS and conflicting evidence stay unplaced. Uniform EPSG columns in inspected well headers populate the source CRS.

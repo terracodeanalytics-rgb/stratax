@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-13 - Map locations from matched well headers
+
+- Map hotfix Sites source is 2126309c10f6a5998628a7e34584b12c8d4578a7. Rollback is Site v26. No backend images were created.
+
 ## 2026-11-13 - Automatic well map placement
 
 - Site v26 source a3ad695f19bb2f376337f810018e3b83bb9e4db9. Rollback is v25. The release is frontend-only and creates no deployment images. The browser fixture is in .release/map-auto-20261113/browser.cjs.
