@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-13 - Automatic source grid plotting
+
+- Unreferenced source coordinates stay in a separate grid per header and reference. Source-grid markers do not imply geographic positions. The workflow needs no location review or refresh action.
+
 ## 2026-11-13 - Map locations from matched well headers
 
 - Map matches by registered well ID, then unique UWI, then unique compatible well name. It uses the matched header coordinates and reads retained per-row EPSG values when necessary.

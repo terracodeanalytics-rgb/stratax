@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-13 - Automatic source grid plotting
+
+- The source-grid hotfix changes only map-workspace.js. Rollback is Site v27. No backend images were created. The Sites release archive is under .release/map-grid-20261113.
+
 ## 2026-11-13 - Map locations from matched well headers
 
 - Map hotfix Sites source is 2126309c10f6a5998628a7e34584b12c8d4578a7. Rollback is Site v26. No backend images were created.

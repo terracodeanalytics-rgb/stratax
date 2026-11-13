@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-13 - Automatic source grid plotting
+
+- Map plots matching uploaded wells on a source X/Y grid when geographic placement is unavailable. Focused checks passed for Monza-style coordinates and excluding unmatched wells.
+
 ## 2026-11-13 - Map locations from matched well headers
 
 - Map filters to wells with uploaded data and a matching active well header. The CRS and coordinate review forms were removed. Focused checks passed for matched, header-only, upload-only and inactive records.
