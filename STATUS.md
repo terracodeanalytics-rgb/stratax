@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-13 - Automatic well map placement
+
+- Site v26 deployment appgdep_6af7860b9a7481918355de27828919da serves the automatic map placement update. Both changed assets match the public domain. Header EPSG extraction passed the consistent and mixed-code cases.
+
 ## 2026-11-13 - Header-first well import
 
 - Site v25 is live on stratax.terracodeanalytics.com (deployment appgdep_6af78249f73881918dc83c5709bfbdc5). Continue uses a single form submission. Chromium registered two separate wells and attached each survey to its uploaded header through the final review.

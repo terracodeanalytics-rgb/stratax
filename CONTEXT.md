@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-13 - Automatic well map placement
+
+- Map automatically places referenced coordinates from active evidence using the Cloud preview transform or the existing portable converter. Missing CRS and conflicting evidence stay unplaced. Uniform EPSG columns in inspected well headers populate the source CRS.
+
 ## 2026-11-13 - Header-first well import
 
 - Guided import offers a header-first picker. Included headers define the well identity for deviation matching. Cloud transfers confirm the header originals before starting other transfers. Successful imports allow a fresh batch in the same project.

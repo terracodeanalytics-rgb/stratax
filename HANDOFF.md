@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-13 - Automatic well map placement
+
+- Site v26 source a3ad695f19bb2f376337f810018e3b83bb9e4db9. Rollback is v25. The release is frontend-only and creates no deployment images. The browser fixture is in .release/map-auto-20261113/browser.cjs.
+
 ## 2026-11-13 - Header-first well import
 
 - Site v25 source is 26e34fa5e65e16cff35e11783e7081f388281ea6. Rollback is v24. The browser replay is in .release/well-header-20261113/browser.cjs. The release only changed frontend assets. No deployment images were created or removed.

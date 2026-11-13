@@ -26,6 +26,14 @@ export function suggest(dataset,family,previous={}){
  const columns=dataset?.columns||[],mapping={},references={},headers=dataset?.metadata?.headers||{};
  for(const [role,names]of Object.entries(roleAliases)){const found=columns.map((c,i)=>names.includes(key(c.mnemonic))?i:-1).filter(i=>i>=0);if(found.length===1)mapping[role]=String(found[0]);}
 
+ if(family==='well_headers'){
+  const crsColumn=columns.findIndex(c=>['epsg','crs','sourcecrs','coordsys','coordinatesystem'].includes(key(c.mnemonic)));
+  const rows=dataset.reviewRows||dataset.preview||[];
+  if(crsColumn>=0&&rows.length===dataset.rowCount&&rows.length){
+   const codes=rows.map(row=>/^(?:EPSG:\s*)?([0-9]{3,7})$/i.exec(String(row[crsColumn]??'').trim())?.[1]);
+   if(codes[0]&&codes.every(code=>code===codes[0]))references.crs='EPSG:'+codes[0];
+  }
+ }
  if(mapping.index===undefined&&dataset?.metadata?.index){const matches=columns.map((c,i)=>[c,i]).filter(([c])=>c.mnemonic===dataset.metadata.index);if(matches.length===1)mapping.index=String(matches[0][1]);}
  if(family==='tops'&&mapping.name===mapping.well)delete mapping.name;
  const index=columns[Number(mapping.index??mapping.md??mapping.depth)],unit=index?.unit;
