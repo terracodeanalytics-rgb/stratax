@@ -23,13 +23,14 @@ async function item(key, value) {
 }
 function key(projectId, suffix = 'handle') { return `${session.user.uid}:${projectId}:${suffix}`; }
 export function resetRepository() { activeUid = session.user?.uid; handles.clear(); }
-async function directory(projectId, request = false) {
+const folderError = () => Object.assign(new Error('Project folder access is needed. Select Reconnect project folder to continue.'), {code:'project_folder_access'});
+async function directory(projectId, request = false, mode = 'readwrite') {
   let handle = handles.get(projectId) || await item(key(projectId));
-  if (!handle) throw new Error('Reconnect the project folder to save changes.');
-  const options = {mode:'readwrite'};
+  if (!handle) throw folderError();
+  const options = {mode};
   let permission = await handle.queryPermission(options);
   if (permission !== 'granted' && request) permission = await handle.requestPermission(options);
-  if (permission !== 'granted') throw new Error('Reconnect the project folder to allow saving.');
+  if (permission !== 'granted') throw folderError();
   handles.set(projectId, handle);
   return handle;
 }
@@ -45,7 +46,26 @@ export async function chooseFolder(projectId) {
   await item(key(projectId), handle);
   return handle.name;
 }
-export async function reconnect(projectId) { return directory(projectId, true); }
+export async function reconnect(projectId, choose = false) {
+  if (!choose) return directory(projectId, true);
+  const uid = session.user?.uid;
+  if (!folderSupported()) throw new Error('Open StrataX directly in a browser that supports project folders.');
+  const handle = await window.showDirectoryPicker({mode:'readwrite'});
+  const record = await readFolderRecord(handle);
+  if (record.project.id !== projectId) throw new Error('Choose the original folder for this project.');
+  if (!uid || session.user?.uid !== uid) throw new Error('The signed-in account changed.');
+  await item(key(projectId), handle);
+  handles.set(projectId, handle);
+  return handle;
+}
+export async function folderCanWrite(projectId) {
+  try { await directory(projectId); return true; }
+  catch (error) { if (error.code === 'project_folder_access') return false; throw error; }
+}
+async function readFolderRecord(handle) {
+  try { return validate(JSON.parse(await (await (await handle.getFileHandle('project.stratax.json')).getFile()).text())); }
+  catch { throw new Error('Choose a folder containing this project’s project.stratax.json file.'); }
+}
 export async function listCloud() {
   let cursor = null, records = [];
   do { const result = await api('/api/projects' + (cursor ? '?cursor='+encodeURIComponent(cursor) : '')); records.push(...result.projects); cursor = result.next_cursor; } while (cursor);
@@ -54,9 +74,8 @@ export async function listCloud() {
 export async function load(project) {
   if (project.storage === 'cloud') return api('/api/projects/'+project.id);
   if (project.storage === 'local') {
-    const dir = await directory(project.id, true);
-    const text = await (await (await dir.getFileHandle('project.stratax.json')).getFile()).text();
-    return validate(JSON.parse(text));
+    const dir = await directory(project.id, false, 'read');
+    return readFolderRecord(dir);
   }
   const cached = await item(key(project.id, 'draft'));
   if (!cached) throw new Error('Open the project package to recover this workspace.');
@@ -101,7 +120,7 @@ export async function source(project, file) {
     return response.blob();
   }
   if(file.external){const handle=await item(key(project.id,'external:'+file.id));if(!handle)throw new Error('Reconnect the linked original file.');if(await handle.queryPermission({mode:'read'})!=='granted')throw new Error('Permission to the linked original is required. Reconnect it from the import panel.');return handle.getFile();}
-  if (project.storage === 'local') return (await (await directory(project.id)).getDirectoryHandle('originals')).getFileHandle(file.id).then(h=>h.getFile());
+  if (project.storage === 'local') return (await (await directory(project.id, false, 'read')).getDirectoryHandle('originals')).getFileHandle(file.id).then(h=>h.getFile());
   const value = await item(key(project.id, 'file:'+file.id));
   if (!value) throw new Error('The original file is missing from this device.');
   return value;
@@ -131,7 +150,7 @@ function validate(record) {
 export async function openLocal() {
   if (folderSupported()) {
     const handle = await window.showDirectoryPicker({mode:'readwrite'});
-    const record = validate(JSON.parse(await (await (await handle.getFileHandle('project.stratax.json')).getFile()).text()));
+    const record = await readFolderRecord(handle);
     record.project.storage='local';record.project.directoryName=handle.name;
     handles.set(record.project.id,handle);await item(key(record.project.id),handle);
     return record;
@@ -158,7 +177,7 @@ export async function importPackage(file) {
 
 function artifactName(value){if(!/^[\w.-]{1,180}$/.test(value)||value==='.'||value==='..')throw new Error('Invalid artifact reference.');return value;}
 export async function putArtifact(project,importId,name,blob){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id);const dir=await(await root.getDirectoryHandle('datasets',{create:true})).getDirectoryHandle(importId,{create:true});await writeFile(dir,name,blob);}else await item(key(project.id,'artifact:'+importId+':'+name),blob);}
-export async function getArtifact(project,importId,name){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id);const dir=await(await root.getDirectoryHandle('datasets')).getDirectoryHandle(importId);return(await dir.getFileHandle(name)).getFile();}const blob=await item(key(project.id,'artifact:'+importId+':'+name));if(!blob)throw new Error('A derived artifact is missing. Reinspect the retained original.');return blob;}
+export async function getArtifact(project,importId,name){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id,false,'read');const dir=await(await root.getDirectoryHandle('datasets')).getDirectoryHandle(importId);return(await dir.getFileHandle(name)).getFile();}const blob=await item(key(project.id,'artifact:'+importId+':'+name));if(!blob)throw new Error('A derived artifact is missing. Reinspect the retained original.');return blob;}
 export async function linkOriginal(project,handle){if(project.storage!=='local')throw new Error('Linked originals require a local folder project.');const file=await handle.getFile();const fileId=id();await item(key(project.id,'external:'+fileId),handle);return {id:fileId,name:file.name,size:file.size,type:'Source file',well:'',status:'Linked original · not parsed',external:true,local:true};}
 
 export async function copyToCloud(project,workspace,name,onProgress=()=>{}){

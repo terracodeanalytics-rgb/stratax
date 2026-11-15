@@ -8,12 +8,11 @@ import {openImporter,reviewImport} from './data-page.js';
 import * as repository from './project-repository.js';
 import {mountWorkspaceMap} from './project-map.js';
 
-let host,activeProject,selected='',search='',basemap='grid',inspector=true,labels=true,showWells=true,showDeviation=true,zoom=1,paths=[],pathIssues=[],loading=false,loadedAt=0,loadedSignature='',resizeObserver,mapGeneration=0,googleMap,focusWell='',contextAbort,pan=[0,0],measure=null;
+let host,activeProject,selected='',search='',basemap='grid',inspector=true,labels=true,showWells=true,showDeviation=true,zoom=1,paths=[],pathIssues=[],loading=false,loadedAt=0,loadedSignature='',resizeObserver,mapGeneration=0,googleMap,focusWell='',contextAbort,pan=[0,0],measure=null,gridSelection='',folderBlocked=false,automaticLocations={};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $=s=>document.querySelector(s);
 const isWgs84=value=>/^(?:EPSG:)?4326$|^WGS\s?84$/i.test(String(value||'').trim());
 const validPoint=p=>p&&typeof p.lat==='number'&&typeof p.lng==='number'&&Number.isFinite(p.lat)&&Number.isFinite(p.lng)&&Math.abs(p.lat)<=85&&Math.abs(p.lng)<=180;
-const projection=p=>[6378137*p.lng*Math.PI/180,6378137*Math.log(Math.tan(Math.PI/4+p.lat*Math.PI/360))];
 export function configureMapWorkspace(value){host=value;}
 export function focusMapWell(id){if(wells().includes(id)){selected=id;inspector=true;draw();}}
 function settings(){return host.getState().mapWorkspace||{locations:{},symbols:{}};}
@@ -47,38 +46,65 @@ function pendingSurveys(id){
   ?(record.datasets||[]).filter(d=>!d.active&&d.family==='deviation'&&d.well===owner&&!accepted.has(identity(d))).map(d=>({id:d.id,importId:record.id}))
   :[]);
 }
-function located(){const matches=headerMatches();return [...matches.keys()].filter(id=>!settings().removedWells?.includes(id)).flatMap(id=>{const p=settings().locations?.[id];return headerPoint(p,retainedLocation(id,matches))?[{id,name:wellName(id),...p}]:[];});}
+function located(){const matches=headerMatches();return [...matches.keys()].filter(id=>!settings().removedWells?.includes(id)).flatMap(id=>{const p=automaticLocations[id]||settings().locations?.[id];return headerPoint(p,retainedLocation(id,matches))?[{id,name:wellName(id),...p}]:[];});}
 function saveSetting(key,value){const state=host.getState();state.mapWorkspace||={locations:{},symbols:{}};state.mapWorkspace[key]=value;host.save();}
 function closeWellMenu(restoreFocus=false){const node=$('#mw-well-context'),trigger=node?.returnTarget;contextAbort?.abort();contextAbort=null;node?.remove();if(restoreFocus&&trigger?.isConnected)trigger.focus();}
-function endpointFor(id,basis){
- const surface=located().find(point=>point.id===id);
- if(basis==='surface')return surface;
- const end=paths.find(path=>path.well===id)?.points.at(-1);
- return surface&&validPoint(end)?end:null;
+function endpointFor(id,basis,grid=fieldGrid()){
+ if(basis==='surface')return grid.points.find(point=>point.id===id)?.xy;
+ return grid.lines.find(line=>line.well===id)?.xy.at(-1);
 }
-function mapDistance(a,b){
- const radians=Math.PI/180;
- const x=Math.sin((b.lat-a.lat)*radians/2)**2+Math.cos(a.lat*radians)*Math.cos(b.lat*radians)*Math.sin((b.lng-a.lng)*radians/2)**2;
- return 12742017.6*Math.asin(Math.sqrt(Math.min(1,Math.max(0,x))));
+function metricText(value,power,grid){
+ if(grid.unit===null)return value.toLocaleString(undefined,{maximumFractionDigits:2})+' source '+(power===2?'units²':'units');
+ const amount=value*grid.unit**power,threshold=1000**power;
+ return amount>=threshold
+  ?(amount/threshold).toLocaleString(undefined,{maximumFractionDigits:3})+(power===2?' km²':' km')
+  :amount.toLocaleString(undefined,{maximumFractionDigits:2})+(power===2?' m²':' m');
 }
 function measureText(){
  if(!measure)return '';
+ const grid=fieldGrid();
+ if(measure.basis==='area'){
+  if(measure.done)return 'Area · '+metricText(polygonArea(measure.vertices),2,grid);
+  return 'Area · '+(measure.vertices.length<3?'Click at least three corners.':'Add corners or choose Finish area.');
+ }
+ if(measure.basis==='distance'){
+  const [a,b]=measure.vertices;
+  return b?'Distance · '+metricText(Math.hypot(b[0]-a[0],b[1]-a[1]),1,grid):'Distance · choose '+(a?'an end point.':'a start point.');
+ }
  const label=measure.basis==='surface'?'Surface to surface':'Survey end to survey end';
  if(!measure.from)return label+' · choose the first well.';
  if(!measure.to)return label+' · choose a second well.';
- const a=endpointFor(measure.from,measure.basis),b=endpointFor(measure.to,measure.basis);
- return a&&b?label+' · '+wellName(measure.from)+' to '+wellName(measure.to)+' · '+mapDistance(a,b).toFixed(1)+' m':'One endpoint needs location or survey review.';
+ const a=endpointFor(measure.from,measure.basis,grid),b=endpointFor(measure.to,measure.basis,grid);
+ return a&&b?label+' · '+wellName(measure.from)+' to '+wellName(measure.to)+' · '+metricText(Math.hypot(b[0]-a[0],b[1]-a[1]),1,grid):'Choose endpoints on this field grid.';
+}
+function polygonArea(vertices){
+ const [x,y]=vertices[0];
+ return Math.abs(vertices.reduce((sum,[ax,ay],i)=>{
+  const [bx,by]=vertices[(i+1)%vertices.length];
+  return sum+(ax-x)*(by-y)-(bx-x)*(ay-y);
+ },0))/2;
 }
 function startMeasure(basis,from=null){
- measure={basis,from:from&&endpointFor(from,basis)?from:null,to:null};basemap='grid';draw();
+ basemap='grid';
+ if(from&&!endpointFor(from,basis)){
+  const grid=fieldGrids().find(value=>endpointFor(from,basis,value));
+  if(grid){gridSelection=grid.id;pan=[0,0];zoom=1;focusWell='';}
+ }
+ measure={basis,from:from&&endpointFor(from,basis)?from:null,to:null,vertices:[],done:false,gridId:fieldGrid().id};
+ draw();
  document.querySelector('[data-map-command="cancel-measure"]')?.focus();
 }
+function updateMeasurement(){
+ const status=$('#mw-measure-status'),finish=$('[data-map-command="finish-area"]');
+ if(status)status.textContent=measureText();
+ if(finish)finish.disabled=measure.vertices.length<3||measure.done;
+}
 function selectMapWell(id){
- if(!measure){selected=id;inspector=true;draw();return;}
- if(!endpointFor(id,measure.basis)){host.toast(measure.basis==='surface'?'Confirm this well’s surface coordinates first.':'Confirm the well location and choose a valid active survey first.');return;}
+ if(!measure||['distance','area'].includes(measure.basis)){selected=id;inspector=true;draw();return;}
+ if(!endpointFor(id,measure.basis)){host.toast('Choose a well with that endpoint on the current field grid.');return;}
  if(!measure.from||measure.to){measure.from=id;measure.to=null;}
  else if(measure.from!==id)measure.to=id;
- const status=$('#mw-measure-status');if(status)status.textContent=measureText();
+ updateMeasurement();
  renderMap();
 }
 function wellMenu(event,id,trigger){
@@ -95,7 +121,7 @@ async function manageWell(action,id){
  if(action==='interpretation'){host.openWellWorkspace('interpretation',sourceWell(id));return;}
  if(action==='measure-from'){startMeasure('surface',id);return;}
  if(action==='trajectory'){if(!paths.some(p=>p.well===id)){host.toast('Choose a valid active survey to display this trajectory.');return;}saveSetting('showDeviation',true);saveSetting('hiddenWells',(settings().hiddenWells||[]).filter(w=>w!==id));focusWell=id;inspector=true;draw();return;}
- if(action==='zoom'){const p=located().find(p=>p.id===id);if(!p){host.toast('Review this well’s location before zooming to it.');if(!loading)await refresh();return;}focusWell=id;zoom=5;inspector=true;draw();return;}
+ if(action==='zoom'){const grid=fieldGrids().find(value=>value.points.some(p=>p.id===id));if(!grid){host.toast('Review this well’s location before zooming to it.');if(!loading)await refresh();return;}if(!located().some(p=>p.id===id))basemap='grid';gridSelection=grid.id;focusWell=id;pan=[0,0];zoom=5;inspector=true;draw();return;}
  if(action==='delete'){
   host.modal('Delete map well',`<h3>Remove ${esc(name)} from the map?</h3><p>This removes the map well and its displayed trajectories. Original files, datasets and well evidence stay in Data.</p><p class="sub">Restore it later from View → Removed wells.</p><div class="actions"><button id="mw-delete-cancel">Cancel</button><button id="mw-delete-confirm" class="danger">Delete from map</button></div>`);
   $('#mw-delete-cancel').onclick=()=>$('#dialog').close();$('#mw-delete-confirm').onclick=async()=>{if(!isScope(scope))return;try{saveSetting('removedWells',[...new Set([...(settings().removedWells||[]),id])]);await host.flush();$('#dialog').close();selected='';if(focusWell===id){focusWell='';zoom=1;}draw();}catch(error){host.toast(error.message);}};return;
@@ -140,7 +166,7 @@ async function placeReferencedWells(project,scope){
  if(!isScope(scope))return;
  for(const id of wells()){
   const retained=retainedLocation(id,matches),header=recovered.get(matches.get(id)?.record.id);
-  if(headerPoint(settings().locations?.[id],retained))continue;
+  if(headerPoint(automaticLocations[id]||settings().locations?.[id],retained))continue;
   const source=sourceEpsg(retained?.crs)?retained:header||retained;
   if(retained?.coordinateConflict||retained?.conflictingCRS)continue;
   if(!source||source.coordinateConflict||source.conflictingCRS)continue;
@@ -175,7 +201,9 @@ async function placeReferencedWells(project,scope){
  }
  if(!isScope(scope))return;
  const fresh=Object.entries(updates).filter(([id])=>!headerPoint(settings().locations?.[id],retainedLocation(id,matches)));
- if(fresh.length){saveSetting('locations',{...settings().locations,...Object.fromEntries(fresh)});await host.flush();}
+ if(!fresh.length)return;
+ if(project.storage==='cloud')saveSetting('locations',{...settings().locations,...Object.fromEntries(fresh)});
+ else Object.assign(automaticLocations,Object.fromEntries(fresh));
 }
 function locationReason(id){
  if(located().some(p=>p.id===id))return 'Confirmed location';
@@ -214,12 +242,20 @@ async function headerLocations(scope,matches){
 }
 const menu=(title,items)=>`<details class="mw-menu"><summary>${title} <span aria-hidden="true">⌄</span></summary><div>${items.map(([id,label,disabled])=>`<button type="button" data-map-command="${id}" ${disabled?'disabled':''}>${label}</button>`).join('')}</div></details>`;
 export function mapWorkspaceView(){
- const project=host.getProject(),scope=session.user?.uid+':'+project.id;if(activeProject!==scope){activeProject=scope;selected='';search='';paths=[];pathIssues=[];loadedAt=0;loadedSignature='';loading=false;basemap='grid';zoom=1;focusWell='';pan=[0,0];measure=null;inspector=true;}
- const ids=wells(),sourceCount=sourceGridGroups(true).reduce((count,g)=>count+g.points.length,0);if(!ids.includes(selected))selected=ids[0]||'';const p=located().find(w=>w.id===selected),deviations=datasets().filter(d=>d.family==='deviation'&&d.well===selected),pending=pendingSurveys(selected);
- return `<section class="map-workspace ${inspector?'':'inspector-collapsed'}"><header class="mw-heading"><div><div class="study-kicker">SPATIAL WORKSPACE</div><h1>Project map</h1><p>${esc(project.name)} · ${located().length+sourceCount}/${ids.length} wells plotted</p></div><div class="actions"><button data-map-command="fit">Fit project</button><button id="mw-inspector-toggle" aria-expanded="${inspector}" aria-controls="mw-inspector">${inspector?'Hide':'Show'} inspector</button></div></header><div class="mw-ribbon" aria-label="Map ribbon">${menu('＋ Add',[['well','Import well locations…'],['deviation','Deviation data for selected well…',!selected],['spatial','Spatial data…'],['seismic','Seismic data…',!project.workflows?.includes('seismic')]])}${menu('Basemap',[['grid','Field grid'],['roadmap','Google Roadmap'],['satellite','Google Satellite'],['hybrid','Google Hybrid'],['terrain','Google Terrain']])}${menu('View',[['fit','Fit all evidence'],['labels','Show / hide well labels'],['wells','Show / hide wells'],['trajectories','Show / hide deviation'],['inspector','Show / hide inspector'],...(settings().removedWells?.length?[['restore-wells','Removed wells…']]:[])])}${menu('Measure',[['measure-surface','Surface to surface'],['measure-bottom','Survey end to survey end']])}${menu('Style',[['style','Selected well symbol…',!selected]])}${menu('Export',[['export','Field map (SVG)',basemap!=='grid']])}<span class="mw-ribbon-status">${loading?'Loading evidence…':'Project evidence'}</span></div><div class="mw-body"><aside class="mw-contents"><div class="mw-panel-title">Contents <button data-map-command="refresh" aria-label="Refresh map evidence">↻</button></div><label class="mw-search">${host.icon('search')}<input id="mw-search" aria-label="Find a well" placeholder="Find a well…" value="${esc(search)}"></label><h3>BASEMAP</h3><div class="mw-basemap">${basemap==='grid'?'Field grid · EPSG:3857':'Google '+basemap}</div><h3>PROJECT LAYERS</h3><label class="mw-layer"><input id="mw-wells" type="checkbox" ${showWells?'checked':''}>Wells <span>${ids.length}</span></label><label class="mw-layer"><input id="mw-deviation" type="checkbox" ${showDeviation?'checked':''}>Deviation trajectories <span>${paths.length}</span></label><h3>WELLS</h3><div class="mw-well-list">${ids.length?ids.map(id=>`<div class="mw-well-row" ${wellName(id).toLowerCase().includes(search.toLowerCase())||id.toLowerCase().includes(search.toLowerCase())?'':'hidden'}><input type="checkbox" data-map-visible="${esc(id)}" aria-label="Show ${esc(wellName(id))}" ${settings().hiddenWells?.includes(id)?'':'checked'}><button data-map-well="${esc(id)}" aria-pressed="${id===selected}"><img src="${WELL_ICON_URL}" alt="" class="mw-well-svg"><span><strong>${esc(wellName(id))}</strong><small>${esc(locationReason(id))}</small></span></button><button data-map-well-menu="${esc(id)}" aria-label="Actions for ${esc(wellName(id))}" aria-haspopup="menu">⋯</button></div>`).join(''):'<p class="sub">No uploaded wells match an imported well header.</p>'}</div><p class="mw-reference-note">Well locations come from the matched headers.</p></aside><div class="mw-map-column">${measure?`<div class="mw-measure-toolbar"><output id="mw-measure-status">${esc(measureText())}</output><button data-map-command="cancel-measure">Exit Measure</button></div>`:''}<div class="mw-canvas" id="mw-canvas"><div class="mw-map-label">${basemap==='grid'?'FIELD GRID · EPSG:3857':'GOOGLE '+basemap.toUpperCase()}</div><div class="mw-north" aria-label="North">↑<small>N</small></div><div id="mw-renderer" aria-label="Project map"></div>${ids.length>located().length+sourceCount?`<div class="mw-unplaced-panel"><strong>Some wells lack header coordinates</strong><p>Wells with incomplete or conflicting header coordinates stay unplaced.</p>${!located().length?`<div class="mw-unplaced-wells">${ids.map(id=>`<button data-map-unplaced="${esc(id)}"><img src="${WELL_ICON_URL}" alt="" width="20" height="28"><span>${esc(wellName(id))}</span></button>`).join('')}</div><small>Unplaced wells — these are not map positions.</small>`:''}</div>`:''}<div id="mw-map-feedback" role="status"></div><div class="mw-map-controls"><button data-map-command="zoom-in" aria-label="Zoom in">＋</button><button data-map-command="zoom-out" aria-label="Zoom out">−</button><button data-map-command="fit" aria-label="Fit evidence">⌖</button></div></div><div id="mw-source-grids"></div><div class="mw-legend"><span><img src="${WELL_ICON_URL}" alt="" width="12" height="17">Wellhead</span><span><i class="mw-line"></i>Deviation trajectory</span><span><i class="mw-end"></i>Survey end</span></div></div><aside class="mw-inspector" id="mw-inspector" ${inspector?'':'hidden'}><div class="mw-panel-title">Inspector<button id="mw-inspector-close" aria-label="Collapse inspector">×</button></div>${selected?`<div class="mw-inspector-well-title"><h2>${esc(wellName(selected))}</h2><button data-map-well-menu="${esc(selected)}" aria-label="Well actions" aria-haspopup="menu">⋯</button></div><p class="sub">Surface well · ${esc(selected)}</p><dl><dt>Location reference</dt><dd>${p?'WGS84 · confirmed source':finitePair(retainedLocation(selected))?'Source X/Y grid':'Header coordinates unavailable'}</dd>${p?`<dt>Latitude / longitude</dt><dd class="mw-coordinates">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</dd>`:''}<dt>Deviation evidence</dt><dd>${deviations.length} imported ${deviations.length===1?'dataset':'datasets'}${pending.length?' · '+pending.length+' pending review':''}</dd></dl><label class="field">Active survey<select id="mw-active-survey"><option value="">Choose active survey</option>${datasets().filter(d=>d.family==='deviation'&&d.well===selected).map(d=>`<option value="${esc(d.id)}" ${host.getState().wellDrafts?.find(w=>w.id===selected)?.activeSurveyId===d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select></label><div class="mw-inspector-actions">${pending.length?'<button data-map-command="pending-surveys">Review pending surveys</button>':''}<button data-map-command="deviation" class="primary">＋ Add deviation data</button><button data-map-command="interpretation">Open in Interpretation</button><button data-map-command="evidence">View well evidence</button></div><div class="mw-style"><h3>APPEARANCE</h3><label class="field">Well symbol<select id="mw-symbol">${['Wellhead','Circle','Square'].map(s=>`<option ${settings().symbols?.[selected]===s?'selected':''}>${s}</option>`).join('')}</select></label><label class="mw-layer"><input id="mw-labels" type="checkbox" ${labels?'checked':''}>Show well names</label></div>`:'<div class="mw-inspector-empty">Select a well to inspect its location and add deviation evidence.</div>'}<div class="mw-path-issues">${pathIssues.map(i=>`<p>${esc(i)}</p>`).join('')}</div></aside></div><footer class="mw-status"><span>${located().length+sourceCount} plotted wells · ${paths.length} mapped deviation ${paths.length===1?'survey':'surveys'}</span><span>${sourceCount?'Source grid uses well header X/Y':'Field grid: Web Mercator E/N (km)'}</span></footer></section>`;
+ const project=host.getProject(),scope=session.user?.uid+':'+project.id;if(activeProject!==scope){activeProject=scope;selected='';search='';paths=[];pathIssues=[];loadedAt=0;loadedSignature='';loading=false;basemap='grid';zoom=1;focusWell='';pan=[0,0];measure=null;gridSelection='';folderBlocked=false;automaticLocations={};inspector=true;}
+ const grids=fieldGrids(),grid=fieldGrid(grids),ids=wells(),mapped=new Set(located().map(p=>p.id)),sourceCount=grids.filter(g=>g.id!=='geographic').flatMap(g=>g.points).filter(p=>!mapped.has(p.id)).length;
+ if(measure&&measure.gridId!==grid.id)measure=null;
+ const gridLabel=grid.id==='geographic'?'Field grid · local metres':'Field grid · source X/Y';if(!ids.includes(selected))selected=ids[0]||'';const p=located().find(w=>w.id===selected),deviations=datasets().filter(d=>d.family==='deviation'&&d.well===selected),pending=pendingSurveys(selected);
+ return `<section class="map-workspace ${inspector?'':'inspector-collapsed'}"><header class="mw-heading"><div><div class="study-kicker">SPATIAL WORKSPACE</div><h1>Project map</h1><p>${esc(project.name)} · ${located().length+sourceCount}/${ids.length} wells plotted</p></div><div class="actions"><button data-map-command="fit">Fit project</button><button id="mw-inspector-toggle" aria-expanded="${inspector}" aria-controls="mw-inspector">${inspector?'Hide':'Show'} inspector</button></div></header><div class="mw-ribbon" aria-label="Map ribbon">${menu('＋ Add',[['well','Import well locations…'],['deviation','Deviation data for selected well…',!selected],['spatial','Spatial data…'],['seismic','Seismic data…',!project.workflows?.includes('seismic')]])}${menu('Basemap',[['grid','Field grid'],['roadmap','Google Roadmap'],['satellite','Google Satellite'],['hybrid','Google Hybrid'],['terrain','Google Terrain']])}${menu('View',[['fit','Fit all evidence'],['labels','Show / hide well labels'],['wells','Show / hide wells'],['trajectories','Show / hide deviation'],['inspector','Show / hide inspector'],...(settings().removedWells?.length?[['restore-wells','Removed wells…']]:[])])}${menu('Measure',[['measure-distance','Distance between points'],['measure-area','Polygon area'],['measure-surface','Surface to surface'],['measure-bottom','Survey end to survey end']])}${menu('Style',[['style','Selected well symbol…',!selected]])}${menu('Export',[['export','Field map (SVG)',basemap!=='grid']])}<span class="mw-ribbon-status">${loading?'Loading evidence…':'Project evidence'}</span></div><div class="mw-body"><aside class="mw-contents"><div class="mw-panel-title">Contents <button data-map-command="refresh" aria-label="Refresh map evidence">↻</button></div><label class="mw-search">${host.icon('search')}<input id="mw-search" aria-label="Find a well" placeholder="Find a well…" value="${esc(search)}"></label><h3>BASEMAP</h3><div class="mw-basemap">${basemap==='grid'?esc(gridLabel):'Google '+basemap}</div><h3>PROJECT LAYERS</h3><label class="mw-layer"><input id="mw-wells" type="checkbox" ${showWells?'checked':''}>Wells <span>${ids.length}</span></label><label class="mw-layer"><input id="mw-deviation" type="checkbox" ${showDeviation?'checked':''}>Deviation trajectories <span>${paths.length}</span></label><h3>WELLS</h3><div class="mw-well-list">${ids.length?ids.map(id=>`<div class="mw-well-row" ${wellName(id).toLowerCase().includes(search.toLowerCase())||id.toLowerCase().includes(search.toLowerCase())?'':'hidden'}><input type="checkbox" data-map-visible="${esc(id)}" aria-label="Show ${esc(wellName(id))}" ${settings().hiddenWells?.includes(id)?'':'checked'}><button data-map-well="${esc(id)}" aria-pressed="${id===selected}"><img src="${WELL_ICON_URL}" alt="" class="mw-well-svg"><span><strong>${esc(wellName(id))}</strong><small>${esc(locationReason(id))}</small></span></button><button data-map-well-menu="${esc(id)}" aria-label="Actions for ${esc(wellName(id))}" aria-haspopup="menu">⋯</button></div>`).join(''):'<p class="sub">No uploaded wells match an imported well header.</p>'}</div><p class="mw-reference-note">Well locations come from the matched headers.</p></aside><div class="mw-map-column">${project.storage==='local'?'<div id="mw-folder-access" class="mw-folder-access" hidden><span>Folder access is required to load local survey files and write pending changes.</span><button data-map-command="reconnect-folder">Reconnect project folder</button></div>':''}${basemap==='grid'?`<div class="mw-grid-tools" aria-label="Field grid tools"><button data-map-command="measure-distance" aria-pressed="${measure?.basis==='distance'}">Measure</button><button data-map-command="measure-area" aria-pressed="${measure?.basis==='area'}">Area</button>${grids.length>1?`<label>Coordinate grid <select id="mw-grid-select">${grids.map(g=>`<option value="${esc(g.id)}" ${g.id===grid.id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>`:''}</div>`:''}${measure?`<div class="mw-measure-toolbar"><output id="mw-measure-status" aria-live="polite">${esc(measureText())}</output><div>${measure.basis==='area'?'<button data-map-command="finish-area" disabled>Finish area</button> ':''}<button data-map-command="cancel-measure">Clear measurement</button></div></div>`:''}<div class="mw-canvas" id="mw-canvas"><div class="mw-map-label">${basemap==='grid'?esc(gridLabel.toUpperCase()):'GOOGLE '+basemap.toUpperCase()}</div><div class="mw-north" aria-label="North">↑<small>N</small></div><div id="mw-renderer" aria-label="Project map"></div>${ids.length>located().length+sourceCount?`<div class="mw-unplaced-panel"><strong>Some wells lack header coordinates</strong><p>Wells with incomplete or conflicting header coordinates stay unplaced.</p>${!located().length?`<div class="mw-unplaced-wells">${ids.map(id=>`<button data-map-unplaced="${esc(id)}"><img src="${WELL_ICON_URL}" alt="" width="20" height="28"><span>${esc(wellName(id))}</span></button>`).join('')}</div><small>Unplaced wells — these are not map positions.</small>`:''}</div>`:''}<div id="mw-map-feedback" role="status"></div><div class="mw-map-controls"><button data-map-command="zoom-in" aria-label="Zoom in">＋</button><button data-map-command="zoom-out" aria-label="Zoom out">−</button><button data-map-command="fit" aria-label="Fit evidence">⌖</button></div></div><div class="mw-legend"><span><img src="${WELL_ICON_URL}" alt="" width="12" height="17">Wellhead</span><span><i class="mw-line"></i>Deviation trajectory</span><span><i class="mw-end"></i>Survey end</span></div></div><aside class="mw-inspector" id="mw-inspector" ${inspector?'':'hidden'}><div class="mw-panel-title">Inspector<button id="mw-inspector-close" aria-label="Collapse inspector">×</button></div>${selected?`<div class="mw-inspector-well-title"><h2>${esc(wellName(selected))}</h2><button data-map-well-menu="${esc(selected)}" aria-label="Well actions" aria-haspopup="menu">⋯</button></div><p class="sub">Surface well · ${esc(selected)}</p><dl><dt>Location reference</dt><dd>${p?'WGS84 · confirmed source':finitePair(retainedLocation(selected))?'Source X/Y grid':'Header coordinates unavailable'}</dd>${p?`<dt>Latitude / longitude</dt><dd class="mw-coordinates">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</dd>`:''}<dt>Deviation evidence</dt><dd>${deviations.length} imported ${deviations.length===1?'dataset':'datasets'}${pending.length?' · '+pending.length+' pending review':''}</dd></dl><label class="field">Active survey<select id="mw-active-survey"><option value="">Choose active survey</option>${datasets().filter(d=>d.family==='deviation'&&d.well===selected).map(d=>`<option value="${esc(d.id)}" ${host.getState().wellDrafts?.find(w=>w.id===selected)?.activeSurveyId===d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select></label><div class="mw-inspector-actions">${pending.length?'<button data-map-command="pending-surveys">Review pending surveys</button>':''}<button data-map-command="deviation" class="primary">＋ Add deviation data</button><button data-map-command="interpretation">Open in Interpretation</button><button data-map-command="evidence">View well evidence</button></div><div class="mw-style"><h3>APPEARANCE</h3><label class="field">Well symbol<select id="mw-symbol">${['Wellhead','Circle','Square'].map(s=>`<option ${settings().symbols?.[selected]===s?'selected':''}>${s}</option>`).join('')}</select></label><label class="mw-layer"><input id="mw-labels" type="checkbox" ${labels?'checked':''}>Show well names</label></div>`:'<div class="mw-inspector-empty">Select a well to inspect its location and add deviation evidence.</div>'}<div class="mw-path-issues">${pathIssues.map(i=>`<p>${esc(i)}</p>`).join('')}</div></aside></div><footer class="mw-status"><span>${located().length+sourceCount} plotted wells · ${paths.length} mapped deviation ${paths.length===1?'survey':'surveys'}</span><span>${basemap!=='grid'?'Geographic well and survey evidence':grid.id==='geographic'?'Field grid uses a local WGS84 projection':'Source X/Y · '+(grid.unit===null?'units unspecified':grid.name)}</span></footer></section>`;
 }
 export function bindMapWorkspace(){
- if(!$('#mw-canvas'))return;const project=host.getProject();showWells=settings().showWells!==false;showDeviation=settings().showDeviation!==false;labels=settings().labels!==false;
+ if(!$('#mw-canvas'))return;const project=host.getProject(),folder=$('#mw-folder-access');
+ if(folder){
+  folder.hidden=!folderBlocked;
+  repository.folderCanWrite(project.id).then(writable=>{if(folder.isConnected){folderBlocked=!writable;folder.hidden=writable;}}).catch(error=>{if(folder.isConnected)host.toast(error.message);});
+ }
+ $('#mw-grid-select')?.addEventListener('change',e=>{gridSelection=e.target.value;measure=null;pan=[0,0];zoom=1;focusWell='';draw();$('#mw-grid-select')?.focus();});
+ if(measure)updateMeasurement();showWells=settings().showWells!==false;showDeviation=settings().showDeviation!==false;labels=settings().labels!==false;
  const toggle=()=>{inspector=!inspector;draw();};$('#mw-inspector-toggle').onclick=toggle;$('#mw-inspector-close')?.addEventListener('click',toggle);
  document.querySelectorAll('[data-map-well]').forEach(b=>{b.onclick=()=>selectMapWell(b.dataset.mapWell);b.oncontextmenu=e=>wellMenu(e,b.dataset.mapWell,b);b.onkeydown=e=>{if(e.key==='ContextMenu'||e.shiftKey&&e.key==='F10')wellMenu(e,b.dataset.mapWell,b);};});
  document.querySelectorAll('[data-map-well-menu]').forEach(b=>b.onclick=e=>wellMenu(e,b.dataset.mapWellMenu,b));
@@ -236,15 +272,21 @@ export function bindMapWorkspace(){
   if(!map.isConnected){document.removeEventListener('keydown',exitMeasure);return;}
   if(event.key==='Escape'&&measure&&!event.defaultPrevented&&!document.querySelector('dialog[open]')){
    document.removeEventListener('keydown',exitMeasure);
-   measure=null;draw();$('.mw-menu summary')?.focus();
+   measure=null;draw();$('[data-map-command=measure-distance]')?.focus();
   }
  });
  renderMap();const signature=datasets().map(d=>d.id+JSON.stringify(d.references||{})).join('|');if(signature!==loadedSignature&&!loading)refresh();else if(project.storage==='cloud'&&Date.now()-loadedAt>30000&&!loading)refresh();else if(!loadedAt&&!loading)refresh();
 }
 function draw(){closeWellMenu();host.render();}
 async function command(action){try{
- if(action==='measure-surface'||action==='measure-bottom'){startMeasure(action==='measure-surface'?'surface':'bottom');return;}
- if(action==='cancel-measure'){measure=null;draw();return;}
+ if(action.startsWith('measure-')){startMeasure(action.slice(8));return;}
+ if(action==='finish-area'&&measure?.basis==='area'&&measure.vertices.length>=3){measure.done=true;updateMeasurement();renderMap();return;}
+ if(action==='reconnect-folder'){
+  try{await host.reconnectProjectFolder();folderBlocked=false;await refresh();}
+  catch(error){if(error.code==='project_folder_access')host.folderReconnectDialog(refresh);else if(error.name!=='AbortError')throw error;}
+  return;
+ }
+ if(action==='cancel-measure'){measure=null;draw();$('[data-map-command=measure-distance]')?.focus();return;}
  if(action==='interpretation'&&selected){host.openWellWorkspace('interpretation',sourceWell(selected));return;}
  if(action==='restore-wells'){restoreWells();return;}
  if(action==='inspector'){inspector=!inspector;draw();return;}
@@ -254,95 +296,195 @@ async function command(action){try{
  if(action==='pending-surveys'){const pending=pendingSurveys(selected)[0];if(pending)await reviewImport(pending.importId);return;}
  if(action==='evidence'){host.navigate('files');return;}
  if(action==='refresh'){await refresh();return;}
- if(action==='labels'){labels=!labels;draw();return;}if(action==='wells'){showWells=!showWells;draw();return;}if(action==='trajectories'){showDeviation=!showDeviation;draw();return;}
+ if(action==='labels'){saveSetting('labels',!labels);draw();return;}if(action==='wells'){saveSetting('showWells',!showWells);draw();return;}if(action==='trajectories'){saveSetting('showDeviation',!showDeviation);draw();return;}
  if(action==='style'){inspector=true;draw();$('#mw-symbol')?.focus();return;}
  if(['grid','roadmap','satellite','hybrid','terrain'].includes(action)){basemap=action;measure=null;pan=[0,0];draw();return;}
  if(action==='fit'){zoom=1;focusWell='';pan=[0,0];renderMap();return;}if(action==='zoom-in'||action==='zoom-out'){if(basemap!=='grid'&&googleMap){googleMap.setZoom(googleMap.getZoom()+(action==='zoom-in'?1:-1));return;}zoom=Math.max(.2,Math.min(30,zoom*(action==='zoom-in'?1.4:1/1.4)));renderMap();return;}
- if(action==='export'){const svg=$('#mw-renderer svg');if(!svg){host.toast('Select Field grid to export the map.');return;}const copy=svg.cloneNode(true);copy.setAttribute('xmlns','http://www.w3.org/2000/svg');const style=document.createElementNS('http://www.w3.org/2000/svg','style');style.textContent='text{font:11px sans-serif;fill:#264b42}.mw-gridline{stroke:#dce6e1;stroke-width:1}.mw-trajectory{stroke:#b47c51;stroke-width:2;fill:none}.mw-point{fill:#fff;stroke:#087c73;stroke-width:1.5}';copy.prepend(style);host.download(host.getProject().name+'-map.svg',new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml'}));}
+ if(action==='export'){const svg=$('#mw-renderer svg');if(!svg){host.toast('Select Field grid to export the map.');return;}const copy=svg.cloneNode(true);copy.setAttribute('xmlns','http://www.w3.org/2000/svg');const style=document.createElementNS('http://www.w3.org/2000/svg','style');style.textContent='text{font:11px sans-serif;fill:#264b42}.mw-gridline{stroke:#dce6e1;stroke-width:1}.mw-trajectory{stroke:#b47c51;stroke-width:2;fill:none}.mw-point{fill:#fff;stroke:#087c73;stroke-width:1.5}';style.textContent+=".mw-survey-end{fill:#fff;stroke:#b47c51;stroke-width:1.5}.mw-measure-shape{stroke:#176c55;stroke-width:2;fill:#087c7322}.mw-grid-edge{fill:none;stroke:#8ca89a}";copy.prepend(style);host.download(host.getProject().name+'-map.svg',new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml'}));}
  }catch(error){host.toast(error.message);}}
 async function refresh(){
- const project=host.getProject(),id=project.id,uid=session.user?.uid;loading=true;try{if(project.storage==='cloud')await host.refreshCloudMapLocations();await host.flush();if(project.storage==='cloud'){const data=await loadCloud(project);if(host.getProject()?.id!==id||session.user?.uid!==uid)return;applyImportedEvidence(host.getState(),data);}await placeReferencedWells(project,uid+':'+id);if(!isScope(uid+':'+id))return;await readDeviations(project);if(host.getProject()?.id!==id||session.user?.uid!==uid)return;loadedSignature=datasets().map(d=>d.id+JSON.stringify(d.references||{})).join('|');loadedAt=Date.now();}catch(error){if(activeProject===uid+':'+id)host.toast(error.message);}finally{if(activeProject===uid+':'+id){loading=false;if($('#mw-canvas'))draw();}}
+ const project=host.getProject(),id=project.id,uid=session.user?.uid;loading=true;try{if(project.storage==='cloud')await host.refreshCloudMapLocations();if(project.storage==='cloud'){const data=await loadCloud(project);if(host.getProject()?.id!==id||session.user?.uid!==uid)return;applyImportedEvidence(host.getState(),data);}await placeReferencedWells(project,uid+':'+id);if(!isScope(uid+':'+id))return;await readDeviations(project);if(host.getProject()?.id!==id||session.user?.uid!==uid)return;loadedSignature=datasets().map(d=>d.id+JSON.stringify(d.references||{})).join('|');loadedAt=Date.now();}catch(error){if(activeProject===uid+':'+id)host.toast(error.message);}finally{if(activeProject===uid+':'+id){loading=false;if($('#mw-canvas'))draw();}}
 }
 async function readDeviations(project){
- const result=[],issues=[],uid=session.user?.uid;
- for(const d of datasets().filter(d=>d.family==='deviation')){
-  const well=host.getState().wellDrafts?.find(w=>w.id===d.well);
-  const surveys=datasets().filter(s=>s.family==='deviation'&&s.well===d.well),active=surveys.find(s=>s.id===well?.activeSurveyId)?.id||(surveys.length===1?d.id:null);if(!active){if(surveys[0]?.id===d.id)issues.push((well?.name||d.well)+': choose the active survey in the inspector.');continue;}if(active!==d.id)continue;
-  try{if(d.issues?.some(i=>i.severity==='blocking'))throw new Error('Resolve import validation before map use.');if(!well)throw new Error('Assign the survey to a registered well.');const source=await retainedRows(host,d,50000),points=globalThis.StrataxWellEvidence.trajectory(source.rows,{...d,metadata:source.metadata},well);if(points.length<2)throw new Error('At least two referenced stations are required.');result.push({id:d.id,well:d.well,name:d.name,points});}catch(error){issues.push((well?.name||d.well||d.name)+': '+error.message);}
+ const result=[],issues=[],uid=session.user?.uid,matches=headerMatches(),data=datasets();
+ for(const [id,{record,dataset}] of matches){
+  const well=host.getState().wellDrafts?.find(w=>w.id===id),header=retainedLocation(id,matches);
+  const surveys=data.filter(d=>d.family==='deviation'&&(d.well===id||d.well===sourceWell(id)));
+  const survey=surveys.find(d=>d.id===well?.activeSurveyId)||(surveys.length===1?surveys[0]:null);
+  if(!survey){if(surveys.length)issues.push(wellName(id)+': choose the active survey in the inspector.');continue;}
+  try{
+   if(survey.issues?.some(i=>i.severity==='blocking'))throw new Error('Resolve import validation before map use.');
+   const source=await retainedRows(host,survey,50000);
+   const d={...survey,columns:source.columns,references:source.references,metadata:source.metadata};
+   const origin={...well,...record,sourceCoordinates:{...header,crs:sourceEpsg(header?.crs)||''}};
+   const evidence=globalThis.StrataxWellEvidence;
+   let points=[],native=[],geographicError;
+   try{points=evidence.trajectory(source.rows,d,origin);}catch(error){geographicError=error;}
+   const crs=sourceEpsg(header?.crs),surveyCrs=sourceEpsg(d.references.crs),unit=sourceGridUnit(header,dataset);
+   if(finitePair(header)&&!header.coordinateConflict&&!header.conflictingCRS&&crs!=='EPSG:4326'&&crs===surveyCrs&&(!d.references.crs||surveyCrs)){
+    const xUnit=evidence.length(d.columns?.[d.mapping?.x]?.unit),yUnit=evidence.length(d.columns?.[d.mapping?.y]?.unit);
+    if((!xUnit&&!yUnit)||(xUnit===yUnit&&(!unit||unit===xUnit))){
+     try{native=evidence.trajectory(source.rows,{...d,references:{...d.references,crs}},origin,{sourceGrid:true,gridUnit:unit});}
+     catch(error){geographicError=error;}
+    }
+   }
+   if(!points.length&&native.length&&surveyCrs&&project.storage==='cloud'&&located().some(p=>p.id===id)){
+    try{points=await transformSurvey(project,surveyCrs,native,uid);}
+    catch(error){geographicError=error;}
+   }
+   if(points.length<2&&native.length<2)throw geographicError||new Error('At least two referenced stations are required.');
+   result.push({id:survey.id,well:id,points:points.length>=2?points:[],native:native.length>=2?native:[]});
+  }catch(error){issues.push(wellName(id)+': '+error.message);}
  }
  if(host.getProject()?.id===project.id&&session.user?.uid===uid){paths=result;pathIssues=issues;}
 }
-function sourceGridGroups(includeHidden=false){
- const groups=new Map(),matches=headerMatches(),mapped=new Set(located().map(p=>p.id));
- for(const [id,{dataset}]of matches){
-  if(mapped.has(id)||settings().removedWells?.includes(id))continue;
-  const point=retainedLocation(id,matches);
-  if(!finitePair(point)||point.coordinateConflict||point.conflictingCRS)continue;
-  const key=JSON.stringify([dataset.id,sourceEpsg(point.crs)]);
-  if(!groups.has(key))groups.set(key,{name:dataset.name,points:[]});
-  if(includeHidden||!settings().hiddenWells?.includes(id))groups.get(key).points.push({...point,id});
+async function transformSurvey(project,crs,stations,uid){
+ const points=[];
+ for(let i=0;i<stations.length;i+=100){
+  if(!isScope(uid+':'+project.id))throw new Error('The project changed while loading evidence.');
+  const batch=stations.slice(i,i+100);
+  const response=await api('/api/projects/'+project.id+'/locations/preview',{method:'POST',body:{crs,points:batch.map(({x,y},j)=>({id:'station-'+(i+j),x,y}))}});
+  if(response.points.length!==batch.length||response.points.some(p=>!validPoint(p)||p.conflicts?.length))throw new Error('The survey could not be placed on the geographic map.');
+  points.push(...response.points);
  }
- return [...groups.values()].filter(group=>group.points.length);
+ return points;
 }
-function renderSourceGrids(groups){
- return groups.map(({name,points})=>{
-  const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
-  const left=Math.min(...xs),bottom=Math.min(...ys),width=Math.max(...xs)-left,height=Math.max(...ys)-bottom;
-  const scale=Math.min(740/(width||1),390/(height||1));
-  const marks=points.map(p=>{
-   const x=450+(p.x-left-width/2)*scale,y=230-(p.y-bottom-height/2)*scale;
-   return `<g data-map-point="${esc(p.id)}" tabindex="0" role="button" aria-label="${esc(wellName(p.id))}" transform="translate(${x} ${y})"><title>${esc(wellName(p.id))} · X ${p.x} · Y ${p.y}</title><circle r="6" fill="#087c73"/>${labels?`<text x="10" y="-8" fill="#153e35" font-size="12">${esc(wellName(p.id))}</text>`:''}</g>`;
-  }).join('');
-  return `<figure style="margin:12px 16px;background:#fafcf9;border:1px solid #dce7da;border-radius:8px"><figcaption style="padding:12px 16px"><strong>${esc(name||'Well header')}</strong><br><small>Source X/Y grid · geographic position unavailable</small></figcaption><svg viewBox="0 0 900 460" width="100%" style="display:block" aria-label="Well header coordinates"><path d="M45 25V430H865" fill="none" stroke="#91aaa0"/><text x="25" y="30" fill="#39594d">Y</text><text x="865" y="450" fill="#39594d">X</text>${marks}</svg></figure>`;
- }).join('');
+function sourceGridUnit(point,dataset){
+ const evidence=globalThis.StrataxWellEvidence;
+ const x=evidence.length(dataset.columns?.[dataset.mapping?.x]?.unit),y=evidence.length(dataset.columns?.[dataset.mapping?.y]?.unit);
+ if(x||y)return x===y?x:null;
+ const crs=sourceEpsg(point?.crs);
+ return /^EPSG:(3857|2639[1-3]|32[67]\d\d)$/.test(crs)?1:null;
 }
-function bindSourceGrid(element){
- element.querySelectorAll('[data-map-point]').forEach(marker=>{
-  marker.onclick=()=>selectMapWell(marker.dataset.mapPoint);
-  marker.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();marker.click();}};
- });
+function sourceGridGroups(){
+ const groups=new Map(),matches=headerMatches();
+ const mapped=new Set(located().map(p=>p.id)),needed=new Set();
+ const groupKey=(dataset,point)=>JSON.stringify([dataset.id,sourceEpsg(point?.crs),sourceGridUnit(point,dataset)]);
+ for(const [id,{dataset}] of matches){
+  if(!mapped.has(id)||paths.some(path=>path.well===id&&path.native.length&&!path.points.length))needed.add(groupKey(dataset,retainedLocation(id,matches)));
+ }
+ for(const [id,{dataset}] of matches){
+  if(settings().removedWells?.includes(id))continue;
+  const point=retainedLocation(id,matches),crs=sourceEpsg(point?.crs),unit=sourceGridUnit(point,dataset);
+  if(!finitePair(point)||point.coordinateConflict||point.conflictingCRS||crs==='EPSG:4326')continue;
+  const native=paths.find(path=>path.well===id&&path.native.length);
+  const key=groupKey(dataset,point);
+  if(!needed.has(key))continue;
+  if(!groups.has(key))groups.set(key,{id:key,name:dataset.name||'Source X/Y',unit,points:[],lines:[]});
+  const grid=groups.get(key);
+  grid.points.push({...point,id,xy:[point.x,point.y]});
+  if(native)grid.lines.push({...native,xy:native.native.map(p=>[p.x,p.y])});
+ }
+ return [...groups.values()];
+}
+function fieldGrids(){
+ const surfaces=located(),lines=paths.filter(p=>p.points.length&&wells().includes(p.well));
+ const reference=surfaces[0]||lines[0]?.points[0];
+ const grids=sourceGridGroups();
+ if(!reference)return grids;
+ const radians=Math.PI/180,metres=6371008.8*radians;
+ const xy=p=>[((p.lng-reference.lng+540)%360-180)*metres*Math.cos(reference.lat*radians),(p.lat-reference.lat)*metres];
+ return [{id:'geographic',name:'Geographic wells',unit:1,points:surfaces.map(p=>({...p,xy:xy(p)})),lines:lines.map(p=>({...p,xy:p.points.map(xy)}))},...grids];
+}
+function fieldGrid(grids=fieldGrids()){
+ return grids.find(g=>g.id===gridSelection)||grids.find(g=>g.lines.length)||grids[0]||{id:'empty',name:'Source X/Y',unit:null,points:[],lines:[]};
 }
 function renderMap(){
- resizeObserver?.disconnect();const element=$('#mw-renderer');if(!element)return;const generation=++mapGeneration;googleMap=null;
- const points=showWells?located().filter(p=>!settings().hiddenWells?.includes(p.id)):[],lines=showDeviation?paths.filter(p=>wells().includes(p.well)&&!settings().hiddenWells?.includes(p.well)):[],site=host.getProject().coordinates;
+ resizeObserver?.disconnect();const element=$('#mw-renderer');if(!element)return;
+ const generation=++mapGeneration,hidden=new Set(settings().hiddenWells||[]);googleMap=null;
+ const visible=id=>!hidden.has(id);
  element.classList.toggle('mw-measuring',!!measure);
- const sourceGrids=showWells?sourceGridGroups():[],sourceMarkup=renderSourceGrids(sourceGrids);
- const extra=$('#mw-source-grids');
- if(extra){extra.innerHTML=points.length||basemap!=='grid'?sourceMarkup:'';bindSourceGrid(extra);}
- if(basemap==='grid'&&!points.length&&sourceMarkup){
-  element.innerHTML=sourceMarkup;
-  bindSourceGrid(element);
+ if(basemap!=='grid'){
+  element.innerHTML='';
+  const points=showWells?located().filter(p=>visible(p.id)):[],lines=showDeviation?paths.filter(p=>p.points.length&&wells().includes(p.well)&&visible(p.well)):[];
+  if(!points.length&&!lines.length){element.innerHTML='<p class="mw-empty-map">No geographically referenced wells or surveys are visible. Use Field grid for source X/Y.</p>';return;}
+  mountWorkspaceMap(element,{points,paths:lines,basemap,labels,symbols:settings().symbols||{},select:selectMapWell,contextMenu:(id,event)=>wellMenu(event,id),focus:focusWell?points.find(p=>p.id===focusWell):null}).then(map=>{if(generation===mapGeneration)googleMap=map;}).catch(error=>{if(generation===mapGeneration&&element.isConnected)element.textContent=error.message+' Field grid remains available.';});
   return;
  }
- if(basemap!=='grid'){element.innerHTML='';mountWorkspaceMap(element,{points,paths:lines,site,basemap,labels,symbols:settings().symbols||{},select:id=>{selected=id;inspector=true;draw();},contextMenu:(id,event)=>wellMenu(event,id),focus:focusWell?points.find(p=>p.id===focusWell):null}).then(map=>{if(generation===mapGeneration)googleMap=map;}).catch(error=>{if(generation===mapGeneration&&element.isConnected)element.textContent=error.message+' Field grid remains available.';});return;}
- const drawGrid=()=>{if(!element.isConnected)return;const width=Math.max(250,element.clientWidth),height=Math.max(360,element.clientHeight);const positions=[...points,...lines.flatMap(p=>p.points),...(validPoint(site)?[site]:[])];const feedback=$('#mw-map-feedback');if(feedback)feedback.textContent=$('.mw-unplaced-panel')?'':!positions.length?(wells().length?'Waiting for usable coordinates from well headers.':'Add a site location or well data to begin.') : '';
-  const xy=positions.map(projection),xs=xy.map(p=>p[0]),ys=xy.map(p=>p[1]);let cx=xy.length?(Math.min(...xs)+Math.max(...xs))/2:0,cy=xy.length?(Math.min(...ys)+Math.max(...ys))/2:0;const target=points.find(p=>p.id===focusWell);if(target)[cx,cy]=projection(target);cx+=pan[0];cy+=pan[1];const span=(target?1000:Math.max(xy.length?Math.max(...xs)-Math.min(...xs):0,xy.length?(Math.max(...ys)-Math.min(...ys))*width/height:0,1000))*1.4/zoom,vertical=span*height/width;const px=p=>{const [x,y]=projection(p);return [width/2+(x-cx)/span*(width-90),height/2-(y-cy)/vertical*(height-90)];};
-  let grid='';for(let i=1;i<=4;i++){const x=45+(width-90)*i/5,y=45+(height-90)*i/5;grid+=`<path class="mw-gridline" d="M${x} 35V${height-35}M35 ${y}H${width-35}"/>`;if(positions.length)grid+=`<text x="${x}" y="${height-15}" text-anchor="middle">${((cx-span/2+span*i/5)/1000).toFixed(2)}</text><text x="5" y="${y-5}">${((cy+vertical/2-vertical*i/5)/1000).toFixed(2)}</text>`;}
-  let geometry=lines.map(line=>`<polyline class="mw-trajectory" data-map-point="${esc(line.well)}" points="${line.points.map(p=>px(p).join(',')).join(' ')}"/><circle class="mw-survey-end" data-map-point="${esc(line.well)}" cx="${px(line.points.at(-1))[0]}" cy="${px(line.points.at(-1))[1]}" r="4"/>`).join('');
-  if(validPoint(site)){const [x,y]=px(site);geometry+=`<path d="M${x} ${y-6}l6 6 -6 6 -6 -6Z" fill="#7d9186"/><text x="${x+10}" y="${y+4}">Project site</text>`;}
-  for(const point of points){const [x,y]=px(point),symbol=settings().symbols?.[point.id]||'Wellhead';geometry+=`<g data-map-point="${esc(point.id)}" transform="translate(${x},${y})"><title>${esc(wellName(point.id))} · ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</title><circle r="18" fill="${point.id===selected?'#e2f2ec':'transparent'}"/>${symbol==='Circle'?'<circle class="mw-point" r="5"/>':symbol==='Square'?'<rect class="mw-point" x="-5" y="-5" width="10" height="10"/>':`<image href="${WELL_ICON_URL}" x="-11" y="-18" width="22" height="30"/>`}${labels?`<text x="0" y="-23" text-anchor="middle">${esc(wellName(point.id))}</text>`:''}</g>`;}
-  element.innerHTML=`<svg id="mw-field-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Field map of confirmed project geometry"><rect width="${width}" height="${height}" fill="#f6faf8"/>${grid}<g id="mw-map-geometry">${geometry}</g><line id="mw-measure-line" visibility="hidden" />${positions.length?`<path d="M45 ${height-46}h80m-80 -4v8m80 -8v8" stroke="#486b5c"/><text x="45" y="${height-56}">${(span*80/(width-90)/1000).toFixed(2)} km · grid distance</text>`:''}</svg>`;
-  const svg=element.querySelector('svg'),line=svg.querySelector('#mw-measure-line');
-  const start=measure?.from&&endpointFor(measure.from,measure.basis);
-  const end=measure?.to&&endpointFor(measure.to,measure.basis);
-  const resting=feedback?.textContent||'';
-  const showLine=(a,b)=>{if(!a||!b){line.setAttribute('visibility','hidden');return;}line.setAttribute('x1',a[0]);line.setAttribute('y1',a[1]);line.setAttribute('x2',b[0]);line.setAttribute('y2',b[1]);line.setAttribute('visibility','visible');};
-  showLine(start&&px(start),end&&px(end));
-  let drag=null;
-  svg.onpointerdown=e=>{if(measure||e.button!==0||e.target.closest('[data-map-point]'))return;drag={x:e.clientX,y:e.clientY};svg.setPointerCapture(e.pointerId);};
-  svg.onpointermove=e=>{
-   if(drag){svg.querySelector('#mw-map-geometry').setAttribute('transform',`translate(${e.clientX-drag.x} ${e.clientY-drag.y})`);return;}
-   const id=e.target.closest('[data-map-point]')?.dataset.mapPoint,point=id&&endpointFor(id,measure?.basis||'surface');
-   if(feedback)feedback.textContent=id?wellName(id)+(point?' · '+point.lat.toFixed(5)+', '+point.lng.toFixed(5):' · endpoint unavailable'):resting;
-   if(!start||end)return;
-   const rect=svg.getBoundingClientRect(),x=(e.clientX-rect.left)*width/rect.width,y=(e.clientY-rect.top)*height/rect.height;
-   showLine(px(start),point?px(point):[x,y]);
-   const status=$('#mw-measure-status');if(status)status.textContent=point&&id!==measure.from?wellName(measure.from)+' to '+wellName(id)+' · '+mapDistance(start,point).toFixed(1)+' m (preview)':measureText();
+ const grid=fieldGrid(),points=showWells?grid.points.filter(p=>visible(p.id)):[],lines=showDeviation?grid.lines.filter(p=>visible(p.well)):[];
+ const positions=[...points.map(p=>p.xy),...lines.flatMap(p=>p.xy)];
+ const bounds=positions.reduce(([left,right,bottom,top],[x,y])=>[Math.min(left,x),Math.max(right,x),Math.min(bottom,y),Math.max(top,y)],[Infinity,-Infinity,Infinity,-Infinity]);
+ const drawGrid=()=>{
+  if(!element.isConnected)return;
+  const width=Math.max(260,element.clientWidth),height=Math.max(340,element.clientHeight),left=67,right=width-42,top=66,bottom=height-74;
+  const [minX,maxX,minY,maxY]=positions.length?bounds:[0,0,0,0];
+  const target=points.find(p=>p.id===focusWell)?.xy;
+  const [cx,cy]=target||[(minX+maxX)/2,(minY+maxY)/2];
+  const scale=zoom/Math.max((maxX-minX)/(right-left)*1.24,(maxY-minY)/(bottom-top)*1.24,(!positions.length||maxX===minX&&maxY===minY)?1:1e-9);
+  const ox=(left+right)/2,oy=(top+bottom)/2;
+  const px=([x,y])=>[ox+(x-cx-pan[0])*scale,oy-(y-cy-pan[1])*scale];
+  const xy=([x,y])=>[(x-ox)/scale+cx+pan[0],(oy-y)/scale+cy+pan[1]];
+  const axisFactor=grid.unit===null?1:grid.unit/1000;
+  const tick=(value)=>Number((value*axisFactor).toPrecision(7)).toLocaleString(undefined,{maximumFractionDigits:8});
+  const unit=grid.unit===null?'source units':'km';
+  let rules='';
+  for(let i=0;i<=5;i++){
+   const x=left+(right-left)*i/5,y=top+(bottom-top)*i/5,[east,north]=xy([x,y]);
+   rules+=`<path class="mw-gridline" d="M${x} ${top}V${bottom}M${left} ${y}H${right}"/>${positions.length?`<text x="${x}" y="${bottom+17}" text-anchor="middle">${tick(east)}</text><text x="${left-6}" y="${y+3}" text-anchor="end">${tick(north)}</text>`:''}`;
+  }
+  const trajectories=lines.map(line=>{
+   const coordinates=line.xy.map(px),[x,y]=coordinates.at(-1);
+   return `<polyline class="mw-trajectory" data-map-point="${esc(line.well)}" points="${coordinates.map(p=>p.join(',')).join(' ')}"/><circle class="mw-survey-end" data-map-point="${esc(line.well)}" cx="${x}" cy="${y}" r="4"><title>${esc(wellName(line.well))} · survey end</title></circle>`;
+  }).join('');
+  const marks=points.map(point=>{
+   const [x,y]=px(point.xy),symbol=settings().symbols?.[point.id]||'Wellhead';
+   const marker=symbol==='Circle'?'<circle class="mw-point" r="5"/>':symbol==='Square'?'<rect class="mw-point" x="-5" y="-5" width="10" height="10"/>':`<image href="${WELL_ICON_URL}" x="-10" y="-23" width="20" height="26"/>`;
+   return `<g data-map-point="${esc(point.id)}" transform="translate(${x},${y})" tabindex="0" role="button" aria-label="${esc(wellName(point.id))}"><title>${esc(wellName(point.id))}</title><circle r="13" fill="${point.id===selected?'#e2f2ec':'transparent'}"/>${marker}${labels?`<text y="-27" text-anchor="middle">${esc(wellName(point.id))}</text>`:''}</g>`;
+  }).join('');
+  const barValue=80/scale,bar=Math.pow(10,Math.floor(Math.log10(barValue))),step=(barValue/bar>=5?5:barValue/bar>=2?2:1)*bar,barWidth=step*scale;
+  const scaleBar=positions.length?`<path d="M${left} ${height-18}h${barWidth}m-${barWidth} -4v8m${barWidth} -8v8" stroke="#486b5c"/><text x="${left+barWidth+7}" y="${height-15}">${metricText(step,1,grid)}</text>`:'';
+  element.innerHTML=`<svg id="mw-field-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" aria-label="Field grid of wells and deviation trajectories"><rect width="${width}" height="${height}" fill="#f9fcfa"/><defs><clipPath id="mw-grid-clip"><rect x="${left}" y="${top}" width="${right-left}" height="${bottom-top}"/></clipPath></defs>${rules}<rect class="mw-grid-edge" x="${left}" y="${top}" width="${right-left}" height="${bottom-top}"/><text x="${ox}" y="${bottom+36}" text-anchor="middle">X position (${unit})</text><text transform="translate(13 ${oy}) rotate(-90)" text-anchor="middle">Y position (${unit})</text>${scaleBar}<g clip-path="url(#mw-grid-clip)"><g id="mw-map-geometry">${trajectories}${marks}</g><path class="mw-measure-shape"/></g></svg>`;
+  const feedback=$('#mw-map-feedback');
+  if(feedback)feedback.textContent=positions.length||$('.mw-unplaced-panel')?'':'No well or survey geometry is visible on this grid.';
+  const svg=element.querySelector('svg'),shape=svg.querySelector('.mw-measure-shape'),geometry=svg.querySelector('#mw-map-geometry');
+  const planar=measure&&['area','distance'].includes(measure.basis);
+  const current=()=>!measure?[]:planar?measure.vertices:[measure.from&&endpointFor(measure.from,measure.basis,grid),measure.to&&endpointFor(measure.to,measure.basis,grid)].filter(Boolean);
+  const paint=(preview=null)=>{
+   const vertices=current(),area=measure?.basis==='area',points=preview?[...vertices,preview]:vertices;
+   shape.setAttribute('d',points.map((p,i)=>(i?'L':'M')+px(p).join(' ')).join(' ')+(area&&measure.done?' Z':''));
+   shape.setAttribute('fill',area&&measure.done?'#087c7322':'none');
   };
-  svg.onpointerleave=()=>{if(feedback)feedback.textContent=resting;if(!end)showLine(null,null);const status=$('#mw-measure-status');if(status)status.textContent=measureText();};
-  svg.onpointerup=e=>{if(!drag)return;pan=[pan[0]-(e.clientX-drag.x)*span/(width-90),pan[1]+(e.clientY-drag.y)*vertical/(height-90)];drag=null;drawGrid();};
+  const cursor=e=>{const rect=svg.getBoundingClientRect();return [(e.clientX-rect.left)*width/rect.width,(e.clientY-rect.top)*height/rect.height];};
+  const coordinate=e=>{
+   const [x,y]=cursor(e);
+   if(x<left||x>right||y<top||y>bottom)return null;
+   return xy([x,y]);
+  };
+  paint();
+  let drag=null;
+  svg.onpointerdown=e=>{if(measure||e.button!==0||e.target.closest('[data-map-point]'))return;drag=cursor(e);svg.setPointerCapture(e.pointerId);};
+  svg.onpointermove=e=>{
+   const [x,y]=cursor(e);
+   if(drag){geometry.setAttribute('transform',`translate(${x-drag[0]} ${y-drag[1]})`);return;}
+   const vertices=current();
+   if(!vertices.length||measure.done||!planar&&measure.to)return;
+   const id=e.target.closest('[data-map-point]')?.dataset.mapPoint;
+   paint((!planar&&id&&endpointFor(id,measure.basis,grid))||coordinate(e));
+  };
+  svg.onpointerleave=()=>paint();
+  svg.onpointerup=e=>{if(!drag)return;const [x,y]=cursor(e);pan=[pan[0]-(x-drag[0])/scale,pan[1]+(y-drag[1])/scale];drag=null;drawGrid();};
   svg.onpointercancel=()=>{drag=null;drawGrid();};
-  svg.addEventListener('wheel',e=>{e.preventDefault();const previous=zoom;zoom=Math.max(.2,Math.min(30,zoom*Math.exp(-e.deltaY*.002)));const rect=svg.getBoundingClientRect(),x=(e.clientX-rect.left)*width/rect.width,y=(e.clientY-rect.top)*height/rect.height;pan=[pan[0]+(x-width/2)*span/(width-90)*(1-previous/zoom),pan[1]-(y-height/2)*vertical/(height-90)*(1-previous/zoom)];drawGrid();},{passive:false});
-  element.querySelectorAll('[data-map-point]').forEach(g=>{g.onclick=()=>selectMapWell(g.dataset.mapPoint);g.oncontextmenu=e=>wellMenu(e,g.dataset.mapPoint,g);});
- };drawGrid();resizeObserver=new ResizeObserver(drawGrid);resizeObserver.observe(element);
+  svg.onclick=e=>{
+   if(!planar)return;
+   const point=coordinate(e);
+   if(!point)return;
+   if(measure.done){measure.vertices=[];measure.done=false;}
+   measure.vertices.push(point);
+   if(measure.basis==='distance'&&measure.vertices.length===2)measure.done=true;
+   updateMeasurement();paint();
+  };
+  svg.addEventListener('wheel',e=>{
+   e.preventDefault();
+   const old=zoom,[x,y]=cursor(e);
+   zoom=Math.max(.2,Math.min(30,zoom*Math.exp(-e.deltaY*.002)));
+   pan=[pan[0]+(x-ox)/scale*(1-old/zoom),pan[1]-(y-oy)/scale*(1-old/zoom)];
+   drawGrid();
+  },{passive:false});
+  svg.querySelectorAll('[data-map-point]').forEach(mark=>{
+   mark.onclick=()=>{if(!planar)selectMapWell(mark.dataset.mapPoint);};
+   mark.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectMapWell(mark.dataset.mapPoint);}};
+   mark.oncontextmenu=e=>wellMenu(e,mark.dataset.mapPoint,mark);
+  });
+ };
+ drawGrid();resizeObserver=new ResizeObserver(drawGrid);resizeObserver.observe(element);
 }

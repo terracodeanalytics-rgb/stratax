@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-15 - Field grid, survey map and folder reconnect
+
+- Frontend-only release source `f6b3d4e7b2d189a420a0ff06d10c38d52c475acd`. Rollback is Site v29. The archive is in `.release/map-field-20261115`. Run `node scripts/verify-field-grid.cjs` and optionally set `STRATAX_UI_BASE=https://stratax.terracodeanalytics.com`. Folder picker and geographic provider are simulated in browser fixtures. No container images were created.
+
 ## 2026-11-15 - Gamma ray and shale volume cutoff markers
 
 - Frontend-only release. Site v29 source is `d85a8021ace1b8654d9c61b5db2103852d420753` and rollback is Site v28. Release archive and published frontend browser receipt are under `.release/gr-shale-cutoff-20261115`. Set `CANVAS_CASE=Curve cutoff` for `node scripts/verify-well-canvas.cjs` to replay the interaction. This release created no container images. Cleanup retained all 90 registry-tagged StrataX images and preserved the pre-existing Playwright files.

@@ -12,3 +12,14 @@
 #mw-renderer g[data-map-point]:hover>circle:first-of-type{fill:#d0eadc}
 #mw-renderer .mw-trajectory:hover{stroke-width:5}
 #mw-measure-line{stroke:#176c55;stroke-width:2;stroke-dasharray:5 3;pointer-events:none}
+.mw-grid-tools,.mw-folder-access{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 12px;background:white;border-bottom:1px solid #dce6e0;font-size:12px}
+.mw-folder-access[hidden]{display:none}
+.mw-folder-access{justify-content:space-between;background:#f5f1e7}
+.mw-grid-tools button,.mw-folder-access button,.mw-measure-toolbar button{font-size:11px;padding:6px 10px}
+.mw-grid-tools button[aria-pressed=true]{background:#087c73;color:white}
+.mw-grid-tools label{display:flex;align-items:center;gap:6px;margin-left:auto}
+.mw-grid-tools select{max-width:190px;font-size:11px;padding:5px 8px}
+.mw-grid-edge{fill:none;stroke:#8ca89a;pointer-events:none}
+.mw-measure-shape{stroke:#176c55;stroke-width:2;stroke-dasharray:5 3;pointer-events:none}
+.mw-empty-map{max-width:340px;margin:82px auto 0;padding:0 20px;text-align:center;font-size:13px}
+#mw-renderer [data-map-point]:focus-visible{outline:2px solid #087c73}

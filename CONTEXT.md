@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-15 - Field grid, survey map and folder reconnect
+
+- The field grid keeps incompatible coordinate groups separate. Unreferenced X/Y can show matched absolute survey geometry, or referenced offsets and grid-north angles with known horizontal units. Measurements use source units when a length unit is unavailable. Geographic maps require a supported transform and use well and survey geometry for bounds. A reconnect can use the retained handle or an original folder whose manifest matches the project ID.
+
 ## 2026-11-15 - Gamma ray and shale volume cutoff markers
 
 - Log cutoff markers are optional per-curve display settings. They follow the curve's scale and colour, persist with the workbook or track template, and have no effect on shale calibration or reservoir/pay calculations. Existing curve colours can be changed in Curve Properties.

@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-15 - Field grid, survey map and folder reconnect
+
+- Site v30 is live on stratax.terracodeanalytics.com (deployment `appgdep_6afa1842a53881918498952ae58cd33d`). The field grid shows wellheads and survey paths with axes, a scale bar, distance and polygon area tools. Geographic basemaps fit wells and deviation stations. Local survey reads use read permission and folder reconnect retries pending saves. All six live assets matched, API health passed, and the Sites error check returned zero. The browser replay against the public frontend passed seven focused cases, and six trajectory assertions passed.
+
 ## 2026-11-15 - Gamma ray and shale volume cutoff markers
 
 - Site v29 (deployment `appgdep_6afa1306bf048191a6f57dea041516c2`) is live on stratax.terracodeanalytics.com. Curve Properties saves a dashed cutoff in the selected curve's units. New GR tracks default to teal and new Vsh tracks to brown. Both production asset hashes matched, API health returned OK, and the focused Chromium replay passed 4 checks locally and 4 on the published frontend using a generated LAS fixture. Eight model assertions passed.

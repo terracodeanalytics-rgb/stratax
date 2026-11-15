@@ -38,7 +38,7 @@
   for(const dataset of datasets){for(const record of dataset.wellRecords||[])for(const [kind,key]of keys(record)){if([...(seen.get(kind+':'+key)||[])].some(id=>id!==record.id))notes.push({code:'existing_'+kind,severity:'warning',source:dataset.name,sourceId:dataset.sourceId,assetKey:dataset.assetKey||dataset.id,message:(record.name||record.id)+' shares '+kind+' with a separate well registration. Review the affected records; coordinates never merge wells.'});}for(const record of dataset.wellRecords||[])remember(record);}
   return notes;
  }
- function trajectory(rows,dataset,well){
+ function trajectory(rows,dataset,well,{sourceGrid=false,gridUnit=null}={}){
   const refs=dataset.references||{},m=dataset.mapping||{},mode=dataset.surveyMethod||dataset.metadata?.surveyMethod||'angles',factor=length(refs.depthUnit),origin=well?.sourceCoordinates,points=[];
   if(!factor)throw new Error('Confirm survey depth units.');if(!refs.verticalDatum)throw new Error('Confirm the survey depth/elevation datum.');if(rows.length>50000)throw new Error('Use a survey of at most 50,000 stations.');
   if(!['angles','offsets','xy_tvd','coordinates'].includes(mode))throw new Error('Confirm the survey representation.');
@@ -46,16 +46,17 @@
   if(['offsets','xy_tvd'].includes(mode)&&refs.depthReference!=='TVD')throw new Error('Confirm TVD and its datum for supplied vertical-depth coordinates.');
   if(mode==='angles'&&refs.depthReference!=='MD')throw new Error('Angular surveys require an MD reference.');
   const needsOrigin=['angles','offsets'].includes(mode),projected=/^EPSG:(32[67]\d\d|3857)$/i.test(refs.crs||'');
-  if(needsOrigin&&(!origin||numeric(origin.x)===null||numeric(origin.y)===null||!projected||String(origin.crs).toUpperCase()!==String(refs.crs).toUpperCase()))throw new Error('Confirm a matching projected well origin and survey CRS.');
+  const gridFactor=sourceGrid?gridUnit:(projected?1:null);
+  if(needsOrigin&&(!origin||numeric(origin.x)===null||numeric(origin.y)===null||!gridFactor||String(origin.crs||'').toUpperCase()!==String(refs.crs||'').toUpperCase()))throw new Error('Confirm a matching projected well origin and horizontal units.');
   if(mode==='offsets'&&!length(refs.offsetUnit))throw new Error('Confirm the horizontal offset unit.');
   let previous=null,east=0,north=0,tvd=0,correction=0;
   if(mode==='angles'){
-   if(!/^EPSG:32[67]\d\d$/i.test(refs.crs))throw new Error('Angular reconstruction currently supports WGS84 UTM coordinates.');
+   if(!sourceGrid&&!/^EPSG:32[67]\d\d$/i.test(refs.crs))throw new Error('Angular reconstruction currently supports WGS84 UTM coordinates.');
    if(!['Grid north','True north','Magnetic north'].includes(refs.northReference))throw new Error('Confirm the azimuth north reference.');
    if(refs.northReference!=='Grid north'){
     if(refs.northReference==='Magnetic north'&&numeric(refs.declination)===null)throw new Error('Supply documented magnetic declination.');
     if(numeric(refs.northCorrection)!==null)correction=numeric(refs.northCorrection);
-    else{const p=location(origin.x,origin.y,refs.crs),q=location(origin.x,origin.y+1,refs.crs);if(!p||!q)throw new Error('Grid convergence could not be calculated.');correction=-Math.atan2((q.lng-p.lng)*Math.cos(p.lat*Math.PI/180),q.lat-p.lat)*180/Math.PI;}
+    else{const p=location(origin.x,origin.y,refs.crs),q=location(origin.x,origin.y+1,refs.crs);if(!p||!q)throw new Error('Supply a documented grid north correction.');correction=-Math.atan2((q.lng-p.lng)*Math.cos(p.lat*Math.PI/180),q.lat-p.lat)*180/Math.PI;}
     if(refs.northReference==='Magnetic north')correction+=numeric(refs.declination);
    }
   }
@@ -64,15 +65,15 @@
     let inc=numeric(at(row,m,'inclination')),az=numeric(at(row,m,'azimuth'));if(inc===null||az===null||!['degrees','radians'].includes(refs.angleUnit))throw new Error('Confirm station angles and units.');if(refs.angleUnit==='degrees'){inc*=Math.PI/180;az*=Math.PI/180;}if(inc<0||inc>Math.PI||az<0||az>2*Math.PI)throw new Error('Station angles are outside their supported range.');az+=correction*Math.PI/180;
     if(!previous&&md!==0)throw new Error('Include a referenced MD 0 tie-in before minimum-curvature reconstruction.');
     if(previous){const dl=Math.acos(Math.max(-1,Math.min(1,Math.cos(previous.inc)*Math.cos(inc)+Math.sin(previous.inc)*Math.sin(inc)*Math.cos(az-previous.az))));if(dl>=Math.PI-1e-8)throw new Error('A 180-degree dogleg is singular. Review the original stations.');const ratio=dl<1e-8?1:2*Math.tan(dl/2)/dl,step=(md-previous.md)*factor/2*ratio;east+=step*(Math.sin(previous.inc)*Math.sin(previous.az)+Math.sin(inc)*Math.sin(az));north+=step*(Math.sin(previous.inc)*Math.cos(previous.az)+Math.sin(inc)*Math.cos(az));tvd+=step*(Math.cos(previous.inc)+Math.cos(inc));}
-    x=numeric(origin.x)+east;y=numeric(origin.y)+north;z=tvd;stationTvd=tvd;previous={md,inc,az};
+    x=numeric(origin.x)+east/gridFactor;y=numeric(origin.y)+north/gridFactor;z=tvd;stationTvd=tvd;previous={md,inc,az};
    }else{
     x=numeric(at(row,m,mode==='offsets'?'dx':'x'));y=numeric(at(row,m,mode==='offsets'?'dy':'y'));z=numeric(at(row,m,mode==='coordinates'?'z':'tvd'));if(x===null||y===null||z===null)throw new Error('A station has missing coordinate/depth values.');z*=factor;
-    if(mode==='offsets'){x=numeric(origin.x)+x*length(refs.offsetUnit);y=numeric(origin.y)+y*length(refs.offsetUnit);}
+    if(mode==='offsets'){x=numeric(origin.x)+x*length(refs.offsetUnit)/gridFactor;y=numeric(origin.y)+y*length(refs.offsetUnit)/gridFactor;}
     if(mode!=='coordinates'||refs.verticalMeaning==='Depth positive down'&&refs.depthReference==='TVD')stationTvd=z;
     if(mode==='coordinates'&&refs.verticalMeaning==='Elevation positive up'&&well?.elevationDatum===refs.verticalDatum&&length(well.elevationUnit)&&numeric(well.elevation)!==null)stationTvd=numeric(well.elevation)*length(well.elevationUnit)-z;
     previous={md};
    }
-   if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z))throw new Error('A station cannot be reconstructed from its geometry.');const point=location(x,y,refs.crs,refs.coordinateOrder);if(!point)throw new Error('Transform this source to WGS84 geographic, Web Mercator or WGS84 UTM before map use.');points.push({...point,md:md===null?null:md*factor,tvd:stationTvd,z,derived:mode==='angles',method:mode==='angles'?'minimum curvature':'supplied coordinate observations',northCorrectionDegrees:mode==='angles'?correction:null});
+   if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z))throw new Error('A station cannot be reconstructed from its geometry.');const point=sourceGrid?{x,y}:location(x,y,refs.crs,refs.coordinateOrder);if(!point)throw new Error('Transform this source to WGS84 geographic, Web Mercator or WGS84 UTM before map use.');points.push({...point,md:md===null?null:md*factor,tvd:stationTvd,z,derived:mode==='angles',method:mode==='angles'?'minimum curvature':'supplied coordinate observations',northCorrectionDegrees:mode==='angles'?correction:null});
   }return points;
  }
  root.StrataxWellEvidence={numeric,length,location,at,headerIdentity,collect,crossWellIssues,trajectory};
