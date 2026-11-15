@@ -1,4 +1,4 @@
-import {focusCanvasWell} from './well-canvas.js';
+import {focusCanvasWell,retryFolderLogSources} from './well-canvas.js';
 import {reconcileImportWorkspace} from './import-reconciliation.js';
 import {applyImportedEvidence} from './well-data.js';
 import {enhanceWorkbench} from './workbench.js';
@@ -260,6 +260,7 @@ async function reconnectProjectFolder(choose=false){
  const project=projectContext(),uid=session.user?.uid;
  await repository.reconnect(project.id,choose);
  if(uid!==session.user?.uid||projectContext()?.id!==project.id)return;
+ retryFolderLogSources();
  save();
  await flushProjectSaves({projectId:project.id,requireCurrent:true});
  toast('Project folder connected. Changes saved.');

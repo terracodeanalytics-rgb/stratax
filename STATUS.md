@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-15 - Local log source reconnect
+
+- Site v31 (deployment `appgdep_6afa19f8af2081919c9cc67fb59f9021`) adds an inline folder reconnect action for local log read failures and reloads affected curves automatically once folder access is granted. The focused browser replay passed locally and on the public frontend. All three live asset hashes matched, API health returned OK, and the Sites error check returned zero.
+
 ## 2026-11-15 - Field grid, survey map and folder reconnect
 
 - Site v30 is live on stratax.terracodeanalytics.com (deployment `appgdep_6afa1842a53881918498952ae58cd33d`). The field grid shows wellheads and survey paths with axes, a scale bar, distance and polygon area tools. Geographic basemaps fit wells and deviation stations. Local survey reads use read permission and folder reconnect retries pending saves. All six live assets matched, API health passed, and the Sites error check returned zero. The browser replay against the public frontend passed seven focused cases, and six trajectory assertions passed.

@@ -177,7 +177,23 @@ export async function importPackage(file) {
 
 function artifactName(value){if(!/^[\w.-]{1,180}$/.test(value)||value==='.'||value==='..')throw new Error('Invalid artifact reference.');return value;}
 export async function putArtifact(project,importId,name,blob){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id);const dir=await(await root.getDirectoryHandle('datasets',{create:true})).getDirectoryHandle(importId,{create:true});await writeFile(dir,name,blob);}else await item(key(project.id,'artifact:'+importId+':'+name),blob);}
-export async function getArtifact(project,importId,name){artifactName(importId);artifactName(name);if(project.storage==='local'){const root=await directory(project.id,false,'read');const dir=await(await root.getDirectoryHandle('datasets')).getDirectoryHandle(importId);return(await dir.getFileHandle(name)).getFile();}const blob=await item(key(project.id,'artifact:'+importId+':'+name));if(!blob)throw new Error('A derived artifact is missing. Reinspect the retained original.');return blob;}
+export async function getArtifact(project,importId,name){
+ artifactName(importId);artifactName(name);
+ if(project.storage==='local'){
+  try{
+   const root=await directory(project.id,false,'read');
+   const dir=await(await root.getDirectoryHandle('datasets')).getDirectoryHandle(importId);
+   return await (await dir.getFileHandle(name)).getFile();
+  }catch(error){
+   if(['NotAllowedError','SecurityError'].includes(error.name))throw folderError();
+   if(error.name==='NotFoundError')throw Object.assign(new Error('The retained samples are missing from this folder. Reconnect the original project folder.'),{code:'project_artifact_missing'});
+   throw error;
+  }
+ }
+ const blob=await item(key(project.id,'artifact:'+importId+':'+name));
+ if(!blob)throw new Error('A derived artifact is missing. Reinspect the retained original.');
+ return blob;
+}
 export async function linkOriginal(project,handle){if(project.storage!=='local')throw new Error('Linked originals require a local folder project.');const file=await handle.getFile();const fileId=id();await item(key(project.id,'external:'+fileId),handle);return {id:fileId,name:file.name,size:file.size,type:'Source file',well:'',status:'Linked original · not parsed',external:true,local:true};}
 
 export async function copyToCloud(project,workspace,name,onProgress=()=>{}){

@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-15 - Local log source reconnect
+
+- The log canvas keeps the original artifact error code. Folder permission and missing local artifact errors expose the same project-folder reconnect flow as Save. Reconnecting clears those failed reads and requeues the visible curves, while preserving loaded curve data and workbook settings.
+
 ## 2026-11-15 - Field grid, survey map and folder reconnect
 
 - The field grid keeps incompatible coordinate groups separate. Unreferenced X/Y can show matched absolute survey geometry, or referenced offsets and grid-north angles with known horizontal units. Measurements use source units when a length unit is unavailable. Geographic maps require a supported transform and use well and survey geometry for bounds. A reconnect can use the retained handle or an original folder whose manifest matches the project ID.

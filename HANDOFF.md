@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-15 - Local log source reconnect
+
+- Frontend-only log source hotfix. Site v31 source `365521f5078fb53dde4ea982d13a0e19a61aacff`. Rollback is Site v30. Archive is under `.release/log-source-20261115`. Run `node scripts/verify-log-folder-reconnect.cjs` for the disconnect and restore regression. The fixture simulates the browser picker and reads three retained sample rows. No container images were created.
+
 ## 2026-11-15 - Field grid, survey map and folder reconnect
 
 - Frontend-only release source `f6b3d4e7b2d189a420a0ff06d10c38d52c475acd`. Rollback is Site v29. The archive is in `.release/map-field-20261115`. Run `node scripts/verify-field-grid.cjs` and optionally set `STRATAX_UI_BASE=https://stratax.terracodeanalytics.com`. Folder picker and geographic provider are simulated in browser fixtures. No container images were created.
