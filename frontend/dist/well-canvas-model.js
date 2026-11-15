@@ -22,7 +22,11 @@ export function addCurve(well,dataset,columnId,trackId=null){
  let track=well.tracks.find(t=>t.id===trackId);if(!track){if(well.tracks.length>=30)throw new Error('Use another well display/workbook for more than 30 tracks.');track={id:uid(),name:column.mnemonic,width:DEFAULT_TRACK_WIDTH,curves:[]};well.tracks.push(track);}
  if(track.curves.some(c=>c.datasetId===dataset.id&&c.columnId===columnId))return track;
  if(track.curves.length>=12)throw new Error('Use another track for more than 12 overlaid curves.');
- const curve={id:uid(),datasetId:dataset.id,columnId,indexColumnId:indexColumn(dataset)?.id||'',name:column.mnemonic,unit:column.effectiveUnit||column.unit||'',color:palette[track.curves.length%palette.length],visible:true,log:false,reverse:false,min:null,max:null,dashed:dataset.well!==well.wellId};
+ const mnemonic=String(column.mnemonic||'').trim();
+ const property=String(column.propertyType||'').trim();
+ const color=/^(VSH|VSHALE|SHALE VOLUME)$/i.test(mnemonic)||/^shale volume$/i.test(property)?palette[1]:
+  /^(GR|GRD|GRC|SGR|CGR|GAMMA[ _-]?RAY)$/i.test(mnemonic)||/^gamma[ -]ray$/i.test(property)?palette[0]:palette[track.curves.length%palette.length];
+ const curve={id:uid(),datasetId:dataset.id,columnId,indexColumnId:indexColumn(dataset)?.id||'',name:column.mnemonic,unit:column.effectiveUnit||column.unit||'',color,visible:true,log:false,reverse:false,min:null,max:null,dashed:dataset.well!==well.wellId};
  track.curves.push(curve);return track;
 }
 export function selectedObjects(book){const well=book.wells.find(w=>w.id===book.selected?.wellId),track=well?.tracks.find(t=>t.id===book.selected?.trackId),curve=track?.curves.find(c=>c.id===book.selected?.curveId);return {well,track,curve};}
@@ -35,8 +39,15 @@ export function curvePath(rows,index,value,range,axis,width,height,offset=0,fact
  for(let i=0;i<rows.length;i++){const row=rows[i],raw=row[value],converted=finite(row[index])?convert(row[index]*factor):null,z=finite(converted)?converted-offset:null,v=axis.log&&finite(raw)?raw>0?Math.log10(raw):null:raw;if(!finite(z)||!finite(v)||z<top||z>base){flush();previous=false;bucket=-1;continue;}const bin=Math.floor((z-top)/(base-top)*height);if(bin!==bucket){flush();bucket=bin;}points.push({i,v,z});}flush();return result;
 }
 export function axisFor(rows,column,curve){const values=rows.map(r=>curve.log&&finite(r[column])?r[column]>0?Math.log10(r[column]):null:r[column]);const ext=rangeOf(values);if(!ext)return null;let lo=finite(curve.min)?curve.log?Math.log10(curve.min):curve.min:ext[0],hi=finite(curve.max)?curve.log?Math.log10(curve.max):curve.max:ext[1];if(!finite(lo)||!finite(hi)||hi<=lo)return null;const axis=[lo,hi];axis.reverse=curve.reverse;axis.log=curve.log;return axis;}
+export function cutoffPosition(value,axis,width){
+ if(!finite(value))return null;
+ const [lo,hi]=axis,scaled=axis.log?Math.log10(value):value;
+ if(!finite(scaled)||scaled<lo||scaled>hi)return null;
+ const fraction=(scaled-lo)/(hi-lo);
+ return (axis.reverse===true?1-fraction:fraction)*width;
+}
 export function applyTemplate(well,template,datasets){
  const sources=datasets.filter(d=>d.well===well.wellId),missing=[];well.tracks=[];
- for(const saved of template.tracks){const track={id:uid(),name:saved.name,width:saved.width,curves:[]};well.tracks.push(track);for(const pattern of saved.curves){const matches=[];for(const ds of sources)for(const col of numericColumns(ds))if((pattern.propertyType&&pattern.propertyType!=='Unclassified'?col.propertyType===pattern.propertyType:col.mnemonic===pattern.mnemonic)&&String(col.effectiveUnit||col.unit||'')===pattern.unit)matches.push({ds,col});if(matches.length!==1){missing.push(pattern.mnemonic+(matches.length?' (multiple matching runs)':' (no exact mnemonic/unit match)'));continue;}addCurve(well,matches[0].ds,matches[0].col.id,track.id);Object.assign(track.curves.at(-1),{color:pattern.color,log:pattern.log,reverse:pattern.reverse,min:pattern.min,max:pattern.max,visible:pattern.visible!==false,dashed:pattern.dashed===true,fill:pattern.fill||'none',fillOpacity:pattern.fillOpacity??.12});}}
+ for(const saved of template.tracks){const track={id:uid(),name:saved.name,width:saved.width,curves:[]};well.tracks.push(track);for(const pattern of saved.curves){const matches=[];for(const ds of sources)for(const col of numericColumns(ds))if((pattern.propertyType&&pattern.propertyType!=='Unclassified'?col.propertyType===pattern.propertyType:col.mnemonic===pattern.mnemonic)&&String(col.effectiveUnit||col.unit||'')===pattern.unit)matches.push({ds,col});if(matches.length!==1){missing.push(pattern.mnemonic+(matches.length?' (multiple matching runs)':' (no exact mnemonic/unit match)'));continue;}addCurve(well,matches[0].ds,matches[0].col.id,track.id);Object.assign(track.curves.at(-1),{color:pattern.color,log:pattern.log,reverse:pattern.reverse,min:pattern.min,max:pattern.max,cutoff:finite(pattern.cutoff)?pattern.cutoff:null,visible:pattern.visible!==false,dashed:pattern.dashed===true,fill:pattern.fill||'none',fillOpacity:pattern.fillOpacity??.12});}}
  return missing;
 }

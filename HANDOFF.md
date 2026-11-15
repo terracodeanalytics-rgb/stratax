@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-15 - Gamma ray and shale volume cutoff markers
+
+- Frontend-only release. Site v29 source is `d85a8021ace1b8654d9c61b5db2103852d420753` and rollback is Site v28. Release archive and published frontend browser receipt are under `.release/gr-shale-cutoff-20261115`. Set `CANVAS_CASE=Curve cutoff` for `node scripts/verify-well-canvas.cjs` to replay the interaction. This release created no container images. Cleanup retained all 90 registry-tagged StrataX images and preserved the pre-existing Playwright files.
+
 ## 2026-11-13 - Automatic source grid plotting
 
 - The source-grid hotfix changes only map-workspace.js. Rollback is Site v27. No backend images were created. The Sites release archive is under .release/map-grid-20261113.

@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-15 - Gamma ray and shale volume cutoff markers
+
+- Site v29 (deployment `appgdep_6afa1306bf048191a6f57dea041516c2`) is live on stratax.terracodeanalytics.com. Curve Properties saves a dashed cutoff in the selected curve's units. New GR tracks default to teal and new Vsh tracks to brown. Both production asset hashes matched, API health returned OK, and the focused Chromium replay passed 4 checks locally and 4 on the published frontend using a generated LAS fixture. Eight model assertions passed.
+
 ## 2026-11-13 - Automatic source grid plotting
 
 - Map plots matching uploaded wells on a source X/Y grid when geographic placement is unavailable. Focused checks passed for Monza-style coordinates and excluding unmatched wells.

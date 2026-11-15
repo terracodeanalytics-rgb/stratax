@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-15 - Gamma ray and shale volume cutoff markers
+
+- Log cutoff markers are optional per-curve display settings. They follow the curve's scale and colour, persist with the workbook or track template, and have no effect on shale calibration or reservoir/pay calculations. Existing curve colours can be changed in Curve Properties.
+
 ## 2026-11-13 - Automatic source grid plotting
 
 - Unreferenced source coordinates stay in a separate grid per header and reference. Source-grid markers do not imply geographic positions. The workflow needs no location review or refresh action.
