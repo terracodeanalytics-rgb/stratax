@@ -1,5 +1,12 @@
 # StrataX handoff
 
+## 2026-11-16 - Curve display implementation ready for publication
+
+- Implemented per-curve live previews, cutoff fills and selective track styling in the shared well canvas. The existing inspector hosts the editor. Curve drafts render into the plot and header without entering persisted state. Apply uses one history transaction. Copy styling reviews exact unique associations and keeps destination identities, names, visibility and ordering.
+- Run node scripts/test-well-display.mjs for 6 geometry, matching and compatibility cases. Run node scripts/verify-well-canvas.cjs with CANVAS_CASE set to Curve preview|Curve cutoff|Curve properties|Track templates|Right-click actions|Wheel over for focused browser coverage. CANVAS_USER selects an isolated fixture identity. Chromium needs execution outside the sandbox on this host. Final runs passed 9 primary checks, 7 second-identity checks and 4 checks after the header-preview refinement. A separate 9-check run covered exports and five viewport widths.
+- Publication blocker confirmed through get_site and create_source_repository_write_credential. Both return project_not_found for the existing frontend/.openai/hosting.json ID. list_sites returns an empty list. Restore the Sites connection to the account/workspace owning that project, then use the existing source helper to push frontend source and deploy. Verify stratax.terracodeanalytics.com and replay the fixture suite against the hosted frontend. Real Cloud project persistence still needs authenticated acceptance.
+- Screenshot .release/curve-display-editor.png shows the editor and real generated LAS curves. Preserve the pre-existing untracked WELL_LOG_DISPLAY_RESEARCH_2026-11-16.md and .playwright-mcp directory. Cleanup retained verification evidence and removed zero files/images. No new container images were built, and current registry references were unavailable for pruning.
+
 ## 2026-11-16 - Automatic Google Maps wellhead placement
 
 - Frontend-only Site v38 source `50d58355c69c77c997b76b17784e61ecb60f99ee`. Rollback is Site v36. Final archive is `.release/automatic-google-map-20261116/stratax-final.tar.gz`. Run `node scripts/verify-cloud-save-rebase.cjs` for the two-identity basemap positive and negative cases and `node scripts/verify-field-grid.cjs` for adjacent workflows. The browser fixtures simulate Google Maps and Cloud state. No container images were built. Cleanup reviewed all 90 registry-tagged StrataX images and retained them.

@@ -1,5 +1,11 @@
 # StrataX context
 
+## 2026-11-16 - Well curve display and track style reuse
+
+- Curve display drafts stay in the inspector and rendered DOM until Apply. Display state adds fill mode cutoff, cutoffColor, belowColor and aboveColor alongside the existing fillOpacity. Missing settings retain legacy defaults. Cutoff sides follow numeric values on either axis direction and fills remain split across sample gaps.
+- Track style copying targets existing tracks in the active workbook. Matching requires a unique confirmed property type and effective unit, with exact mnemonic/unit matching for unclassified curves. Duplicate source or destination candidates are skipped. Display style copying excludes source bindings, names and visibility.
+- The configured Sites project is currently inaccessible through the connected account. Publication must resume against the existing project after account/workspace access is restored. The implementation has local fixture verification under two identities, with real authenticated Cloud persistence and production verification pending.
+
 ## 2026-11-16 - Automatic Google Maps wellhead placement
 
 - The corroborated-projected map location is calculated at render time and leaves import evidence and stored project coordinates intact. The Cloud preview must agree with the retained projected CRS. Other coordinate conflicts stay on the source grid. A survey with compatible projected station geometry can be converted when its wellhead qualifies and the necessary survey references are available.

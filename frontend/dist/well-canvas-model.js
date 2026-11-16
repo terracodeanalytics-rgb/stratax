@@ -46,8 +46,52 @@ export function cutoffPosition(value,axis,width){
  const fraction=(scaled-lo)/(hi-lo);
  return (axis.reverse===true?1-fraction:fraction)*width;
 }
+export const displayColor=value=>/^#[\da-f]{6}$/i.test(String(value||''))?value:null;
+export function fillStyle(curve){
+ return {fill:['left','right','cutoff'].includes(curve.fill)?curve.fill:'none',
+  fillOpacity:finite(curve.fillOpacity)?Math.max(0,Math.min(1,curve.fillOpacity)):.12,
+  cutoffColor:displayColor(curve.cutoffColor),belowColor:displayColor(curve.belowColor),aboveColor:displayColor(curve.aboveColor)};
+}
+export function cutoffFillPaths(path,axis,width,value){
+ const scaled=axis.log?Math.log10(value):value;
+ if(!finite(value)||!finite(scaled))return [];
+ const fraction=(scaled-axis[0])/(axis[1]-axis[0]);
+ const cutoff=(axis.reverse?1-fraction:fraction)*width;
+ const paths=[];
+ for(const segment of path.split('M').filter(Boolean)){
+  const points=segment.split('L').map(pair=>pair.split(',').map(Number));
+  let start=points[0],side=null,run=[start];
+  const flush=()=>{if(run.length>1)paths.push({side,path:`M${cutoff},${run[0][1]}L${run.map(p=>p.join(',')).join('L')}L${cutoff},${run.at(-1)[1]}Z`});};
+  for(const end of points.slice(1)){
+   const from=start[0]-cutoff,to=end[0]-cutoff;
+   const endSide=(axis.reverse?-1:1)*(to||from)>0?'above':'below';
+   if(side===null)side=(axis.reverse?-1:1)*(from||to)>0?'above':'below';
+   if(from*to<0){
+    const crossing=[cutoff,start[1]+(end[1]-start[1])*from/(from-to)];
+    run.push(crossing);flush();run=[crossing];side=endSide;
+   }else if(side!==null&&side!==endSide){flush();run=[start];side=endSide;}
+   side=endSide;run.push(end);start=end;
+  }
+  flush();
+ }
+ return paths;
+}
+export function trackStyleMatches(source,target,getColumn){
+ const identity=curve=>{
+  const column=getColumn(curve);
+  if(!column)return null;
+  const unit=column.effectiveUnit||column.unit||'';
+  const type=column.propertyType;
+  return JSON.stringify(type&&type!=='Unclassified'?['type',type,unit]:['mnemonic',column.mnemonic,unit]);
+ };
+ return source.curves.map(curve=>{
+  const key=identity(curve),matches=key===null?[]:target.curves.filter(candidate=>identity(candidate)===key);
+  const ambiguous=matches.length>1||matches.length===1&&source.curves.filter(candidate=>identity(candidate)===key).length>1;
+  return {curve,target:!ambiguous&&matches.length===1?matches[0]:null,status:ambiguous?'Ambiguous match':matches.length?'Matched':'No matching curve and unit'};
+ });
+}
 export function applyTemplate(well,template,datasets){
  const sources=datasets.filter(d=>d.well===well.wellId),missing=[];well.tracks=[];
- for(const saved of template.tracks){const track={id:uid(),name:saved.name,width:saved.width,curves:[]};well.tracks.push(track);for(const pattern of saved.curves){const matches=[];for(const ds of sources)for(const col of numericColumns(ds))if((pattern.propertyType&&pattern.propertyType!=='Unclassified'?col.propertyType===pattern.propertyType:col.mnemonic===pattern.mnemonic)&&String(col.effectiveUnit||col.unit||'')===pattern.unit)matches.push({ds,col});if(matches.length!==1){missing.push(pattern.mnemonic+(matches.length?' (multiple matching runs)':' (no exact mnemonic/unit match)'));continue;}addCurve(well,matches[0].ds,matches[0].col.id,track.id);Object.assign(track.curves.at(-1),{color:pattern.color,log:pattern.log,reverse:pattern.reverse,min:pattern.min,max:pattern.max,cutoff:finite(pattern.cutoff)?pattern.cutoff:null,visible:pattern.visible!==false,dashed:pattern.dashed===true,fill:pattern.fill||'none',fillOpacity:pattern.fillOpacity??.12});}}
+ for(const saved of template.tracks){const track={id:uid(),name:saved.name,width:saved.width,curves:[]};well.tracks.push(track);for(const pattern of saved.curves){const matches=[];for(const ds of sources)for(const col of numericColumns(ds))if((pattern.propertyType&&pattern.propertyType!=='Unclassified'?col.propertyType===pattern.propertyType:col.mnemonic===pattern.mnemonic)&&String(col.effectiveUnit||col.unit||'')===pattern.unit)matches.push({ds,col});if(matches.length!==1){missing.push(pattern.mnemonic+(matches.length?' (multiple matching runs)':' (no exact mnemonic/unit match)'));continue;}addCurve(well,matches[0].ds,matches[0].col.id,track.id);Object.assign(track.curves.at(-1),{color:pattern.color,log:pattern.log,reverse:pattern.reverse,min:pattern.min,max:pattern.max,cutoff:finite(pattern.cutoff)?pattern.cutoff:null,visible:pattern.visible!==false,dashed:pattern.dashed===true,...fillStyle(pattern)});}}
  return missing;
 }

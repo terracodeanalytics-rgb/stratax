@@ -1,5 +1,13 @@
 # StrataX status
 
+## 2026-11-16 - Curve display editor and selective track styling
+
+- Implemented curve-header editing with live plot and header previews, inline validation, Apply, Cancel and Escape. Apply creates one undoable display edit. Added independent cutoff marker colour, fill opacity and colours on either side of the numeric cutoff, including reversed and logarithmic axes and disconnected sample segments.
+- Added Copy track style with destination selection and association review. Unique property-type/unit or mnemonic/unit matches receive width and appearance. Missing and ambiguous matches are listed and skipped. Extended settings persist in existing templates and view JSON import/export.
+- Verification completed locally. Six model regressions passed. Focused browser runs passed 9 checks for the primary fixture identity and 7 for a second isolated identity, with zero page errors. A final 4-check run verified updated header preview and cancellation. Covered undo/redo, reload, existing templates, drag overlay, SVG/CSV exports and five responsive widths. Test identities and API responses were simulated. Cloud persistence and authenticated production acceptance remain unverified.
+- Deployment is pending. The connected Sites account returns project_not_found for the configured appgprj_6adc66e963588191a4154ab09c724471. A source-write credential request returns the same error and discovery returns zero accessible Sites. No release was saved or deployed.
+- Cleanup found no disposable session source files. Retained verification screenshots and reports, pre-existing research notes and .playwright-mcp logs. Built and removed zero container images. Registry pruning was skipped because this frontend change created no images and current protected-reference inventory was unavailable.
+
 ## 2026-11-16 - Automatic Google Maps wellhead placement
 
 - Site v38 (deployment `appgdep_6afab47fa2ec8191b291d538c4634b88`) automatically places wells on Google basemaps when independent retained header and LAS X/Y agree, projected CRS declarations agree, and the competing latitude/longitude has no declared datum. The two-identity fixture checked automatic placement, a competing referenced latitude/longitude, and a contradictory projected CRS declaration. The public map asset matched, API health was OK, and Sites reported zero recent errors. The hosted two-identity and field-grid browser suites passed.

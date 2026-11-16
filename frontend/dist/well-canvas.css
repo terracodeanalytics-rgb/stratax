@@ -8,3 +8,10 @@
 .wb-proposal-bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 16px;background:#fff7e8;color:#76501c;font-size:12px}.wb-proposal-bar button{margin-left:auto}
 
 .wb-range-warning{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;background:#fff4df;color:#78521d;font-size:12px}.wb-range-warning button{margin-left:auto}
+.wb-curve-chip{display:grid;gap:1px;justify-items:start;text-align:left;color:#254a42;padding:2px 3px}
+.wb-curve-chip span,.wb-curve-chip small{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.wb-curve-chip i{display:inline-block;width:.65em;height:.65em;border-radius:50%;margin-right:.3em}
+.wb-curve-chip small{line-height:1.1;font-size:9px;white-space:normal;overflow-wrap:anywhere}
+.wb-style-targets{display:grid;gap:7px;max-height:40vh;overflow:auto;margin:0 0 12px}
+[data-wb-cutoff-colours][hidden]{display:none}
+#wb-properties-error:not(:empty){color:#a23929}
