@@ -99,6 +99,34 @@ const fs=require('node:fs');
   assert.equal(await svg.locator('.mw-survey-end').count(),2);
   await context.close();
 
+  const conflict={...a,sourceCoordinates:{...a.sourceCoordinates,crs:'EPSG:26391',coordinateConflict:true,geographicCoordinates:{lat:4.62,lng:6.79}}};
+  const angular={...source,id:'angular-survey',chunks:[{name:'angular.jsonl'}],surveyMethod:'angles',
+   mapping:{md:0,inclination:1,azimuth:2},references:{depthReference:'MD',depthUnit:'ft'}};
+  app.data.datasets=[{...baseDatasets[0],wellRecords:[conflict,b]},angular,baseDatasets[2]];
+  const reviewed=await app.createPage();
+  await reviewed.page.evaluate(async()=>{
+   const repo=await import('./project-repository.js');
+   await repo.putArtifact({id:'project',storage:'portable'},'fixture','angular.jsonl',new Blob(['[0,0,0]\n[1000,0,270]\n[2000,14,270]\n']));
+   location.hash='map';
+  });
+  await reviewed.page.locator('g[data-map-point="A"]').waitFor();
+  assert.match(await reviewed.page.locator('[data-map-well="A"]').textContent(),/geographic conflict/);
+  assert.equal(await reviewed.page.locator('.mw-trajectory').count(),0);
+  await reviewed.page.locator('[data-map-well="A"]').click();
+  await reviewed.page.getByRole('button',{name:'Review survey map references'}).click();
+  await reviewed.page.locator('#mw-survey-refs [name=angleUnit]').selectOption('degrees');
+  await reviewed.page.locator('#mw-survey-refs [name=northReference]').selectOption('Grid north');
+  await reviewed.page.locator('#mw-survey-refs [name=sameGrid]').check();
+  await reviewed.page.getByRole('button',{name:'Apply to map'}).click();
+  const path=reviewed.page.locator('polyline[data-map-point="A"]');
+  await path.waitFor({state:'attached'});
+  assert.equal(new Set((await path.getAttribute('points')).split(' ')).size,2);
+  assert.equal(await reviewed.page.locator('.mw-survey-end[data-map-point="A"]').count(),1);
+  await reviewed.page.locator('.mw-menu summary').filter({hasText:'Basemap'}).click();
+  await reviewed.page.getByRole('button',{name:'Google Roadmap'}).click();
+  await reviewed.page.getByText(/No geographically referenced wells/).waitFor();
+  await reviewed.context.close();
+
   app.data.datasets=baseDatasets;
   a.sourceCoordinates.crs=b.sourceCoordinates.crs='EPSG:32632';
   source.references.crs='EPSG:32632';

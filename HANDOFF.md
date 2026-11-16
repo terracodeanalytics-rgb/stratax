@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-16 - ZIP field-grid and survey references
+
+- Frontend-only Site v35 source `7990fa0fdf4653337cdf4439374132701a327971`. Rollback is Site v34. Archive is in `.release/zip-map-20261116`. The 89-station TOMBOY survey starts at MD zero but still requires documented orientation before plotting. The mixed station source still requires a reviewed block and tied origin. Run `node scripts/verify-field-grid.cjs` for geographic-conflict and map-only survey review coverage. No container images were created. Cleanup retained all 90 registry-tagged StrataX images.
+
 ## 2026-11-16 - Shared Cloud save recovery
 
 - Frontend-only Site v34 source `72803fe0dce11d0998d6f7a5239c6b772d8c308a`. Rollback is Site v32. Final archive is `.release/cloud-save-20261116/stratax-utf8.tar.gz`. Run `node scripts/verify-cloud-save-rebase.cjs` and `node scripts/verify-import-reconciliation.cjs`. Set `STRATAX_UI_BASE` for a hosted browser replay. Fixtures simulate account sign-in and the Cloud save API. No container images were built. Cleanup checked the StrataX registry and retained all 90 tagged images.

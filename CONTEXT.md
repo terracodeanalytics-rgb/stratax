@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-16 - ZIP field-grid and survey references
+
+- A geographic conflict can block basemap placement while an unambiguous source X/Y pair remains usable on its native grid. Conflicting X/Y pairs remain unplaced. The inspector can record documented angle units, azimuth reference and source-grid association for an active angular survey. That review supports horizontal display only and leaves retained datasets, scientific depth conversion and import validation intact.
+
 ## 2026-11-16 - Shared Cloud save recovery
 
 - Cloud saves keep a confirmed project/workspace baseline by signed-in owner, project and revision. Pending saves retain the baseline with their device draft. A stale revision triggers a fresh read and bounded three-way retry. Overlap or a legacy draft without a trusted baseline stays in recovery. Calculated Map positions are view state. AGENTS.md requires shared fixes and cross-account verification.

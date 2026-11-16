@@ -38,9 +38,9 @@
   for(const dataset of datasets){for(const record of dataset.wellRecords||[])for(const [kind,key]of keys(record)){if([...(seen.get(kind+':'+key)||[])].some(id=>id!==record.id))notes.push({code:'existing_'+kind,severity:'warning',source:dataset.name,sourceId:dataset.sourceId,assetKey:dataset.assetKey||dataset.id,message:(record.name||record.id)+' shares '+kind+' with a separate well registration. Review the affected records; coordinates never merge wells.'});}for(const record of dataset.wellRecords||[])remember(record);}
   return notes;
  }
- function trajectory(rows,dataset,well,{sourceGrid=false,gridUnit=null}={}){
+ function trajectory(rows,dataset,well,{sourceGrid=false,gridUnit=null,planView=false}={}){
   const refs=dataset.references||{},m=dataset.mapping||{},mode=dataset.surveyMethod||dataset.metadata?.surveyMethod||'angles',factor=length(refs.depthUnit),origin=well?.sourceCoordinates,points=[];
-  if(!factor)throw new Error('Confirm survey depth units.');if(!refs.verticalDatum)throw new Error('Confirm the survey depth/elevation datum.');if(rows.length>50000)throw new Error('Use a survey of at most 50,000 stations.');
+  if(!factor)throw new Error('Confirm survey depth units.');if(!refs.verticalDatum&&!(planView&&sourceGrid&&mode==='angles'))throw new Error('Confirm the survey depth/elevation datum.');if(rows.length>50000)throw new Error('Use a survey of at most 50,000 stations.');
   if(!['angles','offsets','xy_tvd','coordinates'].includes(mode))throw new Error('Confirm the survey representation.');
   if(mode==='coordinates'&&!['Depth positive down','Elevation positive up'].includes(refs.verticalMeaning))throw new Error('Confirm whether Z is depth or elevation.');
   if(['offsets','xy_tvd'].includes(mode)&&refs.depthReference!=='TVD')throw new Error('Confirm TVD and its datum for supplied vertical-depth coordinates.');

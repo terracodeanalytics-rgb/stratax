@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-16 - ZIP field-grid and survey references
+
+- Site v35 (deployment `appgdep_6afaad363f148191a3f277a45956b0c9`) preserves consistent wellhead X/Y on the field grid when the geographic placement conflicts. The original TOMBOY ZIP has six exact agreement pairs between LAS and header X/Y, and offsets of 4,082–4,091 m between the proposed EPSG:26391 conversion and LAS geographic coordinates. Four ZIP compatibility checks and the local field-grid browser replay passed. The public field-grid replay and two-account Cloud regression passed. Both live assets matched, API health was OK, and Sites reported zero recent errors.
+
 ## 2026-11-16 - Shared Cloud save recovery
 
 - Site v34 (deployment `appgdep_6afaaa851688819182789da27e28144d`) adds a shared Cloud workspace save retry. It combines independent edits against the confirmed starting revision and retains overlapping edits for recovery. Opening Map no longer saves calculated positions. v34 corrects a map text encoding regression found during the v33 browser replay. Final public replay passed the two-account Cloud test, overlapping-edit retention, and field-grid and local-folder regressions. All three live asset hashes matched, API health was OK, and Sites reported zero recent errors.
