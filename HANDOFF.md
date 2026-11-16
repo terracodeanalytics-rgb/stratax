@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-16 - Direct Map deviation import
+
+- Frontend-only Site v36 source `427b8428b4d8b77bc3fb5dc2b46e4b071e4533b0`. Rollback is Site v35. Release archive is in `.release/direct-deviation-20261116`. Browser regressions are `node scripts/verify-field-grid.cjs`, `node scripts/verify-map-deviation-cloud.cjs` and `node scripts/verify-cloud-save-rebase.cjs`. Set `STRATAX_UI_BASE` for a hosted replay. Cloud storage and test identities are fixture-backed. No container images were built. Cleanup removed the temporary native test artifacts and retained all 90 tagged StrataX images.
+
 ## 2026-11-16 - ZIP field-grid and survey references
 
 - Frontend-only Site v35 source `7990fa0fdf4653337cdf4439374132701a327971`. Rollback is Site v34. Archive is in `.release/zip-map-20261116`. The 89-station TOMBOY survey starts at MD zero but still requires documented orientation before plotting. The mixed station source still requires a reviewed block and tied origin. Run `node scripts/verify-field-grid.cjs` for geographic-conflict and map-only survey review coverage. No container images were created. Cleanup retained all 90 registry-tagged StrataX images.

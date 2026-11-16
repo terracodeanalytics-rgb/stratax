@@ -32,3 +32,34 @@
 .mw-deviation-wells span{grid-column:2;grid-row:1/3;align-self:center;font-size:11px}
 .mw-measure-results{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 20px}
 .mw-measure-results dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+
+#dialog:has(.mw-survey-import){width:min(820px,calc(100vw - 28px));max-width:none}
+#dialog:has(.mw-survey-locked){width:min(600px,calc(100vw - 28px))}
+.mw-survey-import{display:grid;grid-template-columns:minmax(155px,.72fr) minmax(0,1.6fr);gap:20px;color:#194a40}
+.mw-survey-locked{grid-template-columns:minmax(0,1fr)}
+.mw-survey-wells{padding:12px;border:1px solid #dce8e0;border-radius:10px;background:#f5faf7}
+.mw-survey-wells .field{margin:0 0 10px}
+.mw-survey-wells .mw-deviation-wells{max-height:300px}
+.mw-survey-wells .mw-deviation-wells button{grid-template-columns:1fr;border-color:transparent;padding:9px;background:#fff}
+.mw-survey-wells .mw-deviation-wells button[aria-pressed=true]{background:#e4f4ed;border-color:#7ab3a4}
+.mw-survey-destination{display:flex;gap:11px;align-items:center;margin-bottom:14px}
+.mw-survey-symbol{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:#e5f4ec;color:#087c73}
+.mw-survey-destination small,.mw-survey-destination strong{display:block}
+.mw-survey-destination small{font-size:11px;color:#587664}
+.mw-survey-destination strong{font-size:16px}
+.mw-survey-file{display:grid;gap:6px;padding:16px;border:1px dashed #8db6a9;border-radius:10px;background:#f7fbf9;cursor:pointer}
+.mw-survey-file strong{overflow-wrap:anywhere}
+.mw-survey-file span{font-size:11px;color:#587664}
+.mw-survey-file input{max-width:100%;font-size:12px}
+.mw-survey-import details{margin-top:12px;border:1px solid #dce8e0;padding:10px 12px;border-radius:8px}
+.mw-survey-import summary{cursor:pointer;font-weight:600}
+.mw-survey-import summary small{font-weight:400;color:#587664;margin-left:8px}
+.mw-survey-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:10px}
+.mw-survey-fields .field{min-width:0;margin:8px 0}
+.mw-survey-fields select{min-width:0;text-overflow:ellipsis}
+.mw-survey-fields [hidden]{display:none}
+.mw-survey-notes{border:1px solid #dfd4bd;background:#fbf8f0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:12px}
+.mw-survey-import [role=alert]{color:#9f3227}
+.mw-survey-import [role=status]:empty,.mw-survey-import [role=alert]:empty{display:none}
+.mw-survey-import .actions{justify-content:flex-end;margin-top:14px}
+@media(max-width:620px){.mw-survey-import{grid-template-columns:1fr;gap:12px}.mw-survey-wells .mw-deviation-wells{max-height:150px}}

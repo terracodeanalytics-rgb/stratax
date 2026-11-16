@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-16 - Direct Map deviation import
+
+- Map owns a dedicated one-survey-per-file dialog with column mapping and inspection notes. It reuses retained originals, existing local and native ingestion, and warning acknowledgment. A successful activation selects the accepted version and focuses available map geometry. The well menu can open the relevant review when survey geometry is unresolved.
+
 ## 2026-11-16 - ZIP field-grid and survey references
 
 - A geographic conflict can block basemap placement while an unambiguous source X/Y pair remains usable on its native grid. Conflicting X/Y pairs remain unplaced. The inspector can record documented angle units, azimuth reference and source-grid association for an active angular survey. That review supports horizontal display only and leaves retained datasets, scientific depth conversion and import validation intact.

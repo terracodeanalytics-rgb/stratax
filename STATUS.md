@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-16 - Direct Map deviation import
+
+- Site v36 (deployment `appgdep_6afab13cbdf08191815e393254a73cff`) imports deviation surveys inside Map. The inspector opens a searchable well picker and the well menu locks the destination. Show trajectory enables the layer, chooses the grid and fits the full path. The local portable, native Cloud and mobile-width checks passed. The public frontend passed both import replays and the two-account dialog and save checks. All three live assets matched, API health was OK, and Sites reported zero recent errors.
+
 ## 2026-11-16 - ZIP field-grid and survey references
 
 - Site v35 (deployment `appgdep_6afaad363f148191a3f277a45956b0c9`) preserves consistent wellhead X/Y on the field grid when the geographic placement conflicts. The original TOMBOY ZIP has six exact agreement pairs between LAS and header X/Y, and offsets of 4,082–4,091 m between the proposed EPSG:26391 conversion and LAS geographic coordinates. Four ZIP compatibility checks and the local field-grid browser replay passed. The public field-grid replay and two-account Cloud regression passed. Both live assets matched, API health was OK, and Sites reported zero recent errors.

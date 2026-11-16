@@ -66,37 +66,51 @@ const fs=require('node:fs');
   assert.equal(await svg.locator('polyline').count(),0);
   await page.locator('#mw-deviation').check();
   await svg.locator('polyline').waitFor();
-  await page.locator('.mw-menu summary').filter({hasText:'Add'}).click();
-  await page.locator('.mw-menu [data-map-command=deviation]').click();
+  await page.locator('.mw-inspector [data-map-command=deviation]').click();
   assert.equal(await page.locator('[data-mw-deviation-well]').count(),6);
   await page.locator('#mw-deviation-search').fill('unplaced');
   assert.equal(await page.locator('[data-mw-deviation-well]:visible').count(),1);
-  await page.locator('#mw-deviation-cancel').click();
+  await page.locator('#mw-deviation-search').fill('');
+  await page.locator('[data-mw-deviation-well="A"]').click();
+  assert.equal(await page.locator('#mw-survey-destination').textContent(),'Controlled A');
+  if(process.env.STRATAX_CAPTURE_SURVEY_DIALOG){
+   await page.locator('#dialog').screenshot({path:'.release/map-wells-20261116/deviation-dialog.png'});
+   await page.setViewportSize({width:390,height:844});
+   const dialog=await page.locator('#dialog').boundingBox();
+   assert(dialog.width<390&&dialog.x>=0);
+   await page.setViewportSize({width:1600,height:1100});
+  }
+  async function importSurvey(name,rows){
+   const importer=page.locator('#mw-survey-import');
+   assert.equal(await page.locator('#well-import-form').count(),0);
+   await importer.locator('[type=file]').setInputFiles({name,mimeType:'text/csv',buffer:Buffer.from(rows)});
+   await importer.locator('[name=surveyMethod]').waitFor();
+   await importer.locator('[name=surveyMethod]').selectOption('xy_tvd');
+   await importer.locator('[name=depthUnit]').selectOption('m');
+   await importer.locator('[name=verticalDatum]').fill('KB');
+   await importer.locator('[type=submit]').click();
+   await page.locator('#mw-survey-import [name=acknowledge]').or(page.locator('dialog:not([open])')).first().waitFor({state:'attached'});
+   if(await page.locator('#mw-survey-import [name=acknowledge]').count()){
+    await importer.locator('[name=acknowledge]').check();
+    await importer.locator('[type=submit]').click();
+   }
+   await page.locator('#dialog').waitFor({state:'hidden'});
+  }
+  await importSurvey('A-update.csv','X,Y,TVD\n481000,69000,0\n481030,69010,30\n481090,69030,100\n');
   await page.locator('.mw-well-row button[data-map-well-menu="B"]').click();
   await page.getByRole('menuitem',{name:/Add deviation data/}).click();
-  const importer=page.locator('#well-import-form');
-  await importer.locator('#wi-files').setInputFiles({
-   name:'B-survey.csv',mimeType:'text/csv',buffer:Buffer.from('X,Y,TVD\n481200,69100,0\n481260,69110,50\n481310,69140,100\n')
-  });
-  for(let stage=2;stage<=4;stage++){
-   await importer.locator('.primary').click();
-   await page.locator('[aria-current=step]').filter({hasText:new RegExp('^'+stage+'\\.')}).waitFor();
-   if(stage===3)assert.equal(await importer.locator('select[name^="well:"]').inputValue(),'B');
-  }
-  await importer.locator('[name=surveyMethod]').selectOption('xy_tvd');
-  await importer.locator('[name="ref:depthReference"]').selectOption('TVD');
-  await importer.locator('[name="ref:depthUnit"]').selectOption('m');
-  await importer.locator('[name="ref:verticalDatum"]').fill('KB');
-  await importer.locator('.primary').click();
-  await importer.locator('#wi-authority').check();
-  await importer.locator('.primary').click();
-  await page.locator('#wi-review-result').click();
-  await page.locator('#ack-import-warnings').check();
-  await page.locator('#commit-import').click();
-  await svg.locator('polyline.mw-trajectory[data-map-point="B"]').waitFor({state:'attached'});
-  await page.keyboard.press('Escape');
-  await svg.locator('polyline.mw-trajectory[data-map-point="B"]').waitFor();
+  assert.equal(await page.locator('[data-mw-deviation-well]').count(),0);
+  assert.equal(await page.locator('#mw-survey-destination').textContent(),'Controlled B');
+  await importSurvey('B-survey.csv','X,Y,TVD\n481200,69100,0\n481260,69110,50\n481310,69140,100\n');
+  const bPath=svg.locator('polyline.mw-trajectory[data-map-point="B"]');
+  await bPath.waitFor({state:'attached'});
   assert.equal(await svg.locator('.mw-survey-end').count(),2);
+  await page.locator('#mw-deviation').uncheck();
+  assert.equal(await bPath.count(),0);
+  await page.locator('.mw-well-row button[data-map-well-menu="B"]').click();
+  await page.getByRole('menuitem',{name:'Show trajectory'}).click();
+  await bPath.waitFor({state:'attached'});
+  assert.equal(await page.locator('#mw-deviation').isChecked(),true);
   await context.close();
 
   const conflict={...a,sourceCoordinates:{...a.sourceCoordinates,crs:'EPSG:26391',coordinateConflict:true,geographicCoordinates:{lat:4.62,lng:6.79}}};
@@ -125,6 +139,9 @@ const fs=require('node:fs');
   await reviewed.page.locator('.mw-menu summary').filter({hasText:'Basemap'}).click();
   await reviewed.page.getByRole('button',{name:'Google Roadmap'}).click();
   await reviewed.page.getByText(/No geographically referenced wells/).waitFor();
+  await reviewed.page.locator('.mw-well-row button[data-map-well-menu="A"]').click();
+  await reviewed.page.getByRole('menuitem',{name:'Show trajectory'}).click();
+  await path.waitFor({state:'attached'});
   await reviewed.context.close();
 
   app.data.datasets=baseDatasets;

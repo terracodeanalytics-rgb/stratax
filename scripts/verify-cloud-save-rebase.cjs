@@ -60,6 +60,10 @@ const testAccount=uid=>({uid,record:{revision:1,project:{id,name:uid+' study',st
  try{
   for(const uid of ['cloud-save-owner-a','cloud-save-owner-b']){
    const account=testAccount(uid),{page,context}=await open(account);
+   await page.locator('.mw-inspector [data-map-command=deviation]').click();
+   assert.equal(await page.locator('#mw-survey-import [data-mw-deviation-well]').count(),2);
+   assert.equal(await page.locator('#well-import-form').count(),0);
+   await page.locator('#mw-deviation-cancel').click();
    account.record.revision++;
    account.record.workspace.mapWorkspace.hiddenWells=['B'];
    account.record.workspace.audit.unshift({action:'Concurrent import for '+uid});
