@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-16 - Shared Cloud save recovery
+
+- Site v34 (deployment `appgdep_6afaaa851688819182789da27e28144d`) adds a shared Cloud workspace save retry. It combines independent edits against the confirmed starting revision and retains overlapping edits for recovery. Opening Map no longer saves calculated positions. v34 corrects a map text encoding regression found during the v33 browser replay. Final public replay passed the two-account Cloud test, overlapping-edit retention, and field-grid and local-folder regressions. All three live asset hashes matched, API health was OK, and Sites reported zero recent errors.
+
 ## 2026-11-16 - Well inventory, deviation intake and measurement results
 
 - Site v32 (deployment `appgdep_6afaa65c55d48191a5a517c5efd96622`) adds wheel depth zoom, map inventory from registered wells and active datasets, deviation import from a well picker or well menu, and distance/area results in up to ten units. The focused field-grid fixture plotted header-only and LAS-only wells, kept unplaced and conflicting wells in Contents, and drew a newly confirmed deviation survey without a manual refresh. Field-grid and four focused log browser checks passed locally and on the published frontend. All seven production asset hashes matched, API health returned OK, and the Sites error check returned zero.

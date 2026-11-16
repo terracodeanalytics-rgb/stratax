@@ -1,5 +1,5 @@
 import {focusCanvasWell,retryFolderLogSources} from './well-canvas.js';
-import {reconcileImportWorkspace} from './import-reconciliation.js';
+import {reconcileImportWorkspace,workspaceValuesEqual} from './import-reconciliation.js';
 import {applyImportedEvidence} from './well-data.js';
 import {enhanceWorkbench} from './workbench.js';
 import {workspaceNavigation,interpretationModes,processingModes} from './workspace-navigation.js';
@@ -59,7 +59,7 @@ let wells=[];
 
 let projectQuery='',projectFilter='Active',projectView='grid',projectSort='recent';
 
-function persistPortfolio(){if(!session.user)return;try{localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}catch{toast('Device recovery cache is full. Your chosen project destination will still be saved.');}queueProjectSaves();}
+function persistPortfolio(){if(!session.user)return;queueProjectSaves();try{localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}catch{toast('Device recovery cache is full. Your chosen project destination will still be saved.');}}
 
 function projectContext(){return portfolio.records.find(p=>p.id===portfolio.activeId);}
 
@@ -180,11 +180,11 @@ function projectActions(p){return `<div class="actions">${p.status!=='Trash'?`<b
 
 function projectCard(p){return cardView(p,{portfolio,progressFor,stages:projectStages(p),icon,esc,badge});}
 
-function projectEditor(id){const current=portfolio.records.find(p=>p.id===id);projectSetup({project:current,modal,complete:async draft=>{if(portfolio.records.some(p=>p.id!==draft.id&&p.status!=='Trash'&&p.name.toLowerCase()===draft.name.toLowerCase()))throw new Error('A project with this name already exists.');const now=new Date().toISOString();draft.createdAt=draft.createdAt||now;draft.updatedAt=now;draft.favorite=!!draft.favorite;const context=current?structuredClone(current.id===portfolio.activeId?state:portfolio.contexts[current.id]||freshProjectContext(draft.name)):freshProjectContext(draft.name);context.project=draft.name;if(!current)context.audit.unshift({action:'Created project',time:now});await flushProjectSaves();if(current)draft.revision=current.revision||0;const result=await repository.save(draft,context);draft.revision=result.revision||0;if(current)Object.assign(current,draft);else portfolio.records.push(draft);portfolio.contexts[draft.id]=result.workspace||context;portfolio.activeId=draft.id;state=structuredClone(portfolio.contexts[draft.id]);saveStates.set(draft.id,result.unsaved?'Unsaved changes':'Saved');rememberSnapshot(draft);localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));navigate('overview');}});}
+function projectEditor(id){const current=portfolio.records.find(p=>p.id===id);projectSetup({project:current,modal,complete:async draft=>{if(portfolio.records.some(p=>p.id!==draft.id&&p.status!=='Trash'&&p.name.toLowerCase()===draft.name.toLowerCase()))throw new Error('A project with this name already exists.');const now=new Date().toISOString();draft.createdAt=draft.createdAt||now;draft.updatedAt=now;draft.favorite=!!draft.favorite;const context=current?structuredClone(current.id===portfolio.activeId?state:portfolio.contexts[current.id]||freshProjectContext(draft.name)):freshProjectContext(draft.name);context.project=draft.name;if(!current)context.audit.unshift({action:'Created project',time:now});await flushProjectSaves();if(current)draft.revision=current.revision||0;const result=await repository.save(draft,context);draft.revision=result.revision||0;if(current)Object.assign(current,draft);else portfolio.records.push(draft);portfolio.contexts[draft.id]=result.workspace||context;portfolio.activeId=draft.id;state=structuredClone(portfolio.contexts[draft.id]);saveStates.set(draft.id,result.unsaved?'Unsaved changes':'Saved');rememberCloudBase(draft,result);rememberSnapshot(draft);localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));navigate('overview');}});}
 
 function freshProjectContext(name){return {...structuredClone(initial),project:name};}
 
-async function openProject(id){const p=portfolio.records.find(p=>p.id===id),uid=session.user?.uid;if(!p||p.status==='Trash')return;try{await flushProjectSaves({allowFailures:true});if(session.user?.uid!==uid)return;const pending=p.pendingSave&&portfolio.contexts[id],record=pending?{workspace:portfolio.contexts[id]}:p.storage==='legacy'?{workspace:portfolio.contexts[id]||freshProjectContext(p.name)}:await repository.load(p);if(session.user?.uid!==uid)return;portfolio.activeId=id;state={...structuredClone(initial),...record.workspace,project:p.name};if(state.ingestion)applyImportedEvidence(state,state.ingestion);if(record.project)Object.assign(p,record.project,{revision:record.revision,pendingSave:false});portfolio.contexts[id]=structuredClone(state);wells=state.wellDrafts||[];p.lastOpenedAt=new Date().toISOString();if(!pending){saveConflicts.delete(id);rememberConflicts();rememberSnapshot(p);saveStates.set(id,p.storage==='portable'?'Unsaved changes':'Saved');}localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));navigate('overview');if(saveConflicts.has(id))toast('Opened your retained local edits. Review the save conflict before publishing changes.');}catch(error){toast(error.message);}}
+async function openProject(id){const p=portfolio.records.find(p=>p.id===id),uid=session.user?.uid;if(!p||p.status==='Trash')return;try{await flushProjectSaves({allowFailures:true});if(session.user?.uid!==uid)return;const pending=p.pendingSave&&portfolio.contexts[id],record=pending?{workspace:portfolio.contexts[id]}:p.storage==='legacy'?{workspace:portfolio.contexts[id]||freshProjectContext(p.name)}:await repository.load(p);if(session.user?.uid!==uid)return;portfolio.activeId=id;state={...structuredClone(initial),...record.workspace,project:p.name};if(state.ingestion)applyImportedEvidence(state,state.ingestion);if(record.project)Object.assign(p,record.project,{revision:record.revision,pendingSave:false});portfolio.contexts[id]=structuredClone(state);wells=state.wellDrafts||[];p.lastOpenedAt=new Date().toISOString();if(!pending){if(record.project)rememberCloudBase(p,record);saveConflicts.delete(id);rememberConflicts();rememberSnapshot(p);saveStates.set(id,p.storage==='portable'?'Unsaved changes':'Saved');}localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));navigate('overview');if(saveConflicts.has(id))toast('Opened your retained local edits. Review the save conflict before publishing changes.');}catch(error){toast(error.message);}}
 
 function projectMenu(id){let p=portfolio.records.find(p=>p.id===id);if(!p)return;modal('Manage '+esc(p.name),`<div class="project-menu"><button id="project-edit">${icon('file')}Edit project details</button><button id="project-duplicate">${icon('layers')}Duplicate project</button><button id="project-archive">${icon('clock')}${p.status==='Archived'?'Restore to active projects':'Archive project'}</button>${p.status==='Trash'?'<button id="project-restore">Restore from trash</button>':'<button id="project-trash" class="danger">Move to trash</button>'}</div><p class="note" style="margin-top:18px">Archived projects remain available. Projects in Trash can be restored. Project data is retained in its selected storage destination.</p>`);$('#project-edit').onclick=()=>{$('#dialog').close();projectEditor(id);};$('#project-duplicate').onclick=async()=>{try{await flushProjectSaves();const context=id===portfolio.activeId?state:(await repository.load(p)).workspace;const blob=await repository.exportPackage(p,context);const copy=await repository.importPackage(blob);copy.project.name=p.name+' copy';copy.project.status='Active';copy.project.favorite=false;$('#dialog').close();await attachLocal(copy);toast('Independent portable copy created. Download it to retain the copy.');}catch(error){toast(error.message);}};$('#project-archive').onclick=()=>{p.status=p.status==='Archived'?'Active':'Archived';p.updatedAt=new Date().toISOString();persistPortfolio();$('#dialog').close();renderProjects();toast(p.status==='Archived'?'Project archived.':'Project restored.');};if($('#project-trash'))$('#project-trash').onclick=()=>{modal('Move project to trash?',`<p><strong>${esc(p.name)}</strong> will be removed from your project lists. Its local workspace can be restored from Trash.</p><div class="actions" style="margin-top:20px"><button id="confirm-project-trash" class="danger">Move to trash</button><button id="cancel-project-trash">Cancel</button></div>`);$('#cancel-project-trash').onclick=()=>$('#dialog').close();$('#confirm-project-trash').onclick=()=>{p.previousStatus=p.status;p.status='Trash';p.updatedAt=new Date().toISOString();persistPortfolio();$('#dialog').close();renderProjects();toast('Project moved to Trash. You can restore it.');};};if($('#project-restore'))$('#project-restore').onclick=()=>{p.status=p.previousStatus||'Active';p.updatedAt=new Date().toISOString();persistPortfolio();$('#dialog').close();renderProjects();toast('Project restored.');};}
 
@@ -228,28 +228,181 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#profile-popover
 
 let loadedUid=null;
 
-async function restoreUserWorkspace(){const uid=session.user?.uid||null;if(uid!==loadedUid){loadedUid=uid;clearTimeout(saveTimer);repository.resetRepository();saveSnapshots.clear();saveStates.clear();saveConflicts.clear();state=structuredClone(initial);portfolio={records:[],activeId:null,contexts:{}};if(uid){try{const saved=JSON.parse(localGet(storageKey('stratax.projects.v2'))||'null');if(saved?.records){portfolio=saved;portfolio.contexts||={};if(!localGet(storageKey('stratax.projects.recovery.v2')))localStorage.setItem(storageKey('stratax.projects.recovery.v2'),JSON.stringify(saved));portfolio.records=portfolio.records.filter(p=>{if(!p.demo)return true;const c=portfolio.contexts[p.id]||{};const realFiles=(c.files||[]).filter(f=>f.local);if(realFiles.length||Object.keys(c.configs||{}).length){p.demo=false;p.name+=' recovery';p.storage='legacy';c.files=realFiles;c.well='';c.audit=(c.audit||[]).filter(a=>!/(demonstration|example|synthetic)/i.test(a.action));return true;}return false;});for(const p of portfolio.records){p.storage=p.storage||'legacy';p.workflows||=['petrophysics'];}if(!portfolio.records.some(p=>p.id===portfolio.activeId))portfolio.activeId=null;}}catch{}try{const cloud=await repository.listCloud();if(loadedUid!==uid)return;for(const p of cloud){const index=portfolio.records.findIndex(r=>r.id===p.id);if(index>=0){const cached=portfolio.records[index];if(cached.pendingSave){saveStates.set(p.id,'Unsaved changes');continue;}portfolio.records[index]=portfolio.contexts[p.id]?{...p,revision:cached.revision}:p;}else portfolio.records.push(p);}}catch(error){toast(error.message);}try{for(const id of JSON.parse(localGet(storageKey('stratax.projectConflicts.v1'))||'[]'))if(portfolio.records.some(p=>p.id===id&&p.pendingSave)){saveConflicts.add(id);saveStates.set(id,'Review save conflict');}}catch{}for(const p of portfolio.records){rememberSnapshot(p);if(p.pendingSave)saveStates.set(p.id,saveConflicts.has(p.id)?'Review save conflict':'Unsaved changes');if(p.storage==='legacy')saveStates.set(p.id,'Choose storage');if(p.storage==='portable')saveStates.set(p.id,'Unsaved changes');}if(portfolio.activeId){const p=projectContext();try{const record=p.storage==='legacy'||p.pendingSave?{workspace:portfolio.contexts[p.id]}:await repository.load(p);if(loadedUid!==uid)return;state={...structuredClone(initial),...record.workspace,project:p.name};if(state.ingestion)applyImportedEvidence(state,state.ingestion);if(record.project)Object.assign(p,record.project,{revision:record.revision});portfolio.contexts[p.id]=structuredClone(state);if(record.project)rememberSnapshot(p);}catch(error){saveStates.set(p.id,'Unsaved changes');state={...structuredClone(initial),...portfolio.contexts[p.id],project:p.name};toast(error.message);}}}wells=state.wellDrafts||[];search='';projectQuery='';}if(uid&&session.account?.display_name)state.preferences={...state.preferences,displayName:session.account.display_name};route=location.hash.slice(1)||'home';if($('#dialog').open)$('#dialog').close();render();}
+async function restoreUserWorkspace(){const uid=session.user?.uid||null;if(uid!==loadedUid){loadedUid=uid;clearTimeout(saveTimer);repository.resetRepository();saveSnapshots.clear();saveStates.clear();saveConflicts.clear();cloudBases.clear();state=structuredClone(initial);portfolio={records:[],activeId:null,contexts:{}};if(uid){try{const saved=JSON.parse(localGet(storageKey('stratax.projects.v2'))||'null');if(saved?.records){portfolio=saved;portfolio.contexts||={};
+for(const p of portfolio.records){const base=portfolio.cloudSaveBases?.[p.id];if(p.storage==='cloud'&&base?.revision===p.revision)cloudBases.set(p.id,base);}if(!localGet(storageKey('stratax.projects.recovery.v2')))localStorage.setItem(storageKey('stratax.projects.recovery.v2'),JSON.stringify(saved));portfolio.records=portfolio.records.filter(p=>{if(!p.demo)return true;const c=portfolio.contexts[p.id]||{};const realFiles=(c.files||[]).filter(f=>f.local);if(realFiles.length||Object.keys(c.configs||{}).length){p.demo=false;p.name+=' recovery';p.storage='legacy';c.files=realFiles;c.well='';c.audit=(c.audit||[]).filter(a=>!/(demonstration|example|synthetic)/i.test(a.action));return true;}return false;});for(const p of portfolio.records){p.storage=p.storage||'legacy';p.workflows||=['petrophysics'];}if(!portfolio.records.some(p=>p.id===portfolio.activeId))portfolio.activeId=null;}}catch{}try{const cloud=await repository.listCloud();if(loadedUid!==uid)return;for(const p of cloud){const index=portfolio.records.findIndex(r=>r.id===p.id);if(index>=0){const cached=portfolio.records[index];if(cached.pendingSave){saveStates.set(p.id,'Unsaved changes');continue;}portfolio.records[index]=portfolio.contexts[p.id]?{...p,revision:cached.revision}:p;}else portfolio.records.push(p);}}catch(error){toast(error.message);}try{for(const id of JSON.parse(localGet(storageKey('stratax.projectConflicts.v1'))||'[]'))if(portfolio.records.some(p=>p.id===id&&p.pendingSave)){saveConflicts.add(id);saveStates.set(id,'Review save conflict');}}catch{}for(const p of portfolio.records){rememberSnapshot(p);if(p.pendingSave)saveStates.set(p.id,saveConflicts.has(p.id)?'Review save conflict':'Unsaved changes');if(p.storage==='legacy')saveStates.set(p.id,'Choose storage');if(p.storage==='portable')saveStates.set(p.id,'Unsaved changes');}if(portfolio.activeId){const p=projectContext();try{const record=p.storage==='legacy'||p.pendingSave?{workspace:portfolio.contexts[p.id]}:await repository.load(p);if(loadedUid!==uid)return;state={...structuredClone(initial),...record.workspace,project:p.name};if(state.ingestion)applyImportedEvidence(state,state.ingestion);if(record.project)Object.assign(p,record.project,{revision:record.revision});portfolio.contexts[p.id]=structuredClone(state);if(record.project){rememberCloudBase(p,record);rememberSnapshot(p);}}catch(error){saveStates.set(p.id,'Unsaved changes');state={...structuredClone(initial),...portfolio.contexts[p.id],project:p.name};toast(error.message);}}}wells=state.wellDrafts||[];search='';projectQuery='';}if(uid&&session.account?.display_name)state.preferences={...state.preferences,displayName:session.account.display_name};route=location.hash.slice(1)||'home';if($('#dialog').open)$('#dialog').close();render();}
 
-const saveSnapshots=new Map(),saveStates=new Map(),saveConflicts=new Set();
+const saveSnapshots=new Map(),saveStates=new Map(),saveConflicts=new Set(),cloudBases=new Map();
 
 let saveTimer,saveChain=Promise.resolve();
 
 function projectStages(p){const selected=workflows(p);return selected.includes('petrophysics')?(selected.includes('seismic')?[...stages,['seismic','Seismic interpretation','Review survey evidence']]:stages):seismicStages;}
 
-function snapshot(p){const copy={...p};delete copy.revision;delete copy.pendingSave;delete copy.lastOpenedAt;delete copy.sourceCount;delete copy.wellCount;return JSON.stringify([copy,portfolio.contexts[p.id]||{}]);}
+function snapshot(p){return confirmedSnapshot(p,portfolio.contexts[p.id]||{});}
 
 function rememberSnapshot(p){saveSnapshots.set(p.id,snapshot(p));}
 
 function updateSaveIndicator(){const b=$('.save-indicator');if(b)b.textContent=saveStates.get(portfolio.activeId)||'Saved';}
 
-function queueProjectSaves(){clearTimeout(saveTimer);for(const p of portfolio.records){if(snapshot(p)!==saveSnapshots.get(p.id)){p.pendingSave=true;saveStates.set(p.id,'Unsaved changes');}}updateSaveIndicator();saveTimer=setTimeout(()=>flushProjectSaves().catch(error=>{if(error.code!=='project_folder_access')toast(error.message);}),600);}
-
+function cloudProjectFields(project){
+ const {revision,pendingSave,lastOpenedAt,sourceCount,wellCount,updatedAt,...fields}=project;
+ return fields;
+}
+function cloudWorkspaceFields(workspace){
+ const {ingestion,...fields}={...structuredClone(initial),...workspace};
+ return fields;
+}
+function rememberCloudBase(project,record){
+ if(project.storage!=='cloud'||!record.project)return;
+ cloudBases.set(project.id,structuredClone({revision:record.revision,project:cloudProjectFields(record.project),workspace:cloudWorkspaceFields(record.workspace)}));
+ if(portfolio.cloudSaveBases)delete portfolio.cloudSaveBases[project.id];
+}
+function keepCloudBase(project){
+ const base=cloudBases.get(project.id);
+ if(base?.revision!==project.revision)return;
+ (portfolio.cloudSaveBases||={})[project.id]=base;
+}
+function cloudBaseFor(project){
+ const base=cloudBases.get(project.id);
+ return base?.revision===project.revision?base:null;
+}
+function queueProjectSaves(){
+ clearTimeout(saveTimer);
+ for(const p of portfolio.records){
+  if(snapshot(p)!==saveSnapshots.get(p.id)){
+   p.pendingSave=true;
+   if(p.storage==='cloud')keepCloudBase(p);
+   if(!saveConflicts.has(p.id))saveStates.set(p.id,'Unsaved changes');
+  }
+ }
+ updateSaveIndicator();
+ saveTimer=setTimeout(()=>flushProjectSaves().catch(error=>{if(error.code!=='project_folder_access')toast(error.message);}),600);
+}
 const importSaveLocks=new Set();
-function flushProjectSaves({projectId=null,allowFailures=false,requireCurrent=false}={}){clearTimeout(saveTimer);const uid=session.user?.uid;saveChain=saveChain.catch(()=>{}).then(async()=>{let failure;for(const p of portfolio.records){if(uid!==session.user?.uid)return;if(projectId&&p.id!==projectId)continue;if(importSaveLocks.has(p.id))continue;if(snapshot(p)===saveSnapshots.get(p.id)&&!p.pendingSave)continue;if(saveConflicts.has(p.id)){if(requireCurrent){failure||=Object.assign(new Error('This project changed elsewhere. Use Review save conflict to retain your edits and reopen the Cloud version.'),{code:'project_conflict'});}continue;}if(p.storage==='legacy'){saveStates.set(p.id,'Choose storage');continue;}saveStates.set(p.id,'Saving…');updateSaveIndicator();const before=snapshot(p),context=structuredClone(portfolio.contexts[p.id]||freshProjectContext(p.name));try{const result=await repository.save(p,context);if(uid!==session.user?.uid)return;p.revision=result.revision||0;p.pendingSave=!!result.unsaved;saveStates.set(p.id,result.unsaved?'Unsaved changes':'Saved');saveSnapshots.set(p.id,before);if(!result.unsaved&&snapshot(p)!==before)queueProjectSaves();}catch(error){p.pendingSave=true;if(error.code==='project_conflict'){saveConflicts.add(p.id);rememberConflicts();saveStates.set(p.id,'Review save conflict');}else if(error.code==='project_folder_access')saveStates.set(p.id,'Reconnect project folder');else saveStates.set(p.id,'Save failed · retry');failure||=error;}finally{if(uid===session.user?.uid){try{localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}catch{}updateSaveIndicator();}}}if(failure&&!allowFailures)throw failure;});return saveChain;}
+const cloudConflict=message=>Object.assign(new Error(message||'This project changed elsewhere. Use Review save conflict to recover your pending edits.'),{code:'project_conflict'});
+function mergeCloudChanges(base,project,workspace,remote){
+ if(!base)throw cloudConflict('This older Cloud edit has no saved starting version. Use Review save conflict to keep a recovery copy.');
+ const local=cloudProjectFields(project);
+ const transient=Object.fromEntries(Object.entries(project).filter(([key])=>!Object.hasOwn(local,key)));
+ return {
+  project:{...transient,...reconcileImportWorkspace(base.project,local,cloudProjectFields(remote.project),'project'),revision:remote.revision},
+  workspace:{...reconcileImportWorkspace(base.workspace,cloudWorkspaceFields(workspace),cloudWorkspaceFields(remote.workspace)),...(workspace.ingestion?{ingestion:workspace.ingestion}:{})}
+ };
+}
+async function saveCloudProject(project,context,uid){
+ const scope=()=>uid===session.user?.uid;
+ const base=cloudBaseFor(project);
+ let submitted={project:{...project},workspace:context},result,retried=false;
+ for(let attempt=0;attempt<3;attempt++){
+  try{result=await repository.save(submitted.project,submitted.workspace);break;}
+  catch(error){
+   if(!scope())return null;
+   if(error.code!=='project_conflict'||!base||attempt===2)throw error;
+   const remote=await repository.load(project);
+   if(!scope())return null;
+   const latest=portfolio.contexts[project.id]||context;
+   submitted=mergeCloudChanges(base,project,latest,remote);
+   submitted.localBaseline=structuredClone({project:cloudProjectFields(project),workspace:cloudWorkspaceFields(latest)});
+   retried=true;
+  }
+ }
+ if(!scope())return null;
+ let confirmed=null;
+ if(retried){
+  const latest=portfolio.contexts[project.id]||context;
+  const merged=mergeCloudChanges(submitted.localBaseline,project,latest,result);
+  const acknowledged={...cloudWorkspaceFields(result.workspace),...(submitted.workspace.ingestion?{ingestion:submitted.workspace.ingestion}:{})};
+  confirmed=confirmedSnapshot({...submitted.project,...result.project},acknowledged);
+  for(const field of Object.keys(cloudProjectFields(project)))if(!Object.hasOwn(merged.project,field))delete project[field];
+  Object.assign(project,merged.project);
+  portfolio.contexts[project.id]=structuredClone(merged.workspace);
+  if(portfolio.activeId===project.id){
+   for(const field of Object.keys(state))if(!Object.hasOwn(merged.workspace,field))delete state[field];
+   Object.assign(state,merged.workspace);
+   wells=state.wellDrafts||[];
+  }
+ }
+ return {result,confirmed,retried};
+}
+function flushProjectSaves({projectId=null,allowFailures=false,requireCurrent=false}={}){
+ clearTimeout(saveTimer);
+ const uid=session.user?.uid;
+ saveChain=saveChain.catch(()=>{}).then(async()=>{
+  let failure;
+  for(const p of portfolio.records){
+   if(uid!==session.user?.uid)return;
+   if(projectId&&p.id!==projectId||importSaveLocks.has(p.id))continue;
+   if(snapshot(p)===saveSnapshots.get(p.id)&&!p.pendingSave)continue;
+   if(saveConflicts.has(p.id)){if(requireCurrent)failure||=cloudConflict();continue;}
+   if(p.storage==='legacy'){saveStates.set(p.id,'Choose storage');continue;}
+   saveStates.set(p.id,'Saving…');updateSaveIndicator();
+   const before=snapshot(p),context=structuredClone(portfolio.contexts[p.id]||freshProjectContext(p.name));
+   try{
+    const cloud=p.storage==='cloud'?await saveCloudProject(p,context,uid):null;
+    if(uid!==session.user?.uid)return;
+    const result=cloud?cloud.result:await repository.save(p,context);
+    if(uid!==session.user?.uid)return;
+    p.revision=result.revision||0;
+    const confirmed=cloud?.confirmed||before;
+    rememberCloudBase(p,result);
+    const current=snapshot(p);
+    const unchanged=current===confirmed||!!cloud?.retried&&workspaceValuesEqual(JSON.parse(current),JSON.parse(confirmed));
+    p.pendingSave=!!result.unsaved||!unchanged;
+    if(p.pendingSave&&p.storage==='cloud')keepCloudBase(p);
+    saveStates.set(p.id,p.pendingSave?'Unsaved changes':'Saved');
+    saveSnapshots.set(p.id,unchanged?current:confirmed);
+    if(!result.unsaved&&p.pendingSave)queueProjectSaves();
+    if(cloud?.retried&&portfolio.activeId===p.id)render();
+   }catch(error){
+    p.pendingSave=true;
+    if(p.storage==='cloud')keepCloudBase(p);
+    if(error.code==='project_conflict'){saveConflicts.add(p.id);rememberConflicts();saveStates.set(p.id,'Review save conflict');}
+    else if(error.code==='project_folder_access')saveStates.set(p.id,'Reconnect project folder');
+    else saveStates.set(p.id,'Save failed · retry');
+    failure||=error;
+   }finally{
+    if(uid===session.user?.uid){
+     try{localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}catch{}
+     updateSaveIndicator();
+    }
+   }
+  }
+  if(failure&&!allowFailures)throw failure;
+ });
+ return saveChain;
+}
+function confirmedSnapshot(project,workspace){
+ const copy={...project};
+ delete copy.revision;delete copy.pendingSave;delete copy.lastOpenedAt;delete copy.sourceCount;delete copy.wellCount;
+ return JSON.stringify([copy,workspace]);
+}
 function rememberConflicts(){try{localStorage.setItem(storageKey('stratax.projectConflicts.v1'),JSON.stringify([...saveConflicts]));}catch{}}
 
 
-function conflictDialog(){const p=projectContext();modal('This project changed elsewhere',`<p>Your pending changes remain on this device. Download them before continuing, or retain a recovery copy and load the current cloud version.</p><div class="actions"><button id="conflict-export">Download pending project</button><button id="conflict-reload" class="primary">Keep recovery copy & reload</button></div>`);$('#conflict-export').onclick=()=>projectAction('export-workspace');$('#conflict-reload').onclick=async()=>{try{const uid=session.user?.uid,key=storageKey('stratax.conflict.'+p.id),backup=localStorage.getItem(key)?key+'.'+Date.now():key;localStorage.setItem(backup,JSON.stringify({project:p,workspace:state}));const record=await repository.load(p);if(session.user?.uid!==uid||projectContext()?.id!==p.id)return;Object.assign(p,record.project,{revision:record.revision,pendingSave:false});state={...structuredClone(initial),...record.workspace};portfolio.contexts[p.id]=structuredClone(state);saveConflicts.delete(p.id);rememberConflicts();rememberSnapshot(p);saveStates.set(p.id,'Saved');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));$('#dialog').close();render();}catch(error){toast(error.message);}};}
+function conflictDialog(){
+ const p=projectContext(),base=cloudBaseFor(p);
+ modal('Review Cloud save conflict',`<p>Your pending edits are still on this device. ${base?'Try merging again if the Cloud version has changed.':'This edit was saved by an older version without a confirmed starting copy.'} You can also keep a recovery copy and reopen the Cloud project.</p><div class="actions">${base?'<button id="conflict-retry">Retry safe merge</button>':''}<button id="conflict-export">Download pending edits</button><button id="conflict-reload" class="primary">Keep recovery copy & reload</button></div>`);
+ const recovery=()=>({project:p,workspace:state,base:cloudBaseFor(p)});
+ $('#conflict-export').onclick=()=>blobDownload(p.name+'-pending-edits.json',new Blob([JSON.stringify(recovery(),null,2)],{type:'application/json'}));
+ $('#conflict-retry')?.addEventListener('click',async()=>{
+  $('#dialog').close();saveConflicts.delete(p.id);rememberConflicts();
+  try{await flushProjectSaves({projectId:p.id,requireCurrent:true});}
+  catch(error){toast(error.message);if(projectContext()?.id===p.id&&saveConflicts.has(p.id))conflictDialog();}
+ });
+ $('#conflict-reload').onclick=async()=>{
+  try{
+   const uid=session.user?.uid,key=storageKey('stratax.conflict.'+p.id),backup=localStorage.getItem(key)?key+'.'+Date.now():key;
+   localStorage.setItem(backup,JSON.stringify(recovery()));
+   const record=await repository.load(p);
+   if(session.user?.uid!==uid||projectContext()?.id!==p.id)return;
+   Object.assign(p,record.project,{revision:record.revision,pendingSave:false});
+   state={...structuredClone(initial),...record.workspace};wells=state.wellDrafts||[];
+   portfolio.contexts[p.id]=structuredClone(state);
+   saveConflicts.delete(p.id);rememberConflicts();rememberCloudBase(p,record);rememberSnapshot(p);
+   saveStates.set(p.id,'Saved');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));
+   $('#dialog').close();render();
+  }catch(error){toast(error.message);}
+ };
+}
 function unavailablePage(title,message){return heading(title,message)+panel('Evidence required',`<div class="empty">${icon('logs')}<strong>No scientific results available</strong><p>Original sources and saved configurations remain available in this project.</p>${go('files','View source files')}</div>`);}
 
 function bindProjectUI(){if(['data','collection','files','wells','documents'].includes(route))bindDataPage();bindSwitcher({portfolio,openProject,navigate,esc,icon});if(route==='overview'&&projectContext()?.coordinates)mountMap($('#overview-map'),projectContext().coordinates);if(route==='map')bindMapWorkspace();}
@@ -298,6 +451,8 @@ async function refreshCloudMapLocations(){
 const workspaceHost={openWellWorkspace:(destination,id)=>{
  if(destination==='map'){navigate('map');focusMapWell(id);return;}
  navigate('interpretation');focusCanvasWell(id);
-},refreshCloudMapLocations,reconnectProjectFolder,folderReconnectDialog,importTask:async task=>{const id=portfolio.activeId;await flushProjectSaves({projectId:id,requireCurrent:true});importSaveLocks.add(id);try{return await task();}finally{try{if(portfolio.activeId===id)await workspaceHost.reload();}finally{importSaveLocks.delete(id);}}},getProject:projectContext,getState:()=>state,icon,modal,toast,save,flush:()=>flushProjectSaves({projectId:portfolio.activeId,requireCurrent:true}),render,navigate,download:blobDownload,openImporter,attachCloud:async record=>{const p=record.project;p.revision=record.revision;portfolio.records.push(p);portfolio.contexts[p.id]=record.workspace;portfolio.activeId=p.id;state={...structuredClone(initial),...record.workspace};wells=state.wellDrafts||[];rememberSnapshot(p);saveStates.set(p.id,'Saved');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));},reload:async()=>{const p=projectContext();if(p?.storage==='cloud'){const record=await repository.load(p);Object.assign(p,record.project,{revision:record.revision});const cached=state.ingestion,local={...state},remote={...record.workspace},base=JSON.parse(saveSnapshots.get(p.id)||'[{},{}]')[1];delete local.ingestion;delete remote.ingestion;delete base.ingestion;let merged;try{merged=reconcileImportWorkspace(base,local,remote);}catch(error){p.pendingSave=true;saveConflicts.add(p.id);rememberConflicts();saveStates.set(p.id,'Review save conflict');throw error;}state={...structuredClone(initial),...merged,ingestion:cached};if(cached)applyImportedEvidence(state,cached);portfolio.contexts[p.id]=structuredClone(state);wells=state.wellDrafts||[];saveSnapshots.set(p.id,JSON.stringify([{...JSON.parse(snapshot(p))[0]},record.workspace]));p.pendingSave=true;saveStates.set(p.id,'Unsaved changes');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}}};
+},refreshCloudMapLocations,reconnectProjectFolder,folderReconnectDialog,importTask:async task=>{const id=portfolio.activeId;await flushProjectSaves({projectId:id,requireCurrent:true});importSaveLocks.add(id);try{return await task();}finally{try{if(portfolio.activeId===id)await workspaceHost.reload();}finally{importSaveLocks.delete(id);}}},getProject:projectContext,getState:()=>state,icon,modal,toast,save,flush:()=>flushProjectSaves({projectId:portfolio.activeId,requireCurrent:true}),render,navigate,download:blobDownload,openImporter,attachCloud:async record=>{const p=record.project;p.revision=record.revision;portfolio.records.push(p);portfolio.contexts[p.id]=record.workspace;portfolio.activeId=p.id;state={...structuredClone(initial),...record.workspace};wells=state.wellDrafts||[];rememberCloudBase(p,record);rememberSnapshot(p);saveStates.set(p.id,'Saved');localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));},reload:async()=>{const p=projectContext();if(p?.storage==='cloud'){const uid=session.user?.uid,record=await repository.load(p);if(uid!==session.user?.uid||projectContext()?.id!==p.id)return;const cached=state.ingestion,local={...state},remote=cloudWorkspaceFields(record.workspace),base=structuredClone(cloudBases.get(p.id)?.workspace||JSON.parse(saveSnapshots.get(p.id)||'[{},{}]')[1]);delete local.ingestion;delete remote.ingestion;delete base.ingestion;let merged;try{merged=reconcileImportWorkspace(base,local,remote);}catch(error){p.pendingSave=true;saveConflicts.add(p.id);rememberConflicts();saveStates.set(p.id,'Review save conflict');throw error;}Object.assign(p,record.project,{revision:record.revision});state={...structuredClone(initial),...merged,ingestion:cached};if(cached)applyImportedEvidence(state,cached);portfolio.contexts[p.id]=structuredClone(state);wells=state.wellDrafts||[];const changed=!workspaceValuesEqual(cloudWorkspaceFields(state),remote);
+saveSnapshots.set(p.id,changed?confirmedSnapshot(p,{...remote,...(cached?{ingestion:cached}:{})}):snapshot(p));
+rememberCloudBase(p,record);p.pendingSave=changed;if(changed)keepCloudBase(p);saveStates.set(p.id,changed?'Unsaved changes':'Saved');updateSaveIndicator();localStorage.setItem(storageKey('stratax.projects.v2'),JSON.stringify(portfolio));}}};
 configureData(workspaceHost);configureMapWorkspace(workspaceHost);configureInterpretation(workspaceHost);configureSeismic(workspaceHost);configureProcessing(workspaceHost);configureSeismicQi(workspaceHost);
 render();initializeAuth(restoreUserWorkspace);

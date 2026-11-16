@@ -105,7 +105,11 @@ function pendingSurveys(id){
   ?(record.datasets||[]).filter(d=>!d.active&&d.family==='deviation'&&d.well===owner&&!accepted.has(identity(d))).map(d=>({id:d.id,importId:record.id}))
   :[]);
 }
-function located(){const matches=headerMatches();return [...matches.keys()].filter(id=>!settings().removedWells?.includes(id)).flatMap(id=>{const p=automaticLocations[id]||settings().locations?.[id];return headerPoint(p,retainedLocation(id,matches))?[{id,name:wellName(id),...p}]:[];});}
+function displayedLocation(id,source){
+ const saved=settings().locations?.[id],automatic=automaticLocations[id];
+ return headerPoint(saved,source)?saved:headerPoint(automatic,source)?automatic:null;
+}
+function located(){const matches=headerMatches();return [...matches.keys()].filter(id=>!settings().removedWells?.includes(id)).flatMap(id=>{const p=displayedLocation(id,retainedLocation(id,matches));return p?[{id,name:wellName(id),...p}]:[];});}
 function saveSetting(key,value){const state=host.getState();state.mapWorkspace||={locations:{},symbols:{}};state.mapWorkspace[key]=value;host.save();}
 function closeWellMenu(restoreFocus=false){const node=$('#mw-well-context'),trigger=node?.returnTarget;contextAbort?.abort();contextAbort=null;node?.remove();if(restoreFocus&&trigger?.isConnected)trigger.focus();}
 function endpointFor(id,basis,grid=fieldGrid()){
@@ -268,7 +272,7 @@ async function placeReferencedWells(project,scope){
  if(!isScope(scope))return;
  for(const id of wells()){
   const retained=retainedLocation(id,matches),header=recovered.get(matches.get(id)?.record?.id);
-  if(headerPoint(automaticLocations[id]||settings().locations?.[id],retained))continue;
+  if(displayedLocation(id,retained))continue;
   const source=sourceEpsg(retained?.crs)?retained:header||retained;
   if(retained?.coordinateConflict||retained?.conflictingCRS)continue;
   if(!source||source.coordinateConflict||source.conflictingCRS)continue;
@@ -304,8 +308,7 @@ async function placeReferencedWells(project,scope){
  if(!isScope(scope))return;
  const fresh=Object.entries(updates).filter(([id])=>!headerPoint(settings().locations?.[id],retainedLocation(id,matches)));
  if(!fresh.length)return;
- if(project.storage==='cloud')saveSetting('locations',{...settings().locations,...Object.fromEntries(fresh)});
- else Object.assign(automaticLocations,Object.fromEntries(fresh));
+ Object.assign(automaticLocations,Object.fromEntries(fresh));
 }
 function emptyWellList(){
  const state=host.getState(),unassigned=datasets().filter(d=>d.family!=='well_headers'&&wellFamilies.has(d.family)&&!d.well).length;

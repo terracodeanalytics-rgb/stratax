@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-16 - Shared Cloud save recovery
+
+- Cloud saves keep a confirmed project/workspace baseline by signed-in owner, project and revision. Pending saves retain the baseline with their device draft. A stale revision triggers a fresh read and bounded three-way retry. Overlap or a legacy draft without a trusted baseline stays in recovery. Calculated Map positions are view state. AGENTS.md requires shared fixes and cross-account verification.
+
 ## 2026-11-16 - Well inventory, deviation intake and measurement results
 
 - Map lists registered wells and wells associated with active evidence independently of wellhead placement. It prefers complete, consistent explicit headers and can fall back to retained coordinates from associated evidence, including LAS. Coordinate conflicts remain visible and unplaced. Map-specific deviation drafts are scoped to the selected well. A single newly accepted survey becomes the active survey for that well and triggers a map reload. Metric and customary popup units require known horizontal units.
