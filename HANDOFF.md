@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-16 - Well inventory, deviation intake and measurement results
+
+- Frontend-only Site v32 source `4f466908e105551565995815f9f462f6d4d67c39`. Rollback is Site v31. Archive is in `.release/map-wells-20261116`. Run `node scripts/verify-field-grid.cjs` and run `node scripts/verify-well-canvas.cjs` with `CANVAS_CASE=Wheel over the log`. Set `STRATAX_UI_BASE` to replay against the hosted frontend. Neither the user project nor live Google credentials are needed by these fixtures. No container images were created.
+
 ## 2026-11-15 - Local log source reconnect
 
 - Frontend-only log source hotfix. Site v31 source `365521f5078fb53dde4ea982d13a0e19a61aacff`. Rollback is Site v30. Archive is under `.release/log-source-20261115`. Run `node scripts/verify-log-folder-reconnect.cjs` for the disconnect and restore regression. The fixture simulates the browser picker and reads three retained sample rows. No container images were created.

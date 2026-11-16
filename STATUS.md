@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-16 - Well inventory, deviation intake and measurement results
+
+- Site v32 (deployment `appgdep_6afaa65c55d48191a5a517c5efd96622`) adds wheel depth zoom, map inventory from registered wells and active datasets, deviation import from a well picker or well menu, and distance/area results in up to ten units. The focused field-grid fixture plotted header-only and LAS-only wells, kept unplaced and conflicting wells in Contents, and drew a newly confirmed deviation survey without a manual refresh. Field-grid and four focused log browser checks passed locally and on the published frontend. All seven production asset hashes matched, API health returned OK, and the Sites error check returned zero.
+
 ## 2026-11-15 - Local log source reconnect
 
 - Site v31 (deployment `appgdep_6afa19f8af2081919c9cc67fb59f9021`) adds an inline folder reconnect action for local log read failures and reloads affected curves automatically once folder access is granted. The focused browser replay passed locally and on the public frontend. All three live asset hashes matched, API health returned OK, and the Sites error check returned zero.

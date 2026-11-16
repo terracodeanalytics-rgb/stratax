@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-16 - Well inventory, deviation intake and measurement results
+
+- Map lists registered wells and wells associated with active evidence independently of wellhead placement. It prefers complete, consistent explicit headers and can fall back to retained coordinates from associated evidence, including LAS. Coordinate conflicts remain visible and unplaced. Map-specific deviation drafts are scoped to the selected well. A single newly accepted survey becomes the active survey for that well and triggers a map reload. Metric and customary popup units require known horizontal units.
+
 ## 2026-11-15 - Local log source reconnect
 
 - The log canvas keeps the original artifact error code. Folder permission and missing local artifact errors expose the same project-folder reconnect flow as Save. Reconnecting clears those failed reads and requeues the visible curves, while preserving loaded curve data and workbook settings.
