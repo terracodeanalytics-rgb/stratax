@@ -46,8 +46,13 @@ const fs=require('node:fs');
   assert.doesNotMatch(await svg.textContent(),/Project site/);
   const marker=await svg.locator('g[data-map-point="A"]').getAttribute('transform');
   assert.equal((await svg.locator('polyline').getAttribute('points')).split(' ')[0],marker.slice(10,-1));
-  const rect=await svg.locator('.mw-grid-edge').boundingBox();
-  const click=async(x,y)=>page.mouse.click(rect.x+rect.width*x,rect.y+rect.height*y);
+  const click=async(x,y)=>{
+   const target=await svg.locator('.mw-grid-edge').evaluate((element,[x,y])=>{
+    const rect=element.getBoundingClientRect();
+    return [rect.x+rect.width*x,rect.y+rect.height*y];
+   },[x,y]);
+   await page.mouse.click(...target);
+  };
   await page.getByRole('button',{name:'Measure',exact:true}).click();
   await click(.35,.35);await click(.60,.35);
   assert.match(await page.locator('#mw-measure-status').textContent(),/Distance.*\d m/);

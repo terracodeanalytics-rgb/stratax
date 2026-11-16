@@ -1,5 +1,9 @@
 # StrataX context
 
+## 2026-11-16 - Automatic Google Maps wellhead placement
+
+- The corroborated-projected map location is calculated at render time and leaves import evidence and stored project coordinates intact. The Cloud preview must agree with the retained projected CRS. Other coordinate conflicts stay on the source grid. A survey with compatible projected station geometry can be converted when its wellhead qualifies and the necessary survey references are available.
+
 ## 2026-11-16 - Direct Map deviation import
 
 - Map owns a dedicated one-survey-per-file dialog with column mapping and inspection notes. It reuses retained originals, existing local and native ingestion, and warning acknowledgment. A successful activation selects the accepted version and focuses available map geometry. The well menu can open the relevant review when survey geometry is unresolved.

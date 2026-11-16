@@ -1,5 +1,9 @@
 # StrataX status
 
+## 2026-11-16 - Automatic Google Maps wellhead placement
+
+- Site v38 (deployment `appgdep_6afab47fa2ec8191b291d538c4634b88`) automatically places wells on Google basemaps when independent retained header and LAS X/Y agree, projected CRS declarations agree, and the competing latitude/longitude has no declared datum. The two-identity fixture checked automatic placement, a competing referenced latitude/longitude, and a contradictory projected CRS declaration. The public map asset matched, API health was OK, and Sites reported zero recent errors. The hosted two-identity and field-grid browser suites passed.
+
 ## 2026-11-16 - Direct Map deviation import
 
 - Site v36 (deployment `appgdep_6afab13cbdf08191815e393254a73cff`) imports deviation surveys inside Map. The inspector opens a searchable well picker and the well menu locks the destination. Show trajectory enables the layer, chooses the grid and fits the full path. The local portable, native Cloud and mobile-width checks passed. The public frontend passed both import replays and the two-account dialog and save checks. All three live assets matched, API health was OK, and Sites reported zero recent errors.

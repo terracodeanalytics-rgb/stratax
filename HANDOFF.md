@@ -1,5 +1,9 @@
 # StrataX handoff
 
+## 2026-11-16 - Automatic Google Maps wellhead placement
+
+- Frontend-only Site v38 source `50d58355c69c77c997b76b17784e61ecb60f99ee`. Rollback is Site v36. Final archive is `.release/automatic-google-map-20261116/stratax-final.tar.gz`. Run `node scripts/verify-cloud-save-rebase.cjs` for the two-identity basemap positive and negative cases and `node scripts/verify-field-grid.cjs` for adjacent workflows. The browser fixtures simulate Google Maps and Cloud state. No container images were built. Cleanup reviewed all 90 registry-tagged StrataX images and retained them.
+
 ## 2026-11-16 - Direct Map deviation import
 
 - Frontend-only Site v36 source `427b8428b4d8b77bc3fb5dc2b46e4b071e4533b0`. Rollback is Site v35. Release archive is in `.release/direct-deviation-20261116`. Browser regressions are `node scripts/verify-field-grid.cjs`, `node scripts/verify-map-deviation-cloud.cjs` and `node scripts/verify-cloud-save-rebase.cjs`. Set `STRATAX_UI_BASE` for a hosted replay. Cloud storage and test identities are fixture-backed. No container images were built. Cleanup removed the temporary native test artifacts and retained all 90 tagged StrataX images.
