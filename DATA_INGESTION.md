@@ -1,5 +1,17 @@
 # Guided ingestion
 
+## Current import contract, 17 November 2026
+
+Import well headers first. A header already retained in the project can establish a log or survey destination. Users can include headers and data in the same reviewed batch, with header evidence establishing eligible wells before activation. Logs match those wells, and deviation surveys are optional per well. Existing wells can receive header evidence through the header-row merge control. Existing active datasets remain accessible.
+
+The browser, local commit, Cloud commit and automatic ZIP activation enforce the shared header requirement. A log's embedded identity supports matching. New well registrations require retained well-header evidence. Resolve missing or ambiguous associations in the import review.
+
+Supported readers produce the existing StrataX column-ID and JSON-array chunk representation. Normalization metadata records mapping, references, effective units and review status. Recognized unit aliases are standardized without changing sample values. Source bytes, original unit labels and null gaps remain retained. Missing units, datums or ambiguous mappings require review.
+
+Use **Download sample format** in the main importer or dedicated map deviation popup for illustrative LAS/CSV layouts. Spatial, model, seismic and document families receive native-format guidance where a small numeric sample would be misleading. Native conversion uses the supported Cloud readers. Unsupported structures remain available as retained originals with an explanation.
+
+Verification commands are `node scripts/verify-header-intake.cjs` and `.venv/Scripts/python.exe scripts/verify-live-header-intake.py`. Set `STRATAX_UI_BASE` or `STRATAX_QA_API` for a candidate. The final release passed two browser identities on the public domain and 44 real Cloud checks across two accounts. Backend regression coverage passed 22 tests.
+
 ## Matching deviation files from a ZIP
 
 The importer matches directional surveys to well headers or LAS well identities. A directional worksheet or CSV with several wells produces separate surveys. **Map → Review pending surveys** opens the retained import when a matched survey still needs review.

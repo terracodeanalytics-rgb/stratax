@@ -2,6 +2,7 @@
 
 ## 2026-11-17 - Shared import contracts and deployment
 
+- Release `e69999f` is pushed. Frontend `stratax-frontend-00005-hoy` and API `stratax-api-00059-din` serve 100% traffic. The public hostname is `https://stratax.terracodeanalytics.com`, with `stratax` CNAME pointing to `ghs.googlehosted.com` and a valid managed certificate.
 - The frontend now deploys to Cloud Run stratax-frontend in project-9afac/us-central1. The existing StrataX custom domain uses the Google-managed mapping. API and worker updates remain separate releases. Keep the previous Sites identity for history.
 - Imported well-header datasets establish the eligible well IDs for new well-data activation. Header policy is enforced in browser and backend paths, including automatic ZIP. Existing well evidence is resolved only for affected wells and stops after matching a retained header. Headers can merge into existing wells.
 - Normalization uses the existing column-ID and JSON-array chunk representation with explicit mapping, reference and effective-unit metadata. Unit spelling normalization preserves sample values and source units. Unsupported or ambiguous inputs retain their originals and offer sample formats or native format guidance.
@@ -11,7 +12,7 @@
 
 - Curve display drafts stay in the inspector and rendered DOM until Apply. Display state adds fill mode cutoff, cutoffColor, belowColor and aboveColor alongside the existing fillOpacity. Missing settings retain legacy defaults. Cutoff sides follow numeric values on either axis direction and fills remain split across sample gaps.
 - Track style copying targets existing tracks in the active workbook. Matching requires a unique confirmed property type and effective unit, with exact mnemonic/unit matching for unclassified curves. Duplicate source or destination candidates are skipped. Display style copying excludes source bindings, names and visibility.
-- The configured Sites project is currently inaccessible through the connected account. Publication must resume against the existing project after account/workspace access is restored. The implementation has local fixture verification under two identities, with real authenticated Cloud persistence and production verification pending.
+- Curve display and selective track styling shipped through Cloud Run. Future frontend publication uses `frontend/Dockerfile` and the `stratax-frontend` service. The previous Sites account access issue is historical.
 
 ## 2026-11-16 - Automatic Google Maps wellhead placement
 
