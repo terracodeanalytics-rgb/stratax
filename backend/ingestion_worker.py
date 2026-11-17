@@ -355,7 +355,11 @@ def run():
             if automatic:
                 if any(i.get('code') == 'derived_quota' for i in final_issues) and not any(i.get('code') == 'derived_quota' for i in current['issues']):
                     current['issues'][-1] = final_issues[-1]
-                selected = automatic_selection(current, record)
+                from import_policy import header_well_ids
+                header_ids = header_well_ids(record.get('workspace', {}), resolve=lambda identifier:
+                    project.collection('datasets').document(identifier).get(transaction=transaction).to_dict(),
+                    required={d.get('well') for d in current.get('datasets', [])})
+                selected = automatic_selection(current, record, header_ids)
                 if selected:
                     activate_datasets(transaction, project, ref, current, record, selected, {},
                                       bump_project=False, write_records=False)

@@ -434,6 +434,12 @@ def install_imports(app, database, current_user, fail, acceptance_current):
                         available.update('column-' + str(i) for i in range(dataset['columnCount']))
                     if not columns or set(columns) - available:
                         fail(400, 'column_selection', 'Choose inspected columns from this dataset.')
+            from import_policy import header_well_ids, missing_headers
+            header_ids = header_well_ids(project_data.get('workspace', {}), selected,
+                lambda identifier: ref.collection('datasets').document(valid(identifier)).get(transaction=transaction).to_dict(),
+                required={d.get('well') for d in selected})
+            if missing_headers(selected, header_ids):
+                fail(400, 'well_header_required', 'Import a well header first, then match each dataset to a well in that header.')
             activate_datasets(transaction, ref, ir, current, project_data, selected, body.selected_columns, old_ref, old)
             if parent and parent.get('mode') == 'automatic_zip':
                 parent.setdefault('followUpAccepted', []).extend(

@@ -1,5 +1,13 @@
 # StrataX status
 
+## 2026-11-17 - Shared header-led intake and Cloud Run release
+
+- Cloud Run frontend stratax-frontend-00005-hoy and API stratax-api-00059-din serve 100% traffic. The native import worker uses build fe157761-3398-484a-b70f-fde2c2e2eeb6. API build a11b125f-a15f-4d09-b812-984c1b435eb6 and frontend build a9b6146d-8679-4b18-8f75-cfce46e0b0f1 contain this release. Public HTTPS is issued and nine public asset hashes match the working source.
+- Well data activation requires retained well-header evidence across local, portable, Cloud and automatic ZIP paths. Headers guide log and optional deviation associations. Existing wells can receive header evidence through merge. Existing activated datasets remain available. Readers emit normalized schema metadata and recognized effective-unit aliases while preserving original bytes and null gaps. Import and map-survey dialogs offer sample downloads and format guidance.
+- Existing folder projects request read permission on opening and offer a target-specific reconnect dialog. Wrong folders and cancellation retain the selected project state. New projects default to Cloud storage. Browser filesystem permission renewal still requires a user gesture.
+- Verification passed 22 backend regressions, 6 display/model regressions, hosted browser workflows for two isolated identities, and 44 native Cloud checks with two real isolated accounts. Real-account checks covered private uploads, header rejection, mixed activation, normalized units/nulls and persisted survey associations. Test accounts and their generated data were removed. Final browser replay on the public HTTPS domain passed for both isolated identities, including map sample download and existing-folder reopening.
+- Cleanup inventoried 98 registry-tagged images and retained all 98 plus runtime/rollback references. Removed zero images and zero original assets. Frontend /health and API health passed. No fresh ERROR logs were returned for the final revisions. No original assets or pre-existing research/browser logs were removed. The release applies through shared product paths for all accounts.
+
 ## 2026-11-17 - Cloud Run frontend and DNS
 
 - Cloud Run revision `stratax-frontend-00001-sqz` serves 100% of the new frontend service in `project-9afac/us-central1`. Build `b7162e54-6560-4d99-819b-ef4b97f5bbe6` packaged frontend commit `5630ea0`. The dedicated runtime service account has no project roles.

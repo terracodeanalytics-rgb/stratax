@@ -25,11 +25,20 @@ function key(projectId, suffix = 'handle') { return `${session.user.uid}:${proje
 export function resetRepository() { activeUid = session.user?.uid; handles.clear(); }
 const folderError = () => Object.assign(new Error('Project folder access is needed. Select Reconnect project folder to continue.'), {code:'project_folder_access'});
 async function directory(projectId, request = false, mode = 'readwrite') {
+  const uid=session.user?.uid;
   let handle = handles.get(projectId) || await item(key(projectId));
-  if (!handle) throw folderError();
+  if (!uid || session.user?.uid !== uid) throw new Error('The signed-in account changed.');
+  if (!handle || typeof handle.queryPermission !== 'function') throw folderError();
   const options = {mode};
-  let permission = await handle.queryPermission(options);
-  if (permission !== 'granted' && request) permission = await handle.requestPermission(options);
+  let permission;
+  try {
+    permission = await handle.queryPermission(options);
+    if (permission !== 'granted' && request) permission = await handle.requestPermission(options);
+  } catch (error) {
+    if (['NotAllowedError','SecurityError'].includes(error.name)) throw folderError();
+    throw error;
+  }
+  if (session.user?.uid !== uid) throw new Error('The signed-in account changed.');
   if (permission !== 'granted') throw folderError();
   handles.set(projectId, handle);
   return handle;
@@ -64,17 +73,20 @@ export async function folderCanWrite(projectId) {
 }
 async function readFolderRecord(handle) {
   try { return validate(JSON.parse(await (await (await handle.getFileHandle('project.stratax.json')).getFile()).text())); }
-  catch { throw new Error('Choose a folder containing this project’s project.stratax.json file.'); }
+  catch (error) {
+    if (['NotAllowedError','SecurityError'].includes(error.name)) throw folderError();
+    throw new Error('Choose a folder containing this project’s project.stratax.json file.');
+  }
 }
 export async function listCloud() {
   let cursor = null, records = [];
   do { const result = await api('/api/projects' + (cursor ? '?cursor='+encodeURIComponent(cursor) : '')); records.push(...result.projects); cursor = result.next_cursor; } while (cursor);
   return records;
 }
-export async function load(project) {
+export async function load(project, {requestPermission=false} = {}) {
   if (project.storage === 'cloud') return api('/api/projects/'+project.id);
   if (project.storage === 'local') {
-    const dir = await directory(project.id, false, 'read');
+    const dir = await directory(project.id, requestPermission, 'read');
     return readFolderRecord(dir);
   }
   const cached = await item(key(project.id, 'draft'));

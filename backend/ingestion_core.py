@@ -453,6 +453,10 @@ def validate_mapping(dataset, family, options):
         effective = options.get('units', {}).get(str(index), '')
         if effective:
             col['effectiveUnit'] = str(effective)[:80]
+        from import_policy import normalize_unit
+        normalized = normalize_unit(col.get('effectiveUnit') or col.get('unit'))
+        if normalized:
+            col['effectiveUnit'] = normalized
     if all(c.get('effectiveUnit') or c.get('unit') and c['unit'].upper() != 'UNKNOWN' for c in dataset['columns']):
         notes = [i for i in notes if i['code'] != 'unknown_units']
     required = {"deviation": ["md", "inclination", "azimuth"], "tops": ["name", "depth"], "checkshots": ["depth", "time"], "well_headers": ["well"], "production": ["date"], "spatial": []}.get(family, [])
@@ -535,6 +539,15 @@ def parse(path, output, family, options=None, companions=None):
         validate_mapping(dataset, family, settings)
         from well_ingestion import decorate
         decorate(dataset, output, settings)
+        dataset['normalization'] = {
+            'schemaVersion': 1, 'format': 'stratax-dataset/1',
+            'status': 'needs_review' if any(i.get('severity') == 'blocking' for i in dataset.get('issues', [])) else 'normalized',
+            'rowEncoding': 'json-array', 'nullValue': None,
+            'columnIds': [c['id'] for c in dataset.get('columns', [])],
+            'mapping': dict(dataset.get('mapping', {})),
+            'references': dict(dataset.get('references', {})),
+            'sourceUnitsRetained': True,
+        }
         if family in ('checkshots','deviation'):
             dataset['metadata']['profileSignature'] = profile_signature(dataset, output)
     return datasets

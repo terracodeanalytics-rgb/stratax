@@ -23,7 +23,7 @@ def test_activation_is_scoped_to_verified_wells_and_datasets():
         'archiveEntries': [{'excluded': True, 'path': 'seismic.sgy', 'reason': 'Outside workflows'}],
     }
     project = {'project': {'workflows': ['petrophysics']}, 'workspace': {'wellDrafts': [{'id':'a'}, {'id':'b'}]}}
-    selected = automatic_selection(record, project)
+    selected = automatic_selection(record, project, {'a', 'b'})
     assert [d['id'] for d in selected] == ['good']
     selected[0]['active'] = True
     assert automatic_result(record) == {

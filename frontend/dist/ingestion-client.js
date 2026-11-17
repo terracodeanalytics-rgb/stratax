@@ -1,6 +1,7 @@
 import {concurrent,registerEvidence} from './well-data.js';
 import {api,session} from './auth.js';
 import * as repository from './project-repository.js';
+import {requireWellHeaders} from './import-policy.js';
 
 export async function browserRead(file,family,options,{previewOnly=true,onChunk,onProgress,signal}={}){
  if(signal?.aborted)throw new DOMException('Import cancelled','AbortError');
@@ -108,6 +109,7 @@ export async function importLocal(project,workspace,assets,family,options,{signa
 export async function commitLocal(workspace,record,{templateName,replaceId,onSave,selection={}}){
  if(record.committedAt)throw new Error('Accepted evidence is retained. Resolve pending sources in a linked inspection.');
  const selected=record.datasets.filter(d=>!selection.selected_dataset_ids||selection.selected_dataset_ids.includes(d.id));const sourceNames=new Set(record.assets.filter(a=>selected.some(d=>d.sourceId===a.id)).map(a=>a.name));if(!selected.length||record.issues.some(i=>i.severity==='blocking'&&(!i.source||sourceNames.has(i.source))))throw new Error('Resolve the selected datasets’ blocking issues before activation. Originals are retained.');
+ requireWellHeaders(workspace,selected);
  if(replaceId&&selected.length!==1)throw new Error('Select one new dataset when replacing an active version.');for(const d of selected){const columns=selection.selected_columns?.[d.id];if(columns&&(!columns.length||columns.some(id=>!d.columns.some(c=>c.id===id))))throw new Error('Select at least one valid active column.');}record.status=record.issues.length?'retained/unresolved':'ready';for(const source of workspace.files){if(selected.some(d=>d.sourceId===source.id)){source.status=record.status==='ready'?'Imported':'Imported · references unresolved';source.type=record.assets.find(a=>a.id===source.id)?.family||record.family;}}record.committedAt=new Date().toISOString();
  for(const dataset of selected){if(selection.selected_columns?.[dataset.id])dataset.activeColumns=selection.selected_columns[dataset.id];dataset.active=true;dataset.scientificApproval=false;workspace.ingestion.datasets.push(dataset);if(replaceId){const old=workspace.ingestion.datasets.find(d=>d.id===replaceId);if(old){old.active=false;old.supersededBy=dataset.id;dataset.previousVersion=old.id;}}}
  registerEvidence(workspace,selected);

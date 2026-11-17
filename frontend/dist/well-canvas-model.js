@@ -1,3 +1,4 @@
+import './import-normalization.js';
 // Persist only display/interpretation metadata; samples stay in the project repository.
 export const MIN_TRACK_WIDTH=48,MAX_TRACK_WIDTH=480,DEFAULT_TRACK_WIDTH=48;
 export const palette=['#167e73','#b07036','#527fa3','#975b81','#6c8447','#c0534c'];
@@ -80,7 +81,7 @@ export function trackStyleMatches(source,target,getColumn){
  const identity=curve=>{
   const column=getColumn(curve);
   if(!column)return null;
-  const unit=column.effectiveUnit||column.unit||'';
+  const unit=globalThis.StrataxNormalization.canonicalUnit(column.effectiveUnit||column.unit||'');
   const type=column.propertyType;
   return JSON.stringify(type&&type!=='Unclassified'?['type',type,unit]:['mnemonic',column.mnemonic,unit]);
  };
@@ -92,6 +93,6 @@ export function trackStyleMatches(source,target,getColumn){
 }
 export function applyTemplate(well,template,datasets){
  const sources=datasets.filter(d=>d.well===well.wellId),missing=[];well.tracks=[];
- for(const saved of template.tracks){const track={id:uid(),name:saved.name,width:saved.width,curves:[]};well.tracks.push(track);for(const pattern of saved.curves){const matches=[];for(const ds of sources)for(const col of numericColumns(ds))if((pattern.propertyType&&pattern.propertyType!=='Unclassified'?col.propertyType===pattern.propertyType:col.mnemonic===pattern.mnemonic)&&String(col.effectiveUnit||col.unit||'')===pattern.unit)matches.push({ds,col});if(matches.length!==1){missing.push(pattern.mnemonic+(matches.length?' (multiple matching runs)':' (no exact mnemonic/unit match)'));continue;}addCurve(well,matches[0].ds,matches[0].col.id,track.id);Object.assign(track.curves.at(-1),{color:pattern.color,log:pattern.log,reverse:pattern.reverse,min:pattern.min,max:pattern.max,cutoff:finite(pattern.cutoff)?pattern.cutoff:null,visible:pattern.visible!==false,dashed:pattern.dashed===true,...fillStyle(pattern)});}}
+ for(const saved of template.tracks){const track={id:uid(),name:saved.name,width:saved.width,curves:[]};well.tracks.push(track);for(const pattern of saved.curves){const matches=[];for(const ds of sources)for(const col of numericColumns(ds))if((pattern.propertyType&&pattern.propertyType!=='Unclassified'?col.propertyType===pattern.propertyType:col.mnemonic===pattern.mnemonic)&&globalThis.StrataxNormalization.canonicalUnit(col.effectiveUnit||col.unit||'')===globalThis.StrataxNormalization.canonicalUnit(pattern.unit))matches.push({ds,col});if(matches.length!==1){missing.push(pattern.mnemonic+(matches.length?' (multiple matching runs)':' (no exact mnemonic/unit match)'));continue;}addCurve(well,matches[0].ds,matches[0].col.id,track.id);Object.assign(track.curves.at(-1),{color:pattern.color,log:pattern.log,reverse:pattern.reverse,min:pattern.min,max:pattern.max,cutoff:finite(pattern.cutoff)?pattern.cutoff:null,visible:pattern.visible!==false,dashed:pattern.dashed===true,...fillStyle(pattern)});}}
  return missing;
 }

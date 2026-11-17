@@ -36,7 +36,7 @@ export function suggest(dataset,family,previous={}){
  }
  if(mapping.index===undefined&&dataset?.metadata?.index){const matches=columns.map((c,i)=>[c,i]).filter(([c])=>c.mnemonic===dataset.metadata.index);if(matches.length===1)mapping.index=String(matches[0][1]);}
  if(family==='tops'&&mapping.name===mapping.well)delete mapping.name;
- const index=columns[Number(mapping.index??mapping.md??mapping.depth)],unit=index?.unit;
+ const index=columns[Number(mapping.index??mapping.md??mapping.depth)],unit=index?.effectiveUnit||index?.unit;
  if(/^(m|ft)$/i.test(unit||''))references.depthUnit=unit.toLowerCase();
  if(/^(md|tvd|tvdss)$/i.test(index?.mnemonic||''))references.depthReference=index.mnemonic.toUpperCase();
  if(family==='logs'&&/^(dept|depth)$/i.test(index?.mnemonic||''))references.depthReference='MD';

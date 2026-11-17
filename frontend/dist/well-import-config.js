@@ -1,3 +1,4 @@
+import './import-normalization.js';
 // Physical reads are cached separately from editable interpretation settings.
 export function previewReadKey(family,options,matchField){
  const mapping=Object.entries(options.mapping||{}).filter(([,value])=>value!==''&&value!==undefined).sort(([a],[b])=>a.localeCompare(b));
@@ -24,5 +25,8 @@ export function interpretPreview(source,family,options){
  if(['logs','arrays'].includes(family)&&columns.some(c=>!(c.effectiveUnit||c.unit)||c.unit==='UNKNOWN'&&!options.units?.[c.id.split('-')[1]]))add('unknown_units','Some curve units are unconfirmed.');
  if((['well_headers','seismic','spatial','surfaces','models'].includes(family)||source.metadata?.headers?.LAT)&&!references.crs)add('unconfirmed_crs','Source coordinates require a confirmed CRS or datum before map use.');
  if(['seismic','surfaces','models'].includes(family)&&!references.domain)add('domain','Confirm the time or depth domain before scientific use.');
- return {...source,family,columns,mapping:{...mapping},references:{...references},surveyMethod:options.surveyMethod,issues};
+ const result={...source,family,columns,mapping:{...mapping},references:{...references},surveyMethod:options.surveyMethod,issues};
+ globalThis.StrataxNormalization.normalizeColumns(result);
+ result.normalization=globalThis.StrataxNormalization.describe(result);
+ return result;
 }

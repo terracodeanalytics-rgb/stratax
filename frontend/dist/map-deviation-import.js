@@ -3,6 +3,7 @@ import {browserRead,commitLocal,commitNative,importLocal,loadCloud,nativeImport,
 import {applyImportedEvidence,sourceHints,suggest} from './well-data.js';
 import {rememberImport} from './import-drafts.js';
 import {intakeFamilyAllowed,labels} from './ingestion-catalog.js';
+import {importSample} from './import-samples.js';
 
 const $=selector=>document.querySelector(selector);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -44,9 +45,13 @@ export function openMapDeviation(host,{wells,initialWell,locked=false,onImported
    </details>
    <section id="mw-survey-import-notes" class="mw-survey-notes" hidden></section>
    <p id="mw-survey-import-status" role="status"></p><p id="mw-survey-import-error" role="alert"></p>
-   <div class="actions"><button type="button" id="mw-deviation-cancel">Cancel</button><button type="submit" class="primary" id="mw-survey-import-submit" disabled>Import survey</button></div>
+   <div class="actions"><button type="button" id="mw-deviation-cancel">Cancel</button><button type="button" id="mw-deviation-sample">Download sample format</button><button type="submit" class="primary" id="mw-survey-import-submit" disabled>Import survey</button></div>
   </div></form>`);
  const dialog=$('#dialog'),form=$('#mw-survey-import'),submit=$('#mw-survey-import-submit');
+ $('#mw-deviation-sample').onclick=()=>{
+  const sample=importSample('deviation',form.elements.surveyMethod.value);
+  host.download(sample.name,new Blob([sample.text],{type:sample.type}));
+ };
  const status=$('#mw-survey-import-status'),error=$('#mw-survey-import-error'),notes=$('#mw-survey-import-notes');
  const eligible=()=>record?.datasets?.length===1?readyImportDatasets(record).filter(d=>d.family==='deviation'&&d.well===well?.sourceId):[];
  const renderState=()=>{

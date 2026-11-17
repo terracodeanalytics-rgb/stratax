@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from import_scope import WELL_FAMILIES, workflow_allows
+from import_policy import header_well_ids, missing_headers
 
 INFORMATIONAL = {'workflow_skipped', 'duplicate_location', 'duplicate_header_row', 'large_manifest', 'unknown_units'}
 
@@ -22,7 +23,7 @@ def scoped_issues(record, dataset):
     )] + dataset.get('issues', [])
 
 
-def automatic_selection(record, project):
+def automatic_selection(record, project, existing_header_ids=()):
     workspace = project.get('workspace', {})
     workflows = project.get('project', {}).get('workflows', [])
     trashed = {source['id'] for source in workspace.get('files', []) if source.get('trashed')}
@@ -31,13 +32,12 @@ def automatic_selection(record, project):
         and workflow_allows(dataset['family'], workflows)
         and not any(needs_review(issue, dataset) for issue in scoped_issues(record, dataset))
     )]
-    wells = {w['id'] for w in workspace.get('wellDrafts', [])}
-    wells.update(w['id'] for d in candidates for w in d.get('wellRecords', []))
+    wells = header_well_ids(workspace, candidates) | set(existing_header_ids)
     candidates.sort(key=lambda d: not bool(d.get('wellRecords')))
     for dataset in candidates[:]:
         if dataset['family'] in WELL_FAMILIES - {'well_headers'} and dataset.get('well') not in wells:
-            record['issues'].append({'code':'well_match_required', 'severity':'blocking', 'datasetId':dataset['id'],
-                                     'message':'Confirm the owning well before importing this dataset.'})
+            record['issues'].append({'code':'well_header_required', 'severity':'blocking', 'datasetId':dataset['id'],
+                                     'message':'Import a well header first, then match this dataset to its registered well.'})
             candidates.remove(dataset)
     return candidates
 

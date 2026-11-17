@@ -1,5 +1,14 @@
 # StrataX handoff
 
+## 2026-11-17 - Header-led release on Cloud Run
+
+- Current frontend is stratax-frontend-00005-hoy, API stratax-api-00059-din, worker build fe157761-3398-484a-b70f-fde2c2e2eeb6. All frontend/API traffic uses these revisions. Public stratax.terracodeanalytics.com maps to the frontend with a valid managed certificate. Frontend build a9b6146d-8679-4b18-8f75-cfce46e0b0f1 and API build a11b125f-a15f-4d09-b812-984c1b435eb6 succeeded.
+- Run node scripts/verify-header-intake.cjs with STRATAX_UI_BASE for hosted two-identity browser checks. Run scripts/verify-live-header-intake.py with STRATAX_QA_API for native two-account acceptance. Its 44 checks passed on the final candidate and generated test accounts were cleaned. Run pytest against test_header_import_policy.py, test_imports_api.py and test_automatic_zip.py for 22 passing regressions. Display model tests pass 6 cases.
+- Header prerequisites apply at local commit, manual Cloud commit and automatic ZIP selection. New well data requires a header; existing wells can be merged with imported header rows. Unit aliases retain numeric values. Unsupported native structures get format guidance; ambiguous mappings and references require review. Sample data is illustrative and uses EXAMPLE_1.
+- Filesystem recovery uses the selected existing project and reads disk state before opening it. Cloud is the new-project default. The browser can still require explicit directory permission. The new public health path is /health.
+- Final public-domain browser replay passed for both fixture identities. Nine public asset hashes matched, /health and API health passed, and no fresh final-revision ERROR logs were returned. Cleanup retained all 98 tagged images and removed zero files/images.
+- Preserve .playwright-mcp and WELL_LOG_DISPLAY_RESEARCH_2026-11-16.md. Keep tagged images, live revisions and all worker/rollback images. API rollback before this work is stratax-api-petrophysics-1111 and the original worker image tag is 924e8e13-30f0-4276-a0ed-64bc12152e52. The prior frontend Cloud Run revision is stratax-frontend-00001-sqz.
+
 ## 2026-11-17 - Cloud Run frontend migration
 
 - The new public frontend runs at `https://stratax-frontend-227436363119.us-central1.run.app`. Build from `frontend/Dockerfile` with `frontend` as the build context. Keep the API and worker deployment separate. The first image includes curve display commit `5630ea0`. The project-opening patch is still in the working tree.

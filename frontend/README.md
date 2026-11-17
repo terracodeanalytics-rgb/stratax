@@ -1,6 +1,6 @@
 # StrataX web application
 
-Static ES-module frontend published to the existing StrataX Sites project. Landing and account pages use Firebase and the StrataX account API. Cloud/Local projects and original storage are implemented. Scientific processing remains a future phase. See `../PROJECT_STORAGE.md`.
+Static ES-module frontend deployed to the StrataX Cloud Run frontend service. Landing and account pages use Firebase and the StrataX account API. Cloud, local-folder and portable projects use the shared repository and ingestion paths. See `../PROJECT_STORAGE.md`.
 
 ## Entry points
 
@@ -24,7 +24,8 @@ Static ES-module frontend published to the existing StrataX Sites project. Landi
 - dist/project-overview.js, dist/project-map.js and dist/project.css: real project overview, compact switcher, lazy Google Maps and styling.
 - dist/catalog.js and dist/workbenches.js: inventory and specialist reference layouts.
 - contracts.d.ts: proposed scientific integration contracts, not available calculations.
-- .openai/hosting.json: existing Sites identity; preserve its project ID and audience.
+- Dockerfile and cloud-run.conf serve dist on port 8080 through the StrataX Cloud Run frontend.
+- .openai/hosting.json retains the previous Sites identity for deployment history.
 
 ## Identity and storage
 

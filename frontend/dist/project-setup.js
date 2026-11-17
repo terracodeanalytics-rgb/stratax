@@ -3,7 +3,7 @@ import {mountMap} from './project-map.js';
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function projectSetup({project, modal, complete}) {
-  const draft={id:crypto.randomUUID(), name:'', description:'', workflows:[], siteName:'', region:'', country:'', coordinates:null, storage:'', status:'Active', ...structuredClone(project||{})};
+  const draft={id:crypto.randomUUID(), name:'', description:'', workflows:[], siteName:'', region:'', country:'', coordinates:null, storage:'cloud', status:'Active', ...structuredClone(project||{})};
   let step=0, busy=false, touched=false;
   const dialog=document.querySelector('#dialog');
   function close(event) {

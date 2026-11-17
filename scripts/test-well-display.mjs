@@ -38,9 +38,10 @@ test('Style matches require unique types or mnemonics with exact effective units
  const target={id:'other',propertyType:'Gamma ray',mnemonic:'CGR',effectiveUnit:'gAPI'};
  const matches=(sources,targets)=>trackStyleMatches({curves:sources},{curves:targets},c=>c);
  assert.equal(matches([gr],[target])[0].target,target);
+ assert.equal(matches([{...gr,unit:'GAPI'}],[target])[0].target,target);
  assert.equal(matches([gr],[target,{...target,id:'duplicate'}])[0].status,'Ambiguous match');
  assert.equal(matches([gr,{...gr,id:'run2'}],[target])[0].status,'Ambiguous match');
- assert.equal(matches([gr],[{...target,effectiveUnit:'API'}])[0].target,null);
+ assert.equal(matches([gr],[{...target,effectiveUnit:'m'}])[0].target,null);
  assert.equal(matches([{...gr,propertyType:'Unclassified'}],[{...target,propertyType:'Unclassified'}])[0].target,null);
  const shale={propertyType:'Shale volume',mnemonic:'VSH',unit:'v/v'};
  assert.equal(matches([shale],[{...shale,mnemonic:'VSHALE'}])[0].status,'Matched');

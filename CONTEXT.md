@@ -1,5 +1,12 @@
 # StrataX context
 
+## 2026-11-17 - Shared import contracts and deployment
+
+- The frontend now deploys to Cloud Run stratax-frontend in project-9afac/us-central1. The existing StrataX custom domain uses the Google-managed mapping. API and worker updates remain separate releases. Keep the previous Sites identity for history.
+- Imported well-header datasets establish the eligible well IDs for new well-data activation. Header policy is enforced in browser and backend paths, including automatic ZIP. Existing well evidence is resolved only for affected wells and stops after matching a retained header. Headers can merge into existing wells.
+- Normalization uses the existing column-ID and JSON-array chunk representation with explicit mapping, reference and effective-unit metadata. Unit spelling normalization preserves sample values and source units. Unsupported or ambiguous inputs retain their originals and offer sample formats or native format guidance.
+- New projects default to Cloud. Local project opening requests browser permission and offers a selected-project reconnect dialog. Filesystem grants remain browser controlled.
+
 ## 2026-11-16 - Well curve display and track style reuse
 
 - Curve display drafts stay in the inspector and rendered DOM until Apply. Display state adds fill mode cutoff, cutoffColor, belowColor and aboveColor alongside the existing fillOpacity. Missing settings retain legacy defaults. Cutoff sides follow numeric values on either axis direction and fills remain split across sample gaps.
