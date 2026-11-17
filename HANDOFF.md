@@ -1,5 +1,11 @@
 # StrataX handoff
 
+## 2026-11-17 - Cloud Run frontend migration
+
+- The new public frontend runs at `https://stratax-frontend-227436363119.us-central1.run.app`. Build from `frontend/Dockerfile` with `frontend` as the build context. Keep the API and worker deployment separate. The first image includes curve display commit `5630ea0`. The project-opening patch is still in the working tree.
+- The domain mapping for `stratax.terracodeanalytics.com` maps to `stratax-frontend` and was created with the verified Search Console account. After the DNS change, poll Cloud Run mapping conditions for certificate and route readiness and verify public HTTPS, assets, sign-in and existing projects. The old CNAME target for rollback is `custom-domains.chatgpt.site`.
+- Browser smoke passed four hosted fixture checks. The root and assets returned 200. The separate health URL returned 404 from Google's edge. No recent frontend revision error logs were returned. The migration created one frontend image. Keep it and the existing service images. The staged source archive and build directory are under `.release/stratax-cloud-run-20261117`.
+
 ## 2026-11-16 - Curve display implementation ready for publication
 
 - Implemented per-curve live previews, cutoff fills and selective track styling in the shared well canvas. The existing inspector hosts the editor. Curve drafts render into the plot and header without entering persisted state. Apply uses one history transaction. Copy styling reviews exact unique associations and keeps destination identities, names, visibility and ordering.

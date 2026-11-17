@@ -1,5 +1,11 @@
 # StrataX status
 
+## 2026-11-17 - Cloud Run frontend and DNS
+
+- Cloud Run revision `stratax-frontend-00001-sqz` serves 100% of the new frontend service in `project-9afac/us-central1`. Build `b7162e54-6560-4d99-819b-ef4b97f5bbe6` packaged frontend commit `5630ea0`. The dedicated runtime service account has no project roles.
+- The Cloud Run URL returned HTTP 200 for the landing page and key frontend assets. Four hosted browser fixture checks passed without page errors. The API accepted the existing custom origin. The `/healthz` request returned an edge 404, so endpoint verification used the landing page and assets. Authenticated production acceptance and custom-domain HTTPS verification remain pending.
+- Google accepted the domain mapping under the verified Search Console owner and issued a `stratax` CNAME to `ghs.googlehosted.com.`. The DNS update and certificate issuance are pending. Keep the existing DNS value available for rollback.
+
 ## 2026-11-16 - Curve display editor and selective track styling
 
 - Implemented curve-header editing with live plot and header previews, inline validation, Apply, Cancel and Escape. Apply creates one undoable display edit. Added independent cutoff marker colour, fill opacity and colours on either side of the numeric cutoff, including reversed and logarithmic axes and disconnected sample segments.
